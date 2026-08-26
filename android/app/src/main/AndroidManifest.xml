@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    VaaniLedger — Android manifest.
+
+    Every permission and component the plan needs is declared here so Person A
+    can run the Week 0 spike without hunting for what is missing.
+
+    Note on distribution: AccessibilityService is restricted on the Play
+    Store. This app is sideload / enterprise, and the report says so
+    explicitly rather than leaving it as a gap for the examiner to find.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- The floating bubble. Without this the product does not exist. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Overlay + capture both run in a long-lived foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Voice entry (on-device recogniser). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Sync + Sarvam calls. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Optional: parse bank credit SMS to SUGGEST a settlement. Never auto-settles. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+
+    <!-- Resolve wa.me and upi:// intents on Android 11+. -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="upi" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".VaaniApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VaaniLedger">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Lane 1 — Export Chat.
+            Registers VaaniLedger as a share target so WhatsApp's
+            "Export chat -> Without media" hands us the whole .txt.
+            This is the answer to bulk orders, and it needs no permissions.
+        -->
+        <activity
+            android:name=".capture.ImportExportActivity"
+            android:exported="true"
+            android:label="@string/import_to_ledger"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.VaaniLedger.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+        </activity>
+
+        <!-- The floating bubble + mini dashboard. -->
+        <service
+            android:name=".overlay.OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Persistent ledger overlay the shopkeeper invokes over other apps" />
+        </service>
+
+        <!--
+            Lane 2 — Accessibility.
+            Reads chat text directly and drives scroll-harvest for
+            "entry kar do". Unaffected by FLAG_SECURE.
+        -->
+        <service
+            android:name=".capture.LedgerAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+
+        <!--
+            Lane 3 — Notification listener.
+            Stages every incoming WhatsApp message so the backlog is ready
+            before the shopkeeper asks for it.
+        -->
+        <service
+            android:name=".capture.MessageNotificationListener"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Screenshot + OCR. One long-lived projection: Android 14 prompts once. -->
+        <service
+            android:name=".capture.ScreenCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+    </application>
+</manifest>

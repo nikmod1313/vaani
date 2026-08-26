@@ -1,0 +1,366 @@
+openapi: 3.0.3
+info:
+  title: VaaniLedger API
+  version: "1.0.0"
+  description: |
+    The contract every surface codes against.
+
+    FROZEN — Week 1, Day 1. Owned by Person D.
+
+    Changing anything here requires all four people in the room. The whole
+    stub-first workflow depends on this file not moving underneath people.
+
+servers:
+  - url: http://localhost:8000
+    description: Local dev
+  - url: https://api.vaaniledger.app
+    description: Production
+
+paths:
+  /health:
+    get:
+      summary: Liveness probe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  version: { type: string, example: "1.0.0" }
+
+  /extract:
+    post:
+      summary: Extract a transaction from one message
+      description: |
+        Runs rules, then the LLM layer only for unresolved fields, then
+        confidence scoring. Never writes anything — the client saves to Room
+        after the user confirms.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  example: "2 kilo chawal aur 1 packet chai, dhai sau ka udhaar likh lena"
+                sender_name:
+                  type: string
+                  nullable: true
+                  description: WhatsApp contact name — the strongest customer signal
+                  example: "Rahul Verma"
+                known_customers:
+                  type: array
+                  items: { type: string }
+                  description: The shop's existing khata names, for fuzzy matching
+                source:
+                  type: string
+                  enum: [chat, voice, ocr, manual]
+                  default: chat
+      responses:
+        "200":
+          description: Extraction result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Extraction"
+
+  /extract/batch:
+    post:
+      summary: Extract from many message blocks in one call
+      description: |
+        The bulk path. Blocks that survive the classifier arrive here
+        together — one request, not one per block.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blocks]
+              properties:
+                blocks:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      text: { type: string }
+                      sender_name: { type: string, nullable: true }
+                known_customers:
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: One extraction per block, in order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items: { $ref: "#/components/schemas/Extraction" }
+
+  /ingest/export:
+    post:
+      summary: Ingest a WhatsApp chat export
+      description: |
+        Accepts the .txt from WhatsApp's "Export chat". Applies the watermark,
+        segments into blocks, classifies, and returns only the candidates
+        worth reviewing.
+
+        Does NOT advance the cursor — the client does that after the user
+        approves the review queue, so a crash mid-review cannot lose orders.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chat_id, content]
+              properties:
+                chat_id: { type: string }
+                content: { type: string, description: Raw export text }
+                since: { type: string, format: date-time, nullable: true }
+                until: { type: string, format: date-time, nullable: true }
+                cursor:
+                  $ref: "#/components/schemas/ChatCursor"
+      responses:
+        "200":
+          description: Ingestion summary plus review candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_messages: { type: integer }
+                  new_messages: { type: integer }
+                  blocks: { type: integer }
+                  dropped: { type: integer }
+                  drop_rate: { type: number, format: float }
+                  candidates:
+                    type: array
+                    items: { $ref: "#/components/schemas/Extraction" }
+
+  /summary/narrate:
+    get:
+      summary: Spoken daily summary
+      description: |
+        Composes the summary from real aggregates using a per-language
+        TEMPLATE — never a model paraphrase — then synthesises it with
+        Sarvam Bulbul v3.
+
+        Amounts are rendered as words by the number formatter so the figures
+        are spoken exactly.
+      parameters:
+        - name: shop_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: lang
+          in: query
+          schema:
+            type: string
+            enum: [hi-IN, en-IN, mr-IN, bn-IN, gu-IN, kn-IN, ml-IN, od-IN, pa-IN, ta-IN, te-IN]
+            default: hi-IN
+        - name: speaker
+          in: query
+          schema: { type: string, default: anushka }
+      responses:
+        "200":
+          description: Summary text plus cached audio reference
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text: { type: string }
+                  language_code: { type: string }
+                  audio_url: { type: string, description: Cached MP3 }
+                  cache_hit: { type: boolean }
+
+  /sync:
+    post:
+      summary: Bidirectional, idempotent sync
+      description: |
+        Client-generated UUIDs make this safe to retry. Replaying the same
+        batch must never create a second entry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shop_id: { type: string }
+                since: { type: string, format: date-time, nullable: true }
+                transactions:
+                  type: array
+                  items: { $ref: "#/components/schemas/Transaction" }
+      responses:
+        "200":
+          description: Server-side changes since `since`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted: { type: integer }
+                  duplicates: { type: integer }
+                  transactions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Transaction" }
+
+  /shops/{shop_id}/summary:
+    get:
+      summary: Dashboard aggregates
+      parameters:
+        - name: shop_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: KPIs, 14-day series, and outstanding khata
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  today_sale: { type: number }
+                  cash_in: { type: number }
+                  udhaar_today: { type: number }
+                  total_outstanding: { type: number }
+                  entry_count: { type: integer }
+                  auto_filled: { type: integer }
+                  series:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        cash: { type: number }
+                        udhaar: { type: number }
+                  customers:
+                    type: array
+                    items: { $ref: "#/components/schemas/CustomerBalance" }
+
+  /corrections:
+    post:
+      summary: Record a Badlo correction
+      description: |
+        Every user edit is stored as a (raw_text, corrected_json) pair and
+        retrieved by embedding similarity as a per-shop few-shot example.
+        This is what "the system learns" actually means.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shop_id, raw_text, corrected]
+              properties:
+                shop_id: { type: string }
+                raw_text: { type: string }
+                predicted: { type: object }
+                corrected: { type: object }
+      responses:
+        "201": { description: Stored }
+
+components:
+  schemas:
+    Extraction:
+      type: object
+      properties:
+        text: { type: string }
+        customer: { type: string, nullable: true }
+        customer_is_new: { type: boolean }
+        amount: { type: number, nullable: true }
+        mode:
+          type: string
+          enum: [cash, upi, udhaar, unknown]
+        direction:
+          type: string
+          enum: [sale, payment, unknown]
+        items:
+          type: array
+          items: { type: string }
+        confidence: { $ref: "#/components/schemas/Confidence" }
+        source: { type: string }
+        extracted_at: { type: string, format: date-time }
+
+    Confidence:
+      type: object
+      description: Per-field, because "amount certain, item guessed" is the common case.
+      properties:
+        overall: { type: number, format: float }
+        route:
+          type: string
+          enum: [auto, ask, manual]
+          description: >
+            auto (>0.85) fills and asks for one tap;
+            ask (0.50-0.85) queries only the weak fields;
+            manual (<0.50) falls back to buttons.
+        fields:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              score: { type: number, format: float }
+              reason: { type: string }
+        ask_about:
+          type: array
+          items: { type: string }
+          description: Weak fields, weakest first
+
+    ChatCursor:
+      type: object
+      description: Per-chat high-water mark. Deterministic dedup, never a model call.
+      properties:
+        chat_id: { type: string }
+        last_timestamp: { type: string, format: date-time, nullable: true }
+        seen_hashes:
+          type: array
+          items: { type: string }
+          description: Rolling window of recent sha1 content hashes
+
+    Transaction:
+      type: object
+      required: [id, shop_id, amount, mode]
+      properties:
+        id: { type: string, format: uuid, description: Client-generated — the idempotency key }
+        shop_id: { type: string }
+        customer_id: { type: string, nullable: true }
+        customer_name: { type: string, nullable: true }
+        amount: { type: number }
+        mode:
+          type: string
+          enum: [cash, upi, udhaar]
+        direction:
+          type: string
+          enum: [sale, payment]
+        items:
+          type: array
+          items: { type: string }
+        source:
+          type: string
+          enum: [chat, voice, ocr, manual, export]
+          description: The audit trail — every entry knows where it came from
+        confidence: { type: number, format: float }
+        occurred_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        deleted: { type: boolean, default: false }
+
+    CustomerBalance:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        outstanding: { type: number }
+        last_activity: { type: string, format: date-time }
+        days_overdue: { type: integer, description: Computed at read time, never stored }

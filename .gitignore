@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.db
+.DS_Store
+audio_cache/
+node_modules/
+.next/
+dist/
+build/
+local.properties
+android/.gradle/
+android/app/build/
+*.apk
+.idea/

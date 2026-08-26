@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Scoped as tightly as the feature allows.
+
+    packageNames limits us to WhatsApp only — we cannot read any other app,
+    which is the concrete privacy claim the report makes. canRetrieveWindow
+    Content is what lets us read message text; flagRetrieveInteractiveWindows
+    is what lets the scroll-harvest reach content above the fold.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="false"
+    android:notificationTimeout="100"
+    android:packageNames="com.whatsapp,com.whatsapp.w4b"
+    android:description="@string/accessibility_description"
+    android:settingsActivity="app.vaaniledger.MainActivity" />

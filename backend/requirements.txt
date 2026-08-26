@@ -1,0 +1,20 @@
+# Core API
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+
+# Extraction — stage 2 (the engine runs rules-only without this)
+anthropic>=0.40
+
+# Optional: faster fuzzy matching. names.py falls back to stdlib difflib.
+rapidfuzz>=3.10
+
+# Sarvam (TTS / ASR / OCR) is called over plain HTTPS
+httpx>=0.27
+
+# Persistence
+sqlalchemy>=2.0
+psycopg[binary]>=3.2
+
+# Dev
+pytest>=8.3
