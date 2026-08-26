@@ -268,42 +268,77 @@ class LedgerStore:
 
     def outstanding(self, shop_id: str) -> list[dict]:
         """
-        Per-customer balance, worst first.
+        Per-customer balance and the age of that balance, worst first.
 
-        `days_overdue` is computed at read time from the oldest unsettled
-        activity, never stored -- a stored value is wrong the next morning.
+        Payments settle debts oldest-first (FIFO), which is how a shopkeeper
+        actually thinks about a khata. That matters for `days_overdue`: taking
+        the oldest udhaar date outright would age a balance from a debt the
+        customer paid off months ago, so every regular customer looks
+        permanently overdue and the flag stops meaning anything -- and the
+        reminder it drives would be plainly wrong to the person receiving it.
+
+        Computed at read time, never stored. A stored value is wrong tomorrow.
+
+        Not modelled: overpayment. Paying more than is owed floors the balance
+        at zero rather than carrying an advance.
         """
         rows = self._conn.execute(
             f"""
-            SELECT
-              c.id, c.name,
-              COALESCE(SUM(CASE WHEN t.direction='sale' AND t.mode='udhaar' THEN t.amount
-                                WHEN t.direction='payment' THEN -t.amount
-                                ELSE 0 END), 0)              AS outstanding,
-              MAX(t.occurred_at)                             AS last_activity,
-              MIN(CASE WHEN t.direction='sale' AND t.mode='udhaar'
-                       THEN t.occurred_at END)               AS oldest_udhaar
+            SELECT c.id, c.name,
+                   t.amount, t.mode, t.direction, t.occurred_at
             FROM customers c
             LEFT JOIN transactions t
               ON t.customer_id = c.id AND t.{self._live()}
             WHERE c.shop_id = ?
-            GROUP BY c.id, c.name
-            ORDER BY outstanding DESC, c.name
+            ORDER BY c.name, t.occurred_at
             """,
             (shop_id,),
         ).fetchall()
 
+        people: dict[str, dict] = {}
+        for row in rows:
+            person = people.setdefault(row["id"], {
+                "id": row["id"],
+                "name": row["name"],
+                "debts": [],          # [[occurred_at, remaining], ...] oldest first
+                "last_activity": None,
+            })
+            if row["occurred_at"] is None:
+                continue
+
+            if row["occurred_at"] > (person["last_activity"] or ""):
+                person["last_activity"] = row["occurred_at"]
+
+            if row["direction"] == "sale" and row["mode"] == "udhaar":
+                person["debts"].append([row["occurred_at"], row["amount"]])
+            elif row["direction"] == "payment":
+                credit = row["amount"]
+                while credit > 0 and person["debts"]:
+                    oldest = person["debts"][0]
+                    if oldest[1] <= credit:
+                        credit -= oldest[1]
+                        person["debts"].pop(0)
+                    else:
+                        oldest[1] -= credit
+                        credit = 0
+
         today = date.today()
         result = []
-        for row in rows:
-            entry = dict(row)
-            entry["outstanding"] = round(entry["outstanding"] or 0, 2)
-            entry["days_overdue"] = 0
-            if entry["outstanding"] > 0 and entry["oldest_udhaar"]:
-                oldest = datetime.fromisoformat(entry["oldest_udhaar"]).date()
-                entry["days_overdue"] = (today - oldest).days
-            entry.pop("oldest_udhaar", None)
-            result.append(entry)
+        for person in people.values():
+            debts = person["debts"]
+            balance = round(sum(d[1] for d in debts), 2)
+            days = 0
+            if balance > 0 and debts:
+                days = (today - datetime.fromisoformat(debts[0][0]).date()).days
+            result.append({
+                "id": person["id"],
+                "name": person["name"],
+                "outstanding": balance,
+                "last_activity": person["last_activity"],
+                "days_overdue": days,
+            })
+
+        result.sort(key=lambda c: (-c["outstanding"], c["name"]))
         return result
 
     def series(self, shop_id: str, days: int = 14) -> list[dict]:

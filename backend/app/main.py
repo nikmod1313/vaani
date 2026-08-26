@@ -331,3 +331,22 @@ def add_correction(req: CorrectionRequest) -> dict:
 def seed(shop_id: str, days: int = 90) -> dict:
     """Load demo data. Never present on an empty database."""
     return STORE.seed(shop_id, days=days)
+
+
+# --------------------------------------------------------------------------
+# Dashboard
+# --------------------------------------------------------------------------
+#
+# Served from the API's own origin so there is no CORS hop and no build step
+# between the team and a working page. Mounted last so it cannot shadow an
+# API route.
+
+DASHBOARD = Path(__file__).resolve().parents[2] / "dashboard"
+
+
+@app.get("/")
+def dashboard() -> FileResponse:
+    index = DASHBOARD / "index.html"
+    if not index.exists():
+        raise HTTPException(404, "dashboard not built")
+    return FileResponse(index, media_type="text/html")

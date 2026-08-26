@@ -103,6 +103,72 @@ class TestBalances(StoreCase):
         )
         self.assertEqual(balance["days_overdue"], 42)
 
+    def test_payments_settle_oldest_debt_first(self):
+        """
+        Regression: aging must follow the money, not the calendar.
+
+        Taking the oldest udhaar date outright ages a balance from a debt the
+        customer already paid off, so every regular customer reads as
+        permanently overdue and the flag stops meaning anything -- and the
+        reminder it drives is plainly wrong to whoever receives it.
+        """
+        def days_ago(n):
+            return (datetime.now() - timedelta(days=n)).isoformat(timespec="seconds")
+
+        # An old debt, fully paid, then a fresh one.
+        self.store.save(_tx(customer_name="Priya Sharma", amount=500,
+                            mode="udhaar", occurred_at=days_ago(80)))
+        self.store.save(_tx(customer_name="Priya Sharma", amount=500,
+                            mode="cash", direction="payment",
+                            occurred_at=days_ago(70)))
+        self.store.save(_tx(customer_name="Priya Sharma", amount=300,
+                            mode="udhaar", occurred_at=days_ago(10)))
+
+        balance = next(
+            c for c in self.store.outstanding(SHOP) if c["name"] == "Priya Sharma"
+        )
+        self.assertEqual(balance["outstanding"], 300)
+        # 10, from the unpaid debt -- not 80 from the settled one.
+        self.assertEqual(balance["days_overdue"], 10)
+
+    def test_partial_payment_ages_from_the_remaining_debt(self):
+        def days_ago(n):
+            return (datetime.now() - timedelta(days=n)).isoformat(timespec="seconds")
+
+        self.store.save(_tx(customer_name="Imran Khan", amount=400,
+                            mode="udhaar", occurred_at=days_ago(50)))
+        self.store.save(_tx(customer_name="Imran Khan", amount=600,
+                            mode="udhaar", occurred_at=days_ago(20)))
+        # Clears the first debt and 100 of the second.
+        self.store.save(_tx(customer_name="Imran Khan", amount=500,
+                            mode="upi", direction="payment",
+                            occurred_at=days_ago(5)))
+
+        balance = next(
+            c for c in self.store.outstanding(SHOP) if c["name"] == "Imran Khan"
+        )
+        self.assertEqual(balance["outstanding"], 500)
+        self.assertEqual(balance["days_overdue"], 20)
+
+    def test_overpayment_floors_at_zero(self):
+        self.store.save(_tx(customer_name="Mohan Lal", amount=200, mode="udhaar"))
+        self.store.save(_tx(customer_name="Mohan Lal", amount=500,
+                            mode="cash", direction="payment"))
+        balance = next(
+            c for c in self.store.outstanding(SHOP) if c["name"] == "Mohan Lal"
+        )
+        # Advances are not modelled; the balance does not go negative.
+        self.assertEqual(balance["outstanding"], 0)
+
+    def test_seed_produces_a_believable_overdue_spread(self):
+        """Every customer at ~87 days means the flag is broken, not the shop."""
+        self.store.seed(SHOP, days=90)
+        overdue = [c["days_overdue"] for c in self.store.outstanding(SHOP)
+                   if c["outstanding"] > 0]
+        self.assertTrue(overdue)
+        self.assertLess(min(overdue), 30, "no recent balances — aging looks stuck")
+        self.assertLess(max(overdue), 90)
+
     def test_settled_customer_is_not_overdue(self):
         old = (datetime.now() - timedelta(days=60)).isoformat(timespec="seconds")
         self.store.save(_tx(customer_name="Mohan Lal", amount=500, mode="udhaar",

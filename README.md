@@ -12,7 +12,7 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 152 tests, macro F1 0.926 |
+| Extraction engine | **Working** — 156 tests, macro F1 0.926 |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
 | Ledger store | **Working** — SQLite, idempotent sync, aggregates |
 | Spoken summary | **Working** — templates in hi / en / mr |
@@ -22,7 +22,7 @@ No WhatsApp Business API anywhere on the critical path.
 | Eval harness | **Working** — `python -m eval.run [--llm]` |
 | FastAPI endpoints | **All live** against a real store |
 | Android | Manifest + overlay + accessibility skeletons |
-| Dashboard | Not started |
+| Dashboard | **Working** — zero-build, served at `/` |
 
 ---
 
@@ -37,8 +37,11 @@ cd backend && python3 -m eval.run --verbose
 ```
 
 ```bash
-cd backend && pip install -r requirements.txt && uvicorn app.main:app --reload
+./run.sh serve
 ```
+
+Then open <http://localhost:8000> for the dashboard, or
+<http://localhost:8000/docs> for the API contract.
 
 Try it:
 
@@ -160,3 +163,12 @@ All three have regression tests. Do not remove them.
    sentence frames are drafted, but the amounts still come out in Hindi
    number words. Ship it only once someone who speaks Marathi has read it.
 6. Room schema + the Kotlin sync client (Person B).
+
+### A note on the dashboard
+
+It is one HTML file with no build step — no npm, no bundler, nothing to break
+during a demo. The chart is hand-rolled SVG rather than Recharts. This is a
+deliberate departure from the original plan, which said Next.js: with a team
+new to the stack, a broken `npm run build` twenty minutes before a viva is a
+worse outcome than a plainer chart. Porting to Next.js later is optional and
+changes nothing server-side.
