@@ -12,7 +12,7 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 156 tests, macro F1 0.926 |
+| Extraction engine | **Working** — 160 tests, macro F1 0.926 |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
 | Ledger store | **Working** — SQLite, idempotent sync, aggregates |
 | Spoken summary | **Working** — templates in hi / en / mr |
@@ -21,7 +21,7 @@ No WhatsApp Business API anywhere on the critical path.
 | Correction store | **Working** — few-shot retrieval per shop |
 | Eval harness | **Working** — `python -m eval.run [--llm]` |
 | FastAPI endpoints | **All live** against a real store |
-| Android | Manifest + overlay + accessibility skeletons |
+| Android | **Not compiled** — Room, sync, deep links written; needs Android Studio |
 | Dashboard | **Working** — zero-build, served at `/` |
 
 ---
@@ -162,7 +162,10 @@ All three have regression tests. Do not remove them.
 5. **Have a Marathi speaker review `summary.py`'s `mr-IN` template** — the
    sentence frames are drafted, but the amounts still come out in Hindi
    number words. Ship it only once someone who speaks Marathi has read it.
-6. Room schema + the Kotlin sync client (Person B).
+6. **Open `android/` in Android Studio and make it build.** The Kotlin was
+   written without a compiler on hand, so expect import and signature fixes.
+   The wire format is the part that is already verified — every DTO in
+   `net/Api.kt` was round-tripped against the running API.
 
 ### A note on the dashboard
 

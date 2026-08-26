@@ -108,6 +108,7 @@ class TransactionModel(BaseModel):
 
 class SyncRequest(BaseModel):
     shop_id: str
+    shop_name: str | None = None
     since: datetime | None = None
     transactions: list[TransactionModel] = Field(default_factory=list)
 
@@ -215,6 +216,11 @@ def sync(req: SyncRequest) -> dict:
     Retrying a batch after a dropped connection updates rows; it never
     invents money.
     """
+    # Name the shop properly when the client knows it; _ensure_shop would
+    # otherwise leave the id standing in as the name.
+    if req.shop_name:
+        STORE.create_shop(req.shop_id, req.shop_name)
+
     incoming = [
         Transaction(
             id=t.id,

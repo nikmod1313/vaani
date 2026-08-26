@@ -127,11 +127,35 @@ class LedgerStore:
         language: str = "hi-IN",
         speaker: str = "anushka",
     ) -> None:
+        """Create, or update the name of an existing shop."""
+        with self._tx() as conn:
+            conn.execute(
+                """
+                INSERT INTO shops (id, name, language, speaker, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                """,
+                (shop_id, name, language, speaker,
+                 datetime.now().isoformat(timespec="seconds")),
+            )
+
+    def _ensure_shop(self, shop_id: str) -> None:
+        """
+        Guarantee a shop row exists before anything references it.
+
+        Without this a fresh phone's first sync writes transactions and
+        customers for a shop that has no row, so /summary and
+        /summary/narrate both 404 on a shop that demonstrably has data --
+        which reads as data loss to whoever is looking at the dashboard.
+
+        The placeholder name is replaced the moment the client sends a real
+        one, via create_shop's upsert above.
+        """
         with self._tx() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO shops (id, name, language, speaker, created_at)"
                 " VALUES (?, ?, ?, ?, ?)",
-                (shop_id, name, language, speaker,
+                (shop_id, shop_id, "hi-IN", "anushka",
                  datetime.now().isoformat(timespec="seconds")),
             )
 
@@ -149,6 +173,7 @@ class LedgerStore:
         `names.resolve` -- by the time a name reaches here it is already the
         canonical one for this shop.
         """
+        self._ensure_shop(shop_id)
         row = self._conn.execute(
             "SELECT id FROM customers WHERE shop_id = ? AND name = ?", (shop_id, name)
         ).fetchone()
@@ -184,6 +209,7 @@ class LedgerStore:
         Idempotent by construction: the same id twice is one row. This is what
         lets the phone retry a failed sync without inventing money.
         """
+        self._ensure_shop(tx.shop_id)
         if tx.customer_id is None and tx.customer_name:
             tx.customer_id = self.upsert_customer(tx.shop_id, tx.customer_name)
 

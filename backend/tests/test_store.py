@@ -59,6 +59,58 @@ class TestIdempotency(StoreCase):
         self.assertEqual(rows[0]["amount"], 300)
 
 
+class TestOrphanShop(unittest.TestCase):
+    """
+    Regression: a fresh phone syncs before any shop row exists.
+
+    Saving created transactions and customers for a shop with no row, so
+    /summary and /summary/narrate both 404 on a shop that demonstrably has
+    data — which reads as data loss to whoever is looking at the dashboard.
+    """
+
+    def setUp(self):
+        self.store = LedgerStore(":memory:")
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_first_sync_creates_the_shop(self):
+        self.store.save_many([
+            Transaction(shop_id="fresh", amount=250, mode="udhaar",
+                        customer_name="Rahul Verma")
+        ])
+        self.assertIsNotNone(self.store.get_shop("fresh"))
+
+    def test_summary_works_after_a_bare_first_sync(self):
+        self.store.save_many([
+            Transaction(shop_id="fresh", amount=250, mode="udhaar",
+                        customer_name="Rahul Verma")
+        ])
+        summary = self.store.summary("fresh")
+        self.assertEqual(summary["total_outstanding"], 250)
+        self.assertIsNotNone(summary["shop"])
+
+    def test_client_supplied_name_replaces_the_placeholder(self):
+        self.store.save_many([
+            Transaction(shop_id="fresh", amount=100, mode="cash",
+                        customer_name="Rahul Verma")
+        ])
+        # Until the client says otherwise, the id stands in as the name.
+        self.assertEqual(self.store.get_shop("fresh")["name"], "fresh")
+
+        self.store.create_shop("fresh", "Sharma Kirana Store")
+        self.assertEqual(self.store.get_shop("fresh")["name"], "Sharma Kirana Store")
+
+    def test_renaming_does_not_wipe_existing_data(self):
+        self.store.save_many([
+            Transaction(shop_id="fresh", amount=250, mode="udhaar",
+                        customer_name="Rahul Verma")
+        ])
+        self.store.create_shop("fresh", "Sharma Kirana Store")
+        self.assertEqual(self.store.summary("fresh")["total_outstanding"], 250)
+        self.assertEqual(self.store.customer_names("fresh"), ["Rahul Verma"])
+
+
 class TestCustomers(StoreCase):
     def test_list_builds_itself_from_transactions(self):
         self.store.save(_tx(customer_name="Rahul Verma"))
