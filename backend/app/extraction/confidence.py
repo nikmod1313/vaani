@@ -140,7 +140,17 @@ def score_mode(mode: str, matched_word: str | None) -> FieldScore:
     return FieldScore("mode", mode, 0.95, reason)
 
 
-def score_items(items: list, rates_known: bool = True) -> FieldScore:
+def score_items(
+    items: list,
+    rates_known: bool = True,
+    direction: str = "unknown",
+) -> FieldScore:
+    # A payment settles a balance; it has no line items. Penalising their
+    # absence would route every payment to "ask" about a field that cannot
+    # exist.
+    if direction == "payment":
+        return FieldScore("items", [], 1.0, "not applicable to a payment")
+
     if not items:
         return FieldScore("items", [], 0.30, "no items recognised")
 

@@ -120,7 +120,11 @@ def extract(
     conf.fields["amount"] = score_amount(amount, rules.amount_source, agreed)
     conf.fields["customer"] = score_customer(match.name, match.score, match.is_new)
     conf.fields["mode"] = score_mode(mode, mode_word)
-    conf.fields["items"] = score_items(rules.items, rates_known=_stated_rate(text))
+    conf.fields["items"] = score_items(
+        rules.items,
+        rates_known=_stated_rate(text),
+        direction=rules.direction.value,
+    )
 
     return Extraction(
         text=text,
