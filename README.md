@@ -90,7 +90,7 @@ backend/
     corrections.py  Badlo pairs + per-shop few-shot retrieval
     pipeline.py     orchestrates the four stages
   eval/             labelled dataset + scoring harness
-  tests/            94 tests, stdlib unittest — no install needed
+  tests/            121 tests, stdlib unittest for the core
 docs/api.yaml       the frozen contract everyone codes against
 android/            manifest, overlay service, accessibility service
 dashboard/          not started
@@ -117,7 +117,7 @@ asked about.
 
 ---
 
-## Two traps already found and fixed
+## Three traps already found and fixed
 
 **`do` means 2, but usually it's a verb.** In *"chai bhej do, dhai sau"* the
 parser first read `do dhai sau` as `(2 + 2.5) × 100 = 450` instead of 250.
