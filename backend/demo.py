@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from app.extraction.numbers import find_numbers, rupees_to_words
 from app.extraction.pipeline import extract, extract_batch
 from app.extraction.whatsapp import ChatCursor, ingest, parse_export
+from app.store import LedgerStore
+from app.summary import compose
 
 KNOWN = ["Rahul Verma", "Priya Sharma", "Imran Khan", "Sunita Devi", "Mohan Lal"]
 
@@ -108,7 +110,31 @@ def main() -> None:
           f"{len(again.candidates)} candidates.")
     print("\n  Deterministic content hashes, not a model call. A model that is")
     print("  99% right about 'have I seen this' still double-charges someone")
-    print("  one time in a hundred.\n")
+    print("  one time in a hundred.")
+
+    # ---------------------------------------------------------------- 5
+    rule("5  ·  THE SPOKEN SUMMARY   what Bulbul reads aloud")
+    store = LedgerStore(":memory:")
+    store.seed("sharma-kirana", days=90)
+    summary = store.summary("sharma-kirana")
+
+    print(f"  Rs {summary['today_sale']:.0f} sale   "
+          f"Rs {summary['cash_in']:.0f} cash   "
+          f"Rs {summary['udhaar_today']:.0f} udhaar   "
+          f"Rs {summary['total_outstanding']:.0f} outstanding\n")
+
+    for lang in ("hi-IN", "en-IN"):
+        narration = compose(summary, lang)
+        print(f"  {lang}   ({len(narration)} chars, cap is 2500)")
+        for sentence in narration.text.split(". "):
+            if sentence.strip():
+                print(f"     {sentence.strip().rstrip('.')}.")
+        print()
+
+    print("  Every figure comes from a template filled by the store. No model")
+    print("  restates a number -- \"about four thousand\" instead of Rs 4,240")
+    print("  is a lie a listener has no way to catch.\n")
+    store.close()
 
 
 if __name__ == "__main__":

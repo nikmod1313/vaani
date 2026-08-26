@@ -12,12 +12,15 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 121 tests, macro F1 0.926 |
+| Extraction engine | **Working** — 152 tests, macro F1 0.926 |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
-| Stage 2 (Claude) | **Wired, unmeasured** — needs credentials to run |
+| Ledger store | **Working** — SQLite, idempotent sync, aggregates |
+| Spoken summary | **Working** — templates in hi / en / mr |
+| Stage 2 (Claude) | **Wired, unmeasured** — needs credentials |
+| Sarvam TTS | **Wired, unmeasured** — needs `SARVAM_API_KEY` |
 | Correction store | **Working** — few-shot retrieval per shop |
 | Eval harness | **Working** — `python -m eval.run [--llm]` |
-| FastAPI endpoints | Extraction live; sync + summary stubbed |
+| FastAPI endpoints | **All live** against a real store |
 | Android | Manifest + overlay + accessibility skeletons |
 | Dashboard | Not started |
 
@@ -98,7 +101,7 @@ dashboard/          not started
 
 ---
 
-## Three ideas worth understanding before you edit anything
+## Four ideas worth understanding before you edit anything
 
 **1. The engine runs without a model.** The LLM layer is injected and
 optional. Rules resolve most entries offline, and `extract()` degrades to
@@ -114,6 +117,12 @@ duplicate money in someone's khata one time in a hundred.
 **3. Confidence is per field.** "Amount certain, item guessed" is the common
 case, and a single blended score throws that away. Only the weak field gets
 asked about.
+
+**4. The voice model never restates a number.** `summary.py` fills a
+per-language template from real aggregates and spells amounts out with the
+parser's own number table, run backwards. Bulbul only reads what the store
+already computed. An LLM that paraphrases ₹4,240 as "about four thousand" has
+lied to someone about their money, and a listener cannot catch it.
 
 ---
 
@@ -147,5 +156,7 @@ All three have regression tests. Do not remove them.
 2. Room schema + `docs/api.yaml` frozen with all four people present.
 3. **Measure the stage-2 lift** — add credentials and run `eval.run --llm`.
 4. Grow the eval dataset from 30 cases toward 150.
-5. Sarvam Bulbul v3 for the spoken summary — **server-side only**, the key
-   never ships in the APK.
+5. **Have a Marathi speaker review `summary.py`'s `mr-IN` template** — the
+   sentence frames are drafted, but the amounts still come out in Hindi
+   number words. Ship it only once someone who speaks Marathi has read it.
+6. Room schema + the Kotlin sync client (Person B).
