@@ -12,7 +12,7 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 170 tests, macro F1 0.974 |
+| Extraction engine | **Working** — 169 tests, macro F1 0.974 |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
 | Ledger store | **Working** — SQLite, idempotent sync, aggregates |
 | Spoken summary | **Working** — templates in hi / en / mr |
@@ -102,7 +102,7 @@ backend/
     corrections.py  Badlo pairs + per-shop few-shot retrieval
     pipeline.py     orchestrates the four stages
   eval/             labelled dataset + scoring harness
-  tests/            121 tests, stdlib unittest for the core
+  tests/            169 tests, stdlib unittest for the core
 docs/api.yaml       the frozen contract everyone codes against
 android/            manifest, overlay service, accessibility service
 dashboard/          not started
