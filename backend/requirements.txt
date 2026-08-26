@@ -4,7 +4,7 @@ uvicorn[standard]>=0.32
 pydantic>=2.9
 
 # Extraction — stage 2 (the engine runs rules-only without this)
-anthropic>=0.40
+anthropic>=1.0
 
 # Optional: faster fuzzy matching. names.py falls back to stdlib difflib.
 rapidfuzz>=3.10

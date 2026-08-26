@@ -3,6 +3,7 @@ Extraction accuracy evaluation.
 
     python -m eval.run                 # rules-only baseline
     python -m eval.run --verbose       # show every miss
+    python -m eval.run --llm           # with stage 2 (needs credentials)
 
 Reports field-level precision / recall / F1 plus a confidence-calibration
 table -- does a 0.9 confidence actually mean 90% correct?
@@ -97,7 +98,24 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="VaaniLedger extraction eval")
     parser.add_argument("--verbose", "-v", action="store_true", help="show each miss")
     parser.add_argument("--dataset", type=Path, default=DATASET)
+    parser.add_argument(
+        "--llm",
+        action="store_true",
+        help="run stage 2 as well (needs credentials; costs money)",
+    )
     args = parser.parse_args()
+
+    llm = None
+    label = "rules-only"
+    if args.llm:
+        from app.extraction.llm import ClaudeLayer
+
+        llm = ClaudeLayer()
+        if not llm.available():
+            print("\n  --llm requested but no credentials found.")
+            print("  Set ANTHROPIC_API_KEY or run `ant auth login`, then retry.\n")
+            return 2
+        label = f"rules + {llm.model}"
 
     rows = load(args.dataset)
     counters: dict[str, Counter] = {f: Counter() for f in FIELDS}
@@ -110,6 +128,7 @@ def main() -> int:
             row["text"],
             known_customers=EVAL_KNOWN_CUSTOMERS,
             sender_name=row.get("sender", EVAL_SENDER),
+            llm=llm,
         )
         predicted = {
             "amount": result.amount,
@@ -142,7 +161,7 @@ def main() -> int:
     # ---- report ---------------------------------------------------------
     print()
     print("=" * 62)
-    print(f"  VaaniLedger extraction eval  ·  {len(rows)} cases  ·  rules-only")
+    print(f"  VaaniLedger extraction eval  ·  {len(rows)} cases  ·  {label}")
     print("=" * 62)
     print()
     print(f"  {'FIELD':<12}{'PREC':>8}{'RECALL':>9}{'F1':>8}{'TP':>6}{'FP':>5}{'FN':>5}")
@@ -180,6 +199,23 @@ def main() -> int:
         print("  " + "-" * 55)
         for line in misses:
             print(line)
+
+    # A layer that failed every call degrades to rules-only silently. Saying
+    # so is the difference between "the model didn't help" and "the model
+    # never ran" -- and only one of those belongs in a report.
+    if llm is not None:
+        print()
+        print("  STAGE 2")
+        print("  " + "-" * 55)
+        print(f"  calls succeeded  {llm.calls_ok}")
+        print(f"  calls failed     {llm.calls_failed}")
+        if llm.calls_ok == 0:
+            print()
+            print("  !! Stage 2 never ran — these are RULES-ONLY numbers.")
+            if llm.last_error:
+                print(f"     {llm.last_error}")
+            print()
+            return 1
 
     print()
     return 0

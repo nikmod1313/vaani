@@ -12,9 +12,11 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 94 tests, macro F1 0.926 |
+| Extraction engine | **Working** — 121 tests, macro F1 0.926 |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
-| Eval harness | **Working** — `python -m eval.run` |
+| Stage 2 (Claude) | **Wired, unmeasured** — needs credentials to run |
+| Correction store | **Working** — few-shot retrieval per shop |
+| Eval harness | **Working** — `python -m eval.run [--llm]` |
 | FastAPI endpoints | Extraction live; sync + summary stubbed |
 | Android | Manifest + overlay + accessibility skeletons |
 | Dashboard | Not started |
@@ -56,10 +58,21 @@ items          0.789    0.833   0.811
 Exact match (all fields):  24/30  (80.0%)
 ```
 
-Items is the weakest field and that is expected — it is the one the LLM layer
-exists to lift. **Re-run the eval every week and keep the number in the
-report.** A stated limitation with data behind it scores better than a vague
-claim of high accuracy.
+Items is the weakest field and that is expected — it is the one stage 2
+exists to lift.
+
+**The stage-2 lift is not measured yet.** Running `--llm` needs credentials:
+
+```bash
+export ANTHROPIC_API_KEY=sk-...   # or: ant auth login
+cd backend && .venv/bin/python -m eval.run --llm
+```
+
+That comparison — rules-only vs rules+Claude on the same 30 cases — is the
+single best number to put in the report, because the rules-only run is a real
+control group. **Re-run the eval every week and keep the number.** A stated
+limitation with data behind it scores better than a vague claim of high
+accuracy.
 
 ---
 
@@ -73,6 +86,8 @@ backend/
     names.py        transliteration + fuzzy customer matching
     confidence.py   per-field scoring and routing
     whatsapp.py     export parsing, watermark, segmentation, classifier
+    llm.py          stage 2 — Claude, structured output, batch path
+    corrections.py  Badlo pairs + per-shop few-shot retrieval
     pipeline.py     orchestrates the four stages
   eval/             labelled dataset + scoring harness
   tests/            94 tests, stdlib unittest — no install needed
@@ -112,7 +127,14 @@ Fixed with clause boundaries plus a verb-stem rule. See `TestDoAmbiguity`.
 "priy", and `bhaiya` to "bhaiy" — which then dodged the honorific filter. Only
 the *inherent* vowel gets trimmed now, never a matra, and never Latin input.
 
-Both have regression tests. Do not remove them.
+**`Anthropic()` constructs fine with no credentials.** It only fails at
+request time, so treating construction as proof of availability made
+`eval.run --llm` print "rules + claude-opus-5" over numbers the model had
+never touched — every call failed, the pipeline degraded to rules-only, and
+the header still claimed otherwise. The eval now refuses to report stage-2
+numbers when zero calls succeeded, and `/health` states which stages are live.
+
+All three have regression tests. Do not remove them.
 
 ---
 
@@ -123,7 +145,7 @@ Both have regression tests. Do not remove them.
    this fails, fall back to notification listener + OCR and re-plan the same
    day.
 2. Room schema + `docs/api.yaml` frozen with all four people present.
-3. Grow the eval dataset from 30 cases toward 150.
-4. Wire the LLM layer behind `pipeline.LLMLayer`.
+3. **Measure the stage-2 lift** — add credentials and run `eval.run --llm`.
+4. Grow the eval dataset from 30 cases toward 150.
 5. Sarvam Bulbul v3 for the spoken summary — **server-side only**, the key
    never ships in the APK.

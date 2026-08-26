@@ -11,11 +11,14 @@ and dashboard can be built against them from day one.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from .extraction.corrections import CorrectionStore
+from .extraction.llm import ClaudeLayer
 from .extraction.pipeline import extract, extract_batch
 from .extraction.whatsapp import ChatCursor, ingest
 
@@ -32,6 +35,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Stage 2 and the correction store are process-wide. If no credentials are
+# present the layer reports unavailable and every request quietly runs
+# rules-only -- which is a supported mode, not a failure.
+CORRECTIONS = CorrectionStore(Path("data/corrections.jsonl"))
+_layer = ClaudeLayer(corrections=CORRECTIONS)
+LLM = _layer if _layer.available() else None
 
 
 # --------------------------------------------------------------------------
@@ -76,7 +86,14 @@ class IngestRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "version": "1.0.0"}
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        # Say plainly which stages are live, so nobody reports rules-only
+        # numbers as if the model had run.
+        "stage2": _layer.model if LLM else "unavailable (rules-only)",
+        "corrections": len(CORRECTIONS),
+    }
 
 
 @app.post("/extract")
@@ -86,6 +103,7 @@ def extract_one(req: ExtractRequest) -> dict:
         req.text,
         known_customers=req.known_customers,
         sender_name=req.sender_name,
+        llm=LLM,
     )
     return result.to_dict()
 
@@ -97,6 +115,7 @@ def extract_many(req: BatchRequest) -> dict:
         [b.text for b in req.blocks],
         known_customers=req.known_customers,
         senders=[b.sender_name for b in req.blocks],
+        llm=LLM,
     )
     return {"results": [r.to_dict() for r in results]}
 
@@ -120,6 +139,7 @@ def ingest_export(req: IngestRequest) -> dict:
         [b.text for b in result.candidates],
         known_customers=req.known_customers,
         senders=[b.sender for b in result.candidates],
+        llm=LLM,
     )
 
     return {

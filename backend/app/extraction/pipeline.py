@@ -149,12 +149,41 @@ def extract_batch(
     """
     Bulk path.
 
-    A real implementation batches the surviving blocks into ONE model call
-    rather than N -- see the register. This keeps the same signature so the
-    caller does not change when that lands.
+    When the layer supports `extract_many`, every block goes up in ONE
+    request instead of one each -- twenty orders become one call. Layers
+    without it fall back to per-message extraction, so the signature holds
+    either way.
     """
+    known_customers = known_customers or []
     senders = senders or [None] * len(texts)
+
+    batched: list[dict] | None = None
+    if llm is not None and hasattr(llm, "extract_many") and texts:
+        rule_results = [apply_rules(t) for t in texts]
+        try:
+            batched = llm.extract_many(texts, known_customers, rule_results)
+        except Exception:
+            batched = None  # degrade to per-message, then to rules-only
+
+    if batched is None:
+        return [
+            extract(text, known_customers, sender, llm)
+            for text, sender in zip(texts, senders)
+        ]
+
+    # Replay each pre-computed model result through the single-message path so
+    # confidence scoring and name resolution stay in exactly one place.
     return [
-        extract(text, known_customers, sender, llm)
-        for text, sender in zip(texts, senders)
+        extract(text, known_customers, sender, _Prefilled(result))
+        for text, sender, result in zip(texts, senders, batched)
     ]
+
+
+class _Prefilled:
+    """Adapts an already-fetched batch result to the LLMLayer interface."""
+
+    def __init__(self, result: dict) -> None:
+        self._result = result
+
+    def extract(self, text, gaps, known_customers, rule_result) -> dict:
+        return self._result
