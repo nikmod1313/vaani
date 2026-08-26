@@ -12,7 +12,7 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 160 tests, macro F1 0.926 |
+| Extraction engine | **Working** — 170 tests, macro F1 0.974 |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
 | Ledger store | **Working** — SQLite, idempotent sync, aggregates |
 | Spoken summary | **Working** — templates in hi / en / mr |
@@ -53,19 +53,27 @@ curl -s localhost:8000/extract -H 'content-type: application/json' -d '{"text":"
 
 ## Current accuracy (rules-only baseline, no LLM layer)
 
+122 labelled cases across ten categories.
+
 ```
 FIELD           PREC   RECALL      F1
-amount         0.926    1.000   0.962
-mode           1.000    1.000   1.000
-direction      0.952    0.909   0.930
-items          0.789    0.833   0.811
-                        macro F1   0.926
+amount         0.976    0.976   0.976
+mode           0.982    0.948   0.965
+direction      0.987    0.974   0.980
+items          0.965    0.982   0.973
+                        macro F1   0.974
 
-Exact match (all fields):  24/30  (80.0%)
+Exact match (all fields):  111/122  (91.0%)
 ```
 
-Items is the weakest field and that is expected — it is the one stage 2
-exists to lift.
+Per-category exact match, worst first — this is the view that tells you what
+to fix next, and it belongs in the report:
+
+```
+real_world        50.0%     number_words      83.3%
+devanagari        90.0%     payment_mode      91.7%
+chatter           95.0%     everything else  100.0%
+```
 
 **The stage-2 lift is not measured yet.** Running `--llm` needs credentials:
 
@@ -74,11 +82,9 @@ export ANTHROPIC_API_KEY=sk-...   # or: ant auth login
 cd backend && .venv/bin/python -m eval.run --llm
 ```
 
-That comparison — rules-only vs rules+Claude on the same 30 cases — is the
+That comparison — rules-only vs rules+Claude on the same 122 cases — is the
 single best number to put in the report, because the rules-only run is a real
-control group. **Re-run the eval every week and keep the number.** A stated
-limitation with data behind it scores better than a vague claim of high
-accuracy.
+control group. **Re-run the eval every week and keep the number.**
 
 ---
 

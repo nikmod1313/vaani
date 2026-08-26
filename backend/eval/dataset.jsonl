@@ -1,30 +1,122 @@
-{"id": 1, "text": "Bhaiya 2 kilo chawal aur 1 packet chai bhej do, dhai sau ka udhaar likh lena", "expected": {"amount": 250, "mode": "udhaar", "direction": "sale", "items": ["chawal", "chai"]}}
-{"id": 2, "text": "1 litre tel aur namak, 120 rupaye cash", "expected": {"amount": 120, "mode": "cash", "direction": "sale", "items": ["tel", "namak"]}}
-{"id": 3, "text": "3 packet biscuit 60 rupaye", "expected": {"amount": 60, "mode": "unknown", "direction": "sale", "items": ["biscuit"]}}
-{"id": 4, "text": "Rahul ne 500 rupaye UPI se bhej diye", "expected": {"amount": 500, "mode": "upi", "direction": "payment", "items": []}}
-{"id": 5, "text": "dedh sau ka saman, nakad", "expected": {"amount": 150, "mode": "cash", "direction": "unknown", "items": []}}
-{"id": 6, "text": "sava sau rupaye ka atta", "expected": {"amount": 125, "mode": "unknown", "direction": "sale", "items": ["atta"]}}
-{"id": 7, "text": "paune do sau ka udhaar", "expected": {"amount": 175, "mode": "udhaar", "direction": "unknown", "items": []}}
-{"id": 8, "text": "sadhe teen sau phonepe se mila", "expected": {"amount": 350, "mode": "upi", "direction": "payment", "items": []}}
-{"id": 9, "text": "adha kilo cheeni aur 1 kilo dal, khaate mein daal do", "expected": {"amount": null, "mode": "udhaar", "direction": "sale", "items": ["cheeni", "dal"]}}
-{"id": 10, "text": "2 kilo aalu 40 rupaye cash", "expected": {"amount": 40, "mode": "cash", "direction": "sale", "items": ["aalu"]}}
-{"id": 11, "text": "५ पैकेट चाय, दो सौ रुपये", "expected": {"amount": 200, "mode": "unknown", "direction": "sale", "items": ["चाय"]}}
-{"id": 12, "text": "chawal 5 kilo bhej do baaki likh lena", "expected": {"amount": null, "mode": "udhaar", "direction": "sale", "items": ["chawal"]}}
-{"id": 13, "text": "do hazaar paanch sau ka bill", "expected": {"amount": 2500, "mode": "unknown", "direction": "unknown", "items": []}}
-{"id": 14, "text": "payment mila 1000 nakad", "expected": {"amount": 1000, "mode": "cash", "direction": "payment", "items": []}}
-{"id": 15, "text": "1 dozen anda aur 2 bottle tel, 340 ka udhaar", "expected": {"amount": 340, "mode": "udhaar", "direction": "sale", "items": ["anda", "tel"]}}
-{"id": 16, "text": "sabun 3 piece, 90 rupaye gpay", "expected": {"amount": 90, "mode": "upi", "direction": "sale", "items": ["sabun"]}}
-{"id": 17, "text": "namaste bhaiya kaise ho", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
-{"id": 18, "text": "thik hai bhej dijiye", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
-{"id": 19, "text": "maggi 5 packet, doodh 2 litre, sab milakar 210 nakad", "expected": {"amount": 210, "mode": "cash", "direction": "sale", "items": ["maggi", "doodh"]}}
-{"id": 20, "text": "₹450 ka saman udhaar pe", "expected": {"amount": 450, "mode": "udhaar", "direction": "unknown", "items": []}}
-{"id": 21, "text": "ek lakh ka order", "expected": {"amount": 100000, "mode": "unknown", "direction": "unknown", "items": []}}
-{"id": 22, "text": "haldi mirch masala 75 rupaye cash de diya", "expected": {"amount": 75, "mode": "cash", "direction": "payment", "items": ["haldi", "mirch", "masala"]}}
-{"id": 23, "text": "2 kilo pyaz 1 kilo tamatar 80 ka", "expected": {"amount": 80, "mode": "unknown", "direction": "sale", "items": ["pyaz", "tamatar"]}}
-{"id": 24, "text": "bread aur paneer bhej do, 150 online kar diya", "expected": {"amount": 150, "mode": "upi", "direction": "sale", "items": ["bread", "paneer"]}}
-{"id": 25, "text": "ghee 1 kilo, dhai hazaar ka udhaar", "expected": {"amount": 2500, "mode": "udhaar", "direction": "sale", "items": ["ghee"]}}
-{"id": 26, "text": "shampoo 2 aur colgate 1, 180 rupaye", "expected": {"amount": 180, "mode": "unknown", "direction": "sale", "items": ["shampoo", "colgate"]}}
-{"id": 27, "text": "ok", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
-{"id": 28, "text": "500 jama kar diya", "expected": {"amount": 500, "mode": "unknown", "direction": "payment", "items": []}}
-{"id": 29, "text": "agarbatti 4 packet 40 rupaye nagad", "expected": {"amount": 40, "mode": "cash", "direction": "sale", "items": ["agarbatti"]}}
-{"id": 30, "text": "पचास रुपये का दूध", "expected": {"amount": 50, "mode": "unknown", "direction": "sale", "items": ["दूध"]}}
+{"id": 1, "category": "number_words", "text": "dhai sau ka udhaar", "expected": {"amount": 250, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 2, "category": "number_words", "text": "dedh sau ka saman, nakad", "expected": {"amount": 150, "mode": "cash", "direction": "unknown", "items": []}}
+{"id": 3, "category": "number_words", "text": "sava sau rupaye ka atta", "expected": {"amount": 125, "mode": "unknown", "direction": "sale", "items": ["atta"]}}
+{"id": 4, "category": "number_words", "text": "paune do sau ka udhaar", "expected": {"amount": 175, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 5, "category": "number_words", "text": "sadhe teen sau phonepe se mila", "expected": {"amount": 350, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 6, "category": "number_words", "text": "do hazaar paanch sau ka bill", "expected": {"amount": 2500, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 7, "category": "number_words", "text": "ek lakh ka order", "expected": {"amount": 100000, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 8, "category": "number_words", "text": "dedh hazaar cash", "expected": {"amount": 1500, "mode": "cash", "direction": "unknown", "items": []}}
+{"id": 9, "category": "number_words", "text": "sava do sau udhaar likh lena", "expected": {"amount": 225, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 10, "category": "number_words", "text": "paune sau ka chai", "expected": {"amount": 75, "mode": "unknown", "direction": "sale", "items": ["chai"]}}
+{"id": 11, "category": "number_words", "text": "sadhe char sau nakad diya", "expected": {"amount": 450, "mode": "cash", "direction": "payment", "items": []}}
+{"id": 12, "category": "number_words", "text": "dhai hazaar ka ghee", "expected": {"amount": 2500, "mode": "unknown", "direction": "sale", "items": ["ghee"]}}
+{"id": 13, "category": "number_words", "text": "adha kilo cheeni", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["cheeni"]}}
+{"id": 14, "category": "number_words", "text": "pav kilo haldi 30 rupaye", "expected": {"amount": 30, "mode": "unknown", "direction": "sale", "items": ["haldi"]}}
+{"id": 15, "category": "number_words", "text": "teen sau pachas rupaye baaki", "expected": {"amount": 350, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 16, "category": "number_words", "text": "chaar hazaar do sau chalees ka total", "expected": {"amount": 4240, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 17, "category": "number_words", "text": "assi rupaye cash", "expected": {"amount": 80, "mode": "cash", "direction": "unknown", "items": []}}
+{"id": 18, "category": "number_words", "text": "chhe sau ka saman udhaar", "expected": {"amount": 600, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 19, "category": "devanagari", "text": "पचास रुपये का दूध", "expected": {"amount": 50, "mode": "unknown", "direction": "sale", "items": ["दूध"]}}
+{"id": 20, "category": "devanagari", "text": "५ पैकेट चाय, दो सौ रुपये", "expected": {"amount": 200, "mode": "unknown", "direction": "sale", "items": ["चाय"]}}
+{"id": 21, "category": "devanagari", "text": "ढाई सौ का उधार लिख लेना", "expected": {"amount": 250, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 22, "category": "devanagari", "text": "2 किलो चावल नकद", "expected": {"amount": null, "mode": "cash", "direction": "sale", "items": ["चावल"]}}
+{"id": 23, "category": "devanagari", "text": "डेढ़ सौ रुपये नकद मिले", "expected": {"amount": 150, "mode": "cash", "direction": "payment", "items": []}}
+{"id": 24, "category": "devanagari", "text": "१०० रुपये का साबुन", "expected": {"amount": 100, "mode": "unknown", "direction": "sale", "items": ["साबुन"]}}
+{"id": 25, "category": "devanagari", "text": "आटा 5 किलो, ३०० रुपये", "expected": {"amount": 300, "mode": "unknown", "direction": "sale", "items": ["आटा"]}}
+{"id": 26, "category": "devanagari", "text": "तीन सौ बाकी है", "expected": {"amount": 300, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 27, "category": "devanagari", "text": "नमक और मिर्च भेज दो", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["नमक", "मिर्च"]}}
+{"id": 28, "category": "devanagari", "text": "५०० रुपये यूपीआई से भेजे", "expected": {"amount": 500, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 29, "category": "payment_mode", "text": "150 nakad", "expected": {"amount": 150, "mode": "cash", "direction": "unknown", "items": []}}
+{"id": 30, "category": "payment_mode", "text": "200 rupaye phonepe kar diya", "expected": {"amount": 200, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 31, "category": "payment_mode", "text": "300 gpay se bhej diya", "expected": {"amount": 300, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 32, "category": "payment_mode", "text": "chawal bhej do, likh lena", "expected": {"amount": null, "mode": "udhaar", "direction": "sale", "items": ["chawal"]}}
+{"id": 33, "category": "payment_mode", "text": "khaate mein daal do 250", "expected": {"amount": 250, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 34, "category": "payment_mode", "text": "450 online transfer kiya", "expected": {"amount": 450, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 35, "category": "payment_mode", "text": "120 rokad diya", "expected": {"amount": 120, "mode": "cash", "direction": "payment", "items": []}}
+{"id": 36, "category": "payment_mode", "text": "paytm se 90 bheja", "expected": {"amount": 90, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 37, "category": "payment_mode", "text": "scan karke 175 diya", "expected": {"amount": 175, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 38, "category": "payment_mode", "text": "credit pe 400 ka saman", "expected": {"amount": 400, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 39, "category": "payment_mode", "text": "udhaari 600 hai", "expected": {"amount": 600, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 40, "category": "payment_mode", "text": "bhim se 250 kiya", "expected": {"amount": 250, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 41, "category": "direction", "text": "payment mila 500 nakad", "expected": {"amount": 500, "mode": "cash", "direction": "payment", "items": []}}
+{"id": 42, "category": "direction", "text": "Rahul ne 500 rupaye UPI se bhej diye", "expected": {"amount": 500, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 43, "category": "direction", "text": "500 jama kar diya", "expected": {"amount": 500, "mode": "unknown", "direction": "payment", "items": []}}
+{"id": 44, "category": "direction", "text": "800 chukta kar diya", "expected": {"amount": 800, "mode": "unknown", "direction": "payment", "items": []}}
+{"id": 45, "category": "direction", "text": "paise mil gaye 300", "expected": {"amount": 300, "mode": "unknown", "direction": "payment", "items": []}}
+{"id": 46, "category": "direction", "text": "1200 settle kar diya", "expected": {"amount": 1200, "mode": "unknown", "direction": "payment", "items": []}}
+{"id": 47, "category": "direction", "text": "2 kilo chawal bhej do", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 48, "category": "direction", "text": "1 packet chai chahiye", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chai"]}}
+{"id": 49, "category": "direction", "text": "account clear kar diya 900", "expected": {"amount": 900, "mode": "unknown", "direction": "payment", "items": []}}
+{"id": 50, "category": "direction", "text": "aaj ka payment 450 aaya", "expected": {"amount": 450, "mode": "unknown", "direction": "payment", "items": []}}
+{"id": 51, "category": "items", "text": "2 kilo chawal", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 52, "category": "items", "text": "1 litre tel aur namak", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["tel", "namak"]}}
+{"id": 53, "category": "items", "text": "3 packet biscuit 60 rupaye", "expected": {"amount": 60, "mode": "unknown", "direction": "sale", "items": ["biscuit"]}}
+{"id": 54, "category": "items", "text": "maggi 5 packet, doodh 2 litre, 210 nakad", "expected": {"amount": 210, "mode": "cash", "direction": "sale", "items": ["maggi", "doodh"]}}
+{"id": 55, "category": "items", "text": "1 dozen anda aur 2 bottle tel, 340 ka udhaar", "expected": {"amount": 340, "mode": "udhaar", "direction": "sale", "items": ["anda", "tel"]}}
+{"id": 56, "category": "items", "text": "sabun 3 piece, 90 rupaye gpay", "expected": {"amount": 90, "mode": "upi", "direction": "sale", "items": ["sabun"]}}
+{"id": 57, "category": "items", "text": "haldi mirch masala 75 rupaye cash", "expected": {"amount": 75, "mode": "cash", "direction": "sale", "items": ["haldi", "mirch", "masala"]}}
+{"id": 58, "category": "items", "text": "2 kilo pyaz 1 kilo tamatar 80 ka", "expected": {"amount": 80, "mode": "unknown", "direction": "sale", "items": ["pyaz", "tamatar"]}}
+{"id": 59, "category": "items", "text": "bread aur paneer bhej do, 150 online", "expected": {"amount": 150, "mode": "upi", "direction": "sale", "items": ["bread", "paneer"]}}
+{"id": 60, "category": "items", "text": "shampoo 2 aur colgate 1, 180 rupaye", "expected": {"amount": 180, "mode": "unknown", "direction": "sale", "items": ["shampoo", "colgate"]}}
+{"id": 61, "category": "items", "text": "agarbatti 4 packet 40 rupaye nagad", "expected": {"amount": 40, "mode": "cash", "direction": "sale", "items": ["agarbatti"]}}
+{"id": 62, "category": "items", "text": "1 bora chawal chahiye", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 63, "category": "items", "text": "dal 2 kilo aur atta 5 kilo", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["dal", "atta"]}}
+{"id": 64, "category": "items", "text": "dahi 1 packet, 25 rupaye", "expected": {"amount": 25, "mode": "unknown", "direction": "sale", "items": ["dahi"]}}
+{"id": 65, "category": "items", "text": "ghee 1 kilo, dhai hazaar ka udhaar", "expected": {"amount": 2500, "mode": "udhaar", "direction": "sale", "items": ["ghee"]}}
+{"id": 66, "category": "items", "text": "detergent aur shampoo, 210 cash", "expected": {"amount": 210, "mode": "cash", "direction": "sale", "items": ["detergent", "shampoo"]}}
+{"id": 67, "category": "amount_selection", "text": "2 kilo chawal, 250 rupaye", "expected": {"amount": 250, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 68, "category": "amount_selection", "text": "chawal ₹250", "expected": {"amount": 250, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 69, "category": "amount_selection", "text": "5 packet chai 100 rupaye", "expected": {"amount": 100, "mode": "unknown", "direction": "sale", "items": ["chai"]}}
+{"id": 70, "category": "amount_selection", "text": "3 kilo atta ka 240 udhaar", "expected": {"amount": 240, "mode": "udhaar", "direction": "sale", "items": ["atta"]}}
+{"id": 71, "category": "amount_selection", "text": "₹450 ka saman udhaar pe", "expected": {"amount": 450, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 72, "category": "amount_selection", "text": "rs 320 ka bill", "expected": {"amount": 320, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 73, "category": "amount_selection", "text": "180/- nakad", "expected": {"amount": 180, "mode": "cash", "direction": "unknown", "items": []}}
+{"id": 74, "category": "amount_selection", "text": "2 packet, 4 kilo, total 500 rupaye", "expected": {"amount": 500, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 75, "category": "amount_selection", "text": "10 anda 60 rupaye cash", "expected": {"amount": 60, "mode": "cash", "direction": "sale", "items": ["anda"]}}
+{"id": 76, "category": "amount_selection", "text": "1 kilo cheeni 45 rupaye udhaar", "expected": {"amount": 45, "mode": "udhaar", "direction": "sale", "items": ["cheeni"]}}
+{"id": 77, "category": "chatter", "text": "namaste bhaiya kaise ho", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 78, "category": "chatter", "text": "ok", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 79, "category": "chatter", "text": "thik hai bhej dijiye", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 80, "category": "chatter", "text": "haan boliye", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 81, "category": "chatter", "text": "mil gaya dhanyavaad", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 82, "category": "chatter", "text": "kal aata hoon", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 83, "category": "chatter", "text": "acha", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 84, "category": "chatter", "text": "ji bhaiya", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 85, "category": "chatter", "text": "subh prabhat", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 86, "category": "chatter", "text": "dukan khuli hai kya", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 87, "category": "chatter", "text": "kitne baje band karte ho", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 88, "category": "chatter", "text": "ठीक है", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 89, "category": "chatter", "text": "नमस्ते", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 90, "category": "chatter", "text": "arre wah", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 91, "category": "chatter", "text": "sorry bhaiya bhool gaya", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 92, "category": "chatter", "text": "abhi busy hoon baad me", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 93, "category": "chatter", "text": "ha ha", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 94, "category": "chatter", "text": "👍", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 95, "category": "chatter", "text": "good morning", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 96, "category": "chatter", "text": "aap kaise hain", "expected": {"amount": null, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 97, "category": "ambiguity", "text": "chai bhej do, dhai sau ka udhaar", "expected": {"amount": 250, "mode": "udhaar", "direction": "sale", "items": ["chai"]}}
+{"id": 98, "category": "ambiguity", "text": "chawal bhej do", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 99, "category": "ambiguity", "text": "likh do 300", "expected": {"amount": 300, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 100, "category": "ambiguity", "text": "do kilo chawal", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chawal"]}}
+{"id": 101, "category": "ambiguity", "text": "do packet chai bhej do", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chai"]}}
+{"id": 102, "category": "ambiguity", "text": "kar do 500 ka udhaar", "expected": {"amount": 500, "mode": "udhaar", "direction": "unknown", "items": []}}
+{"id": 103, "category": "ambiguity", "text": "2 kilo chawal aur 1 packet chai bhej do, dhai sau ka udhaar likh lena", "expected": {"amount": 250, "mode": "udhaar", "direction": "sale", "items": ["chawal", "chai"]}}
+{"id": 104, "category": "ambiguity", "text": "do hazaar ka saman", "expected": {"amount": 2000, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 105, "category": "ambiguity", "text": "tel bhej do aur namak bhi", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["tel", "namak"]}}
+{"id": 106, "category": "ambiguity", "text": "5 kilo atta 200 rupaye ka hisab likh do", "expected": {"amount": 200, "mode": "udhaar", "direction": "sale", "items": ["atta"]}}
+{"id": 107, "category": "compound", "text": "2 kilo chawal, 1 litre tel, 3 packet chai, sab 480 nakad", "expected": {"amount": 480, "mode": "cash", "direction": "sale", "items": ["chawal", "tel", "chai"]}}
+{"id": 108, "category": "compound", "text": "atta 5 kilo aur cheeni 2 kilo, dhai sau ka udhaar likh lena", "expected": {"amount": 250, "mode": "udhaar", "direction": "sale", "items": ["atta", "cheeni"]}}
+{"id": 109, "category": "compound", "text": "doodh 2 litre subah, dahi 1 packet shaam, 90 rupaye", "expected": {"amount": 90, "mode": "unknown", "direction": "sale", "items": ["doodh", "dahi"]}}
+{"id": 110, "category": "compound", "text": "biscuit maggi noodles, sab milakar 320 phonepe", "expected": {"amount": 320, "mode": "upi", "direction": "sale", "items": ["biscuit", "maggi", "noodles"]}}
+{"id": 111, "category": "compound", "text": "namak mirch haldi masala, 140 ka udhaar", "expected": {"amount": 140, "mode": "udhaar", "direction": "sale", "items": ["namak", "mirch", "haldi", "masala"]}}
+{"id": 112, "category": "compound", "text": "1 bora chawal aur 2 bora atta, dedh hazaar cash", "expected": {"amount": 1500, "mode": "cash", "direction": "sale", "items": ["chawal", "atta"]}}
+{"id": 113, "category": "real_world", "text": "Bhaiya namaste, 2 kilo chawal bhej dena aur 1 packet chai. Paise kal doonga", "expected": {"amount": null, "mode": "udhaar", "direction": "sale", "items": ["chawal", "chai"]}}
+{"id": 114, "category": "real_world", "text": "bhaiya jaldi bhejo 1 litre tel 60 rupaye wala", "expected": {"amount": 60, "mode": "unknown", "direction": "sale", "items": ["tel"]}}
+{"id": 115, "category": "real_world", "text": "Aaj ka saman: atta 5kg, dal 2kg, cheeni 1kg. Total 420. Cash de raha hoon", "expected": {"amount": 420, "mode": "cash", "direction": "sale", "items": ["atta", "dal", "cheeni"]}}
+{"id": 116, "category": "real_world", "text": "bhaiya wo 250 wala udhaar clear kar diya, gpay dekh lena", "expected": {"amount": 250, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 117, "category": "real_world", "text": "2 packet doodh roz bhejna, mahine ke end me hisab kar lenge", "expected": {"amount": null, "mode": "udhaar", "direction": "sale", "items": ["doodh"]}}
+{"id": 118, "category": "real_world", "text": "chai khatam ho gayi, 2 packet bhej do jaldi", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["chai"]}}
+{"id": 119, "category": "real_world", "text": "kal ka 180 aur aaj ka 220, total 400 le lena", "expected": {"amount": 400, "mode": "unknown", "direction": "unknown", "items": []}}
+{"id": 120, "category": "real_world", "text": "sabun 2, shampoo 1, colgate 1 - 195 rupaye ka udhaar likh lo", "expected": {"amount": 195, "mode": "udhaar", "direction": "sale", "items": ["sabun", "shampoo", "colgate"]}}
+{"id": 121, "category": "real_world", "text": "bhaiya 500 bhej diye phonepe pe, check kar lena", "expected": {"amount": 500, "mode": "upi", "direction": "payment", "items": []}}
+{"id": 122, "category": "real_world", "text": "ghar pe mehmaan aaye hain, 1 kilo paneer aur 2 litre doodh urgent", "expected": {"amount": null, "mode": "unknown", "direction": "sale", "items": ["paneer", "doodh"]}}

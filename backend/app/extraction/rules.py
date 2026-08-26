@@ -57,21 +57,53 @@ _MODE_WORDS: dict[str, PaymentMode] = {
     "उधार": PaymentMode.UDHAAR, "बाकी": PaymentMode.UDHAAR,
 }
 
+# Devanagari-safe word boundaries.
+#
+# `\b` is defined against `\w`, and Python excludes Devanagari vowel signs
+# (matras such as e, aa, i) from `\w` because they are nonspacing marks. So a
+# trailing `\b` NEVER matches after a word ending in a matra -- which is most
+# Hindi words. Every `\b...\b` Devanagari pattern here was silently dead
+# code, matching nothing, for as long as it had been there.
+#
+# Whitespace boundaries mean what we actually want and work in both scripts.
+DEVA_START = r"(?<!\S)"
+DEVA_END = r"(?!\S)"
+
 # Phrases meaning "write it down" -> credit, even without the word udhaar.
 _CREDIT_PHRASES = [
     r"\blikh\s+(?:lena|lo|dena|do|dijiye)\b",
     r"\bkhaate?\s+mein\b",
-    r"\bलिख\s+(?:लेना|लो|देना)\b",
+    DEVA_START + r"लिख\s+(?:लेना|लो|देना|दो)" + DEVA_END,
+    DEVA_START + r"खाते\s+में" + DEVA_END,
 ]
 
 # Phrases meaning money came back in.
+#
+# Note `diy[ae]` rather than `diye?`. The latter matches "diy" plus an
+# optional "e", so the trailing \b never lands on "diya" -- and "kar diya",
+# "de diya" and "bhej diya" are how people actually write it. Every payment
+# phrased in the past tense was being read as a sale.
 _PAYMENT_PHRASES = [
-    r"\bpayment\s+(?:mila|aaya|kiya|kar\s+diya|ho\s+gaya)\b",
-    r"\bpaise?\s+(?:mil|aa|de|bhej)\w*\b",
-    r"\bjama\s+kar\w*\b",
-    r"\bchukta\b", r"\bsettle\w*\b", r"\bclear\s+kar\w*\b",
-    r"\bde\s+diye?\b", r"\bbhej\s+diye?\b",
-    r"\bपैसे?\s+(?:मिल|आ|दे)\w*\b", r"\bजमा\b",
+    # explicit payment nouns
+    r"\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae])\b",
+    r"\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b",
+    r"\bmil\s+gaye?\b",
+    # settling up
+    r"\bjama\s+kar\w*\b", r"\bchukta\b", r"\bsettle\w*\b",
+    r"\b(?:account|khata|hisab|hisaab)\b.{0,15}?\bclear\b",
+    r"\bclear\s+kar\s+diy[ae]\b",
+    # past-tense giving/sending, the most common form by far
+    r"\b(?:de|bhej|kar|jama)\s+diy[ae]\b",
+    r"\bbheja\b", r"\bbheje\b",
+    # a payment app plus any completed action
+    r"\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online|scan|transfer)\b"
+    r".{0,25}?\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|diy[ae]|kiya|bheja|bheje|mila|mile)\b",
+    # Devanagari -- whitespace boundaries, see DEVA_START above
+    DEVA_START + r"पैसे?\s*(?:मिल|आ|दे)\w*",
+    DEVA_START + r"जमा" + DEVA_END,
+    DEVA_START + r"(?:भेज|कर|दे)\s*(?:दिया|दिये|दिए)" + DEVA_END,
+    DEVA_START + r"मिल(?:े|गया|गए)" + DEVA_END,
+    DEVA_START + r"भेजे" + DEVA_END,
 ]
 
 _UNITS: dict[str, str] = {
@@ -100,8 +132,20 @@ _ITEMS: set[str] = {
     "tamatar", "tomato", "टमाटर", "anda", "egg", "अंडा",
     "bread", "ब्रेड", "paneer", "पनीर", "ghee", "घी",
     "shampoo", "शैम्पू", "colgate", "toothpaste", "manjan",
-    "agarbatti", "अगरबत्ती", "matchbox", "diya", "mombatti",
+    "agarbatti", "अगरबत्ती", "matchbox", "mombatti",
 }
+
+# Item words that are also everyday verbs. Same trap as "do" in the number
+# parser: "phonepe kar diya" is not a purchase of oil lamps, and "khaate mein
+# daal do" is not two kilos of lentils.
+#
+# These only count as items when a quantity or unit sits next to them, which
+# is how a real order names them ("dal 2 kilo", "1 packet dal").
+_WEAK_ITEMS: set[str] = {"dal", "daal", "दाल"}
+
+# Dropped from _ITEMS entirely: "diya" (an oil lamp, but overwhelmingly the
+# verb "gave" -- de diya, kar diya, bhej diya). Not worth the false positives
+# on every payment message.
 
 _CURRENCY = re.compile(r"(?:₹|rs\.?|rupaye|rupees|रु\.?|रुपये)", re.IGNORECASE)
 
@@ -209,9 +253,44 @@ def extract_items(text: str) -> list[LineItem]:
             continue
 
         if tok in _ITEMS:
-            items.append(LineItem(name=tok, quantity=pending_qty, unit=pending_unit))
+            nxt = tokens[i + 1].strip(".") if i + 1 < len(tokens) else ""
+            # A digit or a unit counts as corroboration; a weak number word
+            # does not -- "daal do" is "put it in", not two kilos of lentils.
+            corroborated = nxt in _UNITS or (
+                is_number_token(nxt) and nxt not in ("do", "de")
+            )
+
+            if tok in _WEAK_ITEMS and pending_qty is None and pending_unit is None:
+                if not corroborated:
+                    i += 1
+                    continue
+
+            quantity, unit = pending_qty, pending_unit
             pending_qty, pending_unit = None, None
             i += 1
+
+            # Trailing quantity: shopkeepers write both "2 kilo chawal" and
+            # "chawal 2 kilo". Without this the trailing quantity drifts onto
+            # the NEXT item, and the orphaned number gets picked as the
+            # amount -- "dal 2 kilo aur atta 5 kilo" booked Rs 5.
+            # A trailing number counts as a quantity ONLY when a unit follows
+            # it. "chawal 2 kilo" is two kilos; "chawal 300" is three hundred
+            # rupees of rice, and swallowing that as a quantity loses the
+            # amount entirely.
+            if quantity is None and i < len(tokens):
+                lookahead = tokens[i].strip(".")
+                if is_number_token(lookahead) and lookahead not in ("do", "de"):
+                    j = i
+                    while j < len(tokens) and is_number_token(tokens[j].strip(".")):
+                        j += 1
+                    followed_by_unit = j < len(tokens) and tokens[j].strip(".") in _UNITS
+                    value = parse_number_phrase(tokens[i:j]) if followed_by_unit else None
+                    if value is not None:
+                        quantity = value
+                        unit = _UNITS[tokens[j].strip(".")]
+                        i = j + 1
+
+            items.append(LineItem(name=tok, quantity=quantity, unit=unit))
             continue
 
         i += 1
@@ -253,12 +332,20 @@ def _pick_amount(
         if re.search(window, norm):
             return value, "mode-adjacent"
 
-    # 3. Largest number not used as an item quantity.
+    # 3. Largest number not already consumed as an item quantity.
     used = {it.quantity for it in items if it.quantity is not None}
     spare = [(v, m) for v, m in numbers if v not in used]
     if spare:
         value, matched = max(spare, key=lambda p: p[0])
         return value, "largest-unused"
+
+    # Every number was a quantity, so no price was stated. Falling through to
+    # "largest overall" here would reuse a quantity AS the amount: "2 kilo
+    # chawal bhej do" booked Rs 2. A missing amount is recoverable -- the
+    # confirm sheet asks for it -- but a wrong one is money out of someone's
+    # pocket.
+    if items:
+        return None, None
 
     value, matched = max(numbers, key=lambda p: p[0])
     return value, "largest-overall"

@@ -121,6 +121,7 @@ def main() -> int:
     counters: dict[str, Counter] = {f: Counter() for f in FIELDS}
     exact_matches = 0
     calibration: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # bucket -> [correct, total]
+    by_category: dict[str, list[int]] = defaultdict(lambda: [0, 0])  # cat -> [correct, total]
     misses: list[str] = []
 
     for row in rows:
@@ -146,12 +147,18 @@ def main() -> int:
                 all_correct = False
                 if args.verbose:
                     misses.append(
-                        f"  #{row['id']:>2} {fieldname:<10} "
+                        f"  #{row['id']:>3} {row.get('category','')[:12]:<13}{fieldname:<10} "
                         f"got={predicted[fieldname]!r:<28} want={expected.get(fieldname)!r}"
                     )
 
         if all_correct:
             exact_matches += 1
+
+        category = row.get("category")
+        if category:
+            by_category[category][1] += 1
+            if all_correct:
+                by_category[category][0] += 1
 
         bucket = f"{int(result.confidence['overall'] * 10) / 10:.1f}"
         calibration[bucket][1] += 1
@@ -182,6 +189,18 @@ def main() -> int:
     print()
     print(f"  Exact match (all fields):  {exact_matches}/{len(rows)}"
           f"  ({exact_matches / len(rows):.1%})")
+
+    # Per-category exact-match. A single macro F1 hides which KIND of message
+    # the engine fails on, which is the only view that tells you what to fix
+    # next -- and it is what belongs in the report.
+    if by_category:
+        print()
+        print("  BY CATEGORY")
+        print("  " + "-" * 55)
+        print(f"  {'category':<20}{'n':>5}{'exact':>8}{'rate':>9}")
+        for name in sorted(by_category, key=lambda k: by_category[k][0] / by_category[k][1]):
+            correct, total = by_category[name]
+            print(f"  {name:<20}{total:>5}{correct:>8}{correct / total:>9.1%}")
 
     print()
     print("  CONFIDENCE CALIBRATION")

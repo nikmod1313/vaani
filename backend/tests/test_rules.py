@@ -111,6 +111,71 @@ class TestAmountSelection(unittest.TestCase):
         self.assertIsNone(r.amount)
 
 
+class TestVerbTraps(unittest.TestCase):
+    """
+    Hindi words that are both goods and verbs. Same class as "do" in the
+    number parser, and each one silently invented ledger entries.
+    """
+
+    def test_diya_is_not_an_oil_lamp(self):
+        # "phonepe kar diya" was booking a purchase of diyas on every payment.
+        r = apply_rules("200 rupaye phonepe kar diya")
+        self.assertEqual(r.items, [])
+        self.assertEqual(r.direction, Direction.PAYMENT)
+
+    def test_daal_do_is_not_lentils(self):
+        r = apply_rules("khaate mein daal do 250")
+        self.assertEqual([i.name for i in r.items], [])
+
+    def test_dal_with_a_quantity_is_lentils(self):
+        r = apply_rules("dal 2 kilo bhej do")
+        self.assertEqual([i.name for i in r.items], ["dal"])
+        self.assertEqual(r.items[0].quantity, 2)
+
+
+class TestQuantityIsNotMoney(unittest.TestCase):
+    def test_quantity_alone_yields_no_amount(self):
+        """
+        "2 kilo chawal bhej do" once booked Rs 2 -- the quantity was reused as
+        the price. A missing amount is recoverable; a wrong one is not.
+        """
+        r = apply_rules("2 kilo chawal bhej do")
+        self.assertIsNone(r.amount)
+        self.assertEqual(r.items[0].quantity, 2)
+
+    def test_trailing_quantity_attaches_to_its_own_item(self):
+        # The trailing "2 kilo" once drifted onto atta, orphaning a number
+        # that then got picked as the amount.
+        r = apply_rules("dal 2 kilo aur atta 5 kilo")
+        self.assertIsNone(r.amount)
+        self.assertEqual([(i.name, i.quantity) for i in r.items],
+                         [("dal", 2), ("atta", 5)])
+
+    def test_bare_trailing_number_is_money_not_quantity(self):
+        # No unit -> it is a price, not three hundred kilos of rice.
+        r = apply_rules("chawal 300")
+        self.assertEqual(r.amount, 300)
+
+
+class TestDevanagariBoundaries(unittest.TestCase):
+    """
+    Regression: Python excludes Devanagari matras from \\w, so a trailing
+    `\\b` never matches after them. Every Devanagari phrase pattern was dead
+    code until whitespace boundaries replaced them.
+    """
+
+    def test_payment_detected_in_devanagari(self):
+        self.assertEqual(detect_direction("डेढ़ सौ रुपये नकद मिले"), Direction.PAYMENT)
+        self.assertEqual(detect_direction("५०० रुपये यूपीआई से भेजे"), Direction.PAYMENT)
+
+    def test_credit_phrase_detected_in_devanagari(self):
+        self.assertEqual(detect_mode("खाते में डाल दो")[0], PaymentMode.UDHAAR)
+
+    def test_word_ending_in_matra_is_matched(self):
+        # "मिले" ends in a matra; a \b-anchored pattern silently missed it.
+        self.assertEqual(detect_direction("पैसे मिले"), Direction.PAYMENT)
+
+
 class TestFullRules(unittest.TestCase):
     def test_the_canonical_order(self):
         text = "Bhaiya 2 kilo chawal aur 1 packet chai bhej do, dhai sau ka udhaar likh lena"
