@@ -176,6 +176,77 @@ class TestDevanagariBoundaries(unittest.TestCase):
         self.assertEqual(detect_direction("पैसे मिले"), Direction.PAYMENT)
 
 
+class TestPriceVsQuantity(unittest.TestCase):
+    """
+    "X ka Y" is Hindi for "Y worth X" — the number is money, not a count.
+    Read as a quantity it is swallowed by the item and the entry saves with
+    no amount at all.
+    """
+
+    def test_ka_marks_the_number_as_a_price(self):
+        r = apply_rules("paune sau ka chai")
+        self.assertEqual(r.amount, 75)
+        self.assertEqual([i.name for i in r.items], ["chai"])
+        self.assertIsNone(r.items[0].quantity)
+
+    def test_ka_with_a_large_amount(self):
+        self.assertEqual(apply_rules("dhai hazaar ka ghee").amount, 2500)
+
+    def test_unit_still_wins_over_price_marker(self):
+        r = apply_rules("2 kilo chawal")
+        self.assertIsNone(r.amount)
+        self.assertEqual(r.items[0].quantity, 2)
+
+    def test_a_measure_is_never_the_amount(self):
+        # The 2 never reaches chai across the clause break; without the
+        # measure rule it became a Rs 2 sale.
+        r = apply_rules("chai khatam ho gayi, 2 packet bhej do jaldi")
+        self.assertIsNone(r.amount)
+
+
+class TestGluedUnits(unittest.TestCase):
+    def test_5kg_splits(self):
+        r = apply_rules("Aaj ka saman: atta 5kg, dal 2kg, cheeni 1kg. Total 420. Cash de raha hoon")
+        self.assertEqual([i.name for i in r.items], ["atta", "dal", "cheeni"])
+        self.assertEqual(r.amount, 420)
+        self.assertEqual(r.mode, PaymentMode.CASH)
+
+    def test_glued_litre(self):
+        r = apply_rules("tel 2ltr bhej do")
+        self.assertEqual(r.items[0].quantity, 2)
+
+
+class TestDeferredPayment(unittest.TestCase):
+    """Credit opened without anyone saying "udhaar"."""
+
+    def test_paise_kal_doonga(self):
+        r = apply_rules("2 kilo chawal bhej dena aur 1 packet chai. Paise kal doonga")
+        self.assertEqual(r.mode, PaymentMode.UDHAAR)
+
+    def test_month_end_settlement(self):
+        r = apply_rules("2 packet doodh roz bhejna, mahine ke end me hisab kar lenge")
+        self.assertEqual(r.mode, PaymentMode.UDHAAR)
+
+
+class TestInstrumentBeatsDebtType(unittest.TestCase):
+    def test_you_cannot_pay_with_udhaar(self):
+        """
+        "wo 250 wala udhaar clear kar diya, gpay dekh lena" — udhaar names
+        the debt being settled; gpay is how. On a payment the instrument wins.
+        """
+        r = apply_rules("bhaiya wo 250 wala udhaar clear kar diya, gpay dekh lena")
+        self.assertEqual(r.direction, Direction.PAYMENT)
+        self.assertEqual(r.mode, PaymentMode.UPI)
+
+    def test_udhaar_still_wins_on_a_sale(self):
+        r = apply_rules("2 kilo chawal, dhai sau ka udhaar likh lena")
+        self.assertEqual(r.mode, PaymentMode.UDHAAR)
+
+    def test_mode_word_plus_diya_is_a_payment(self):
+        self.assertEqual(apply_rules("120 rokad diya").direction, Direction.PAYMENT)
+        self.assertEqual(apply_rules("sadhe char sau nakad diya").direction, Direction.PAYMENT)
+
+
 class TestFullRules(unittest.TestCase):
     def test_the_canonical_order(self):
         text = "Bhaiya 2 kilo chawal aur 1 packet chai bhej do, dhai sau ka udhaar likh lena"

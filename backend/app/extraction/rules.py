@@ -77,6 +77,22 @@ _CREDIT_PHRASES = [
     DEVA_START + r"खाते\s+में" + DEVA_END,
 ]
 
+# Deferred payment is credit, even when nobody says "udhaar".
+#
+# "Paise kal doonga" and "mahine ke end me hisab kar lenge" are how a regular
+# customer actually opens a credit line -- the word udhaar never appears
+# because both sides already know that is what this is.
+_DEFERRED_PHRASES = [
+    r"\bpaise?\b.{0,20}?\b(?:kal|baad|shaam|raat|sunday|somvar)\b",
+    r"\b(?:kal|baad\s+me|baad\s+mein|shaam\s+ko|raat\s+ko)\b.{0,15}?\b(?:doonga|dunga|dedunga|de\s+dunga|dungi)\b",
+    r"\b(?:doonga|dunga|dungi|dedunga)\b",
+    r"\bhisab\b.{0,15}?\b(?:kar\s+lenge|kar\s+lena|baad|end)\b",
+    r"\bmahine?\s+ke\s+(?:end|akhir|ant)\b",
+    r"\bbaad\s+m[ei]in?\s+(?:de|dunga|doonga|karenge)\w*\b",
+    DEVA_START + r"पैसे?\s+कल" + DEVA_END,
+    DEVA_START + r"बाद\s+में\s+(?:दूंगा|दे)" + DEVA_END,
+]
+
 # Phrases meaning money came back in.
 #
 # Note `diy[ae]` rather than `diye?`. The latter matches "diy" plus an
@@ -95,6 +111,7 @@ _PAYMENT_PHRASES = [
     # past-tense giving/sending, the most common form by far
     r"\b(?:de|bhej|kar|jama)\s+diy[ae]\b",
     r"\bbheja\b", r"\bbheje\b",
+    r"\b(?:nakad|nagad|cash|rokad|upi|online)\s+diy[ae]\b",
     # a payment app plus any completed action
     r"\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online|scan|transfer)\b"
     r".{0,25}?\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|diy[ae]|kiya|bheja|bheje|mila|mile)\b",
@@ -141,13 +158,23 @@ _ITEMS: set[str] = {
 #
 # These only count as items when a quantity or unit sits next to them, which
 # is how a real order names them ("dal 2 kilo", "1 packet dal").
-_WEAK_ITEMS: set[str] = {"dal", "daal", "दाल"}
+_WEAK_ITEMS: set[str] = {"dal", "daal", "दाल", "aata"}
 
 # Dropped from _ITEMS entirely: "diya" (an oil lamp, but overwhelmingly the
 # verb "gave" -- de diya, kar diya, bhej diya). Not worth the false positives
 # on every payment message.
 
 _CURRENCY = re.compile(r"(?:₹|rs\.?|rupaye|rupees|रु\.?|रुपये)", re.IGNORECASE)
+
+# Tokens that mark the number before them as MONEY rather than a count.
+#
+# "ka / ki / ke" is the Hindi possessive: "paune sau ka chai" is seventy-five
+# rupees WORTH of tea, not seventy-five teas. Without this the price is
+# swallowed as a quantity and the entry saves with no amount at all.
+_PRICE_MARKERS = {
+    "ka", "ki", "ke", "का", "की", "के",
+    "rupaye", "rupees", "rupay", "rs", "₹", "रुपये", "रुपए",
+}
 
 
 # --------------------------------------------------------------------------
@@ -188,13 +215,28 @@ class RuleResult:
 # --------------------------------------------------------------------------
 
 def detect_mode(text: str) -> tuple[PaymentMode, str | None]:
-    """Payment mode plus the word that decided it."""
+    """
+    Payment mode plus the word that decided it.
+
+    `is_payment` matters: you cannot pay WITH udhaar. In "wo 250 wala udhaar
+    clear kar diya, gpay dekh lena" the word udhaar names the debt being
+    settled, while gpay is how it was settled -- so on a payment the
+    instrument wins over the debt type.
+    """
     norm = normalise(text)
+    hits: list[tuple[PaymentMode, str]] = []
     for tok in norm.split():
         clean = tok.strip(".")
         if clean in _MODE_WORDS:
-            return _MODE_WORDS[clean], clean
-    for pattern in _CREDIT_PHRASES:
+            hits.append((_MODE_WORDS[clean], clean))
+
+    if hits:
+        instruments = [h for h in hits if h[0] in (PaymentMode.CASH, PaymentMode.UPI)]
+        if instruments and detect_direction(text) is Direction.PAYMENT:
+            return instruments[0]
+        return hits[0]
+
+    for pattern in _CREDIT_PHRASES + _DEFERRED_PHRASES:
         m = re.search(pattern, norm)
         if m:
             return PaymentMode.UDHAAR, m.group(0)
@@ -242,7 +284,10 @@ def extract_items(text: str) -> list[LineItem]:
             while j < len(tokens) and is_number_token(tokens[j].strip(".")):
                 j += 1
             value = parse_number_phrase(tokens[i:j])
-            if value is not None:
+            nxt = tokens[j].strip(".") if j < len(tokens) else ""
+            # "paune sau ka chai" — a price, not a count. Leaving pending_qty
+            # unset keeps the number available as the amount.
+            if value is not None and nxt not in _PRICE_MARKERS:
                 pending_qty = value
             i = j
             continue
@@ -298,6 +343,28 @@ def extract_items(text: str) -> list[LineItem]:
     return items
 
 
+def _measure_values(text: str) -> set[float]:
+    """Every number immediately followed by a unit. These are never money."""
+    from .numbers import is_number_token, parse_number_phrase
+
+    tokens = tokenize(text)
+    found: set[float] = set()
+    i = 0
+    while i < len(tokens):
+        if not is_number_token(tokens[i].strip(".")):
+            i += 1
+            continue
+        j = i
+        while j < len(tokens) and is_number_token(tokens[j].strip(".")):
+            j += 1
+        if j < len(tokens) and tokens[j].strip(".") in _UNITS:
+            value = parse_number_phrase(tokens[i:j])
+            if value is not None:
+                found.add(value)
+        i = max(j, i + 1)
+    return found
+
+
 def _pick_amount(
     text: str,
     numbers: list[tuple[float, str]],
@@ -333,7 +400,13 @@ def _pick_amount(
             return value, "mode-adjacent"
 
     # 3. Largest number not already consumed as an item quantity.
+    #
+    # A number directly followed by a unit is a measure, full stop -- even
+    # when a clause boundary stopped it attaching to its item. In "chai
+    # khatam ho gayi, 2 packet bhej do jaldi" the 2 never reaches chai, and
+    # without this it gets picked as the amount: a ₹2 sale.
     used = {it.quantity for it in items if it.quantity is not None}
+    used |= _measure_values(text)
     spare = [(v, m) for v, m in numbers if v not in used]
     if spare:
         value, matched = max(spare, key=lambda p: p[0])

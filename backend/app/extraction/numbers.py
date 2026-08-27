@@ -105,7 +105,7 @@ _FILLERS = {"aur", "और", "or"}
 # Number words that are also ordinary Hindi words. "do" means 2, but it is far
 # more often the imperative "give/send" -- "bhej do", "kar do", "likh do". A
 # weak word only counts as a number when the context supports it.
-_WEAK_NUMBERS = {"do", "de"}
+_WEAK_NUMBERS = {"do", "de", "दो", "दे"}
 
 # Verb stems that turn a following "do" into an imperative particle.
 _IMPERATIVE_STEMS = {
@@ -139,6 +139,14 @@ def normalise(text: str) -> str:
     text = re.sub(r"(₹|रु\.?)\s*(\d)", r"\1 \2", text)
     text = re.sub(r"\brs\.?\s*(\d)", r"rs \1", text)
     text = re.sub(r"(\d)\s*/-", r"\1 ", text)
+    # Split glued measures: people type "atta 5kg, dal 2kg" far more often
+    # than "5 kg". Without this the unit never registers and the item loses
+    # its quantity entirely.
+    text = re.sub(
+        r"(?<=\d)(kgs?|kilos?|gms?|grams?|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b",
+        r" \1",
+        text,
+    )
     # Clause separators become explicit boundary tokens. A period only counts
     # when it is not a decimal point.
     text = re.sub(r"[,،;:।!?\n\r]+", f" {BOUNDARY} ", text)

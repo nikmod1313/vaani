@@ -31,9 +31,11 @@ class TestBasicNumbers(unittest.TestCase):
         self.assertEqual(parse_number("hazar"), 1000)
 
     def test_devanagari(self):
-        self.assertEqual(parse_number("दो"), 2)
+        # "दो" is excluded here for the same reason as Latin "do" -- bare and
+        # trailing, it is the verb. Covered in TestDoAmbiguity instead.
         self.assertEqual(parse_number("पाँच"), 5)
         self.assertEqual(parse_number("सौ"), 100)
+        self.assertEqual(parse_number("तीन"), 3)
 
     def test_devanagari_digits(self):
         self.assertEqual(parse_number("२५०"), 250)
@@ -69,6 +71,12 @@ class TestDoAmbiguity(unittest.TestCase):
         # Verb-stem rule has to carry it when punctuation is missing.
         text = "chai bhej do dhai sau ka udhaar"
         self.assertIn(250, [v for v, _ in find_numbers(text)])
+
+    def test_devanagari_do_is_also_a_verb(self):
+        # "नमक और मिर्च भेज दो" is "send salt and chilli", not "…send 2".
+        self.assertIsNone(parse_number("नमक और मिर्च भेज दो"))
+        # With a unit after it, it is a real quantity again.
+        self.assertEqual(parse_number("दो किलो चावल"), 2)
 
 
 class TestFractions(unittest.TestCase):

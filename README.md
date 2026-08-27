@@ -12,7 +12,7 @@ No WhatsApp Business API anywhere on the critical path.
 
 | Component | State |
 |---|---|
-| Extraction engine | **Working** — 169 tests, macro F1 0.974 |
+| Extraction engine | **Working** — 181 tests, macro F1 1.000 (see caveat) |
 | WhatsApp export ingestion | **Working** — parser, watermark, classifier |
 | Ledger store | **Working** — SQLite, idempotent sync, aggregates |
 | Spoken summary | **Working** — templates in hi / en / mr |
@@ -57,34 +57,40 @@ curl -s localhost:8000/extract -H 'content-type: application/json' -d '{"text":"
 
 ```
 FIELD           PREC   RECALL      F1
-amount         0.976    0.976   0.976
-mode           0.982    0.948   0.965
-direction      0.987    0.974   0.980
-items          0.965    0.982   0.973
-                        macro F1   0.974
+amount         1.000    1.000   1.000
+mode           1.000    1.000   1.000
+direction      1.000    1.000   1.000
+items          1.000    1.000   1.000
+                        macro F1   1.000
 
-Exact match (all fields):  111/122  (91.0%)
+Exact match (all fields):  122/122  (100.0%)
 ```
 
-Per-category exact match, worst first — this is the view that tells you what
-to fix next, and it belongs in the report:
+### Read that number carefully
 
-```
-real_world        50.0%     number_words      83.3%
-devanagari        90.0%     payment_mode      91.7%
-chatter           95.0%     everything else  100.0%
-```
+**100% means the dataset is saturated, not that the engine is finished.** We
+wrote these 122 cases, then fixed the engine until it passed them — so the
+set no longer discriminates. It is now a regression suite, not a measure of
+capability.
 
-**The stage-2 lift is not measured yet.** Running `--llm` needs credentials:
+Two things follow, and both are on the plan:
+
+1. **The next 30 cases must come from someone who did not write the engine.**
+   Ideally from real shopkeeper messages rather than our imagination.
+2. **A held-out split.** Right now every case is a training case. The number
+   worth reporting is accuracy on messages the engine has never been tuned
+   against.
+
+The honest claim today is: *"the engine handles every construction we have
+thought to test, and here is the list."* That is worth something, but it is
+not 100% accuracy in the wild, and the report should not say it is.
+
+**The stage-2 lift is still unmeasured.** Running `--llm` needs credentials:
 
 ```bash
 export ANTHROPIC_API_KEY=sk-...   # or: ant auth login
 cd backend && .venv/bin/python -m eval.run --llm
 ```
-
-That comparison — rules-only vs rules+Claude on the same 122 cases — is the
-single best number to put in the report, because the rules-only run is a real
-control group. **Re-run the eval every week and keep the number.**
 
 ---
 
@@ -92,20 +98,28 @@ control group. **Re-run the eval every week and keep the number.**
 
 ```
 backend/
-  app/extraction/
-    numbers.py      Hindi number words, both directions
-    rules.py        amount / mode / items / direction
-    names.py        transliteration + fuzzy customer matching
-    confidence.py   per-field scoring and routing
-    whatsapp.py     export parsing, watermark, segmentation, classifier
-    llm.py          stage 2 — Claude, structured output, batch path
-    corrections.py  Badlo pairs + per-shop few-shot retrieval
-    pipeline.py     orchestrates the four stages
-  eval/             labelled dataset + scoring harness
-  tests/            169 tests, stdlib unittest for the core
+  app/
+    main.py         FastAPI — every endpoint in docs/api.yaml
+    store.py        SQLite ledger: idempotent sync, FIFO aging, seed data
+    summary.py      spoken-summary templates (hi / en / mr)
+    tts.py          Sarvam Bulbul v3 client + content-addressed audio cache
+    extraction/
+      numbers.py    Hindi number words, both directions
+      rules.py      amount / mode / items / direction
+      names.py      transliteration + fuzzy customer matching
+      confidence.py per-field scoring and routing
+      whatsapp.py   export parsing, watermark, segmentation, classifier
+      llm.py        stage 2 — Claude, structured output, batch path
+      corrections.py  Badlo pairs + per-shop few-shot retrieval
+      pipeline.py   orchestrates the four stages
+  eval/             122 labelled cases + scoring harness
+  demo.py           end-to-end walkthrough, no install needed
+  tests/            181 tests, stdlib unittest for the core
 docs/api.yaml       the frozen contract everyone codes against
-android/            manifest, overlay service, accessibility service
-dashboard/          not started
+docs/*.pptx         progress-review deck
+dashboard/          one HTML file, no build step, served at /
+android/            manifest, overlay + accessibility services, Room,
+                    sync worker, reminder deep links — NOT yet compiled
 ```
 
 ---
@@ -135,26 +149,46 @@ lied to someone about their money, and a listener cannot catch it.
 
 ---
 
-## Three traps already found and fixed
+## Traps already found and fixed — do not reintroduce these
 
-**`do` means 2, but usually it's a verb.** In *"chai bhej do, dhai sau"* the
-parser first read `do dhai sau` as `(2 + 2.5) × 100 = 450` instead of 250.
-Fixed with clause boundaries plus a verb-stem rule. See `TestDoAmbiguity`.
+Ten bugs so far, every one of which would have put a wrong number in
+someone's ledger. All have regression tests. The instructive classes:
 
-**Trailing-vowel trimming ate real vowels.** `प्रिया` transliterated to
-"priy", and `bhaiya` to "bhaiy" — which then dodged the honorific filter. Only
-the *inherent* vowel gets trimmed now, never a matra, and never Latin input.
+**Hindi words that are also verbs.** `do` means 2 but usually "send", so
+*"chai bhej do, dhai sau"* parsed as `(2 + 2.5) × 100 = 450` instead of 250.
+Same trap caught `diya` (an oil lamp, but overwhelmingly "gave" — every
+payment booked a lamp purchase) and `daal` ("lentils", but `daal do` means
+"put it in"). See `TestDoAmbiguity` and `TestVerbTraps`.
+
+**A quantity is not a price.** `"2 kilo chawal bhej do"` booked ₹2 — every
+number was consumed as an item quantity, then the amount picker grabbed one
+back. A missing amount is recoverable; a wrong one is not. `TestQuantityIsNotMoney`.
+
+**`\b` does not work on Devanagari.** Python excludes matras (े ा ि) from
+`\w` because they are nonspacing marks, so a trailing `\b` never matches
+after a word ending in one — which is most Hindi words. Every `\b…\b` Hindi
+pattern was silently dead code. Use `DEVA_START`/`DEVA_END` in `rules.py`.
+`TestDevanagariBoundaries`.
+
+**Transliteration ate real vowels.** `प्रिया` became "priy" and `bhaiya`
+became "bhaiy", which then dodged the honorific filter. Only the *inherent*
+vowel is trimmed now — never a matra, never Latin input.
+
+**Aging must follow the money.** Taking the oldest udhaar date outright ages
+a balance from a debt already paid off, so every regular customer reads as
+permanently overdue and the flag stops meaning anything. Payments settle
+oldest-first. Duplicated deliberately in Kotlin `Aging.settle` — if the phone
+and the dashboard disagree, the shopkeeper trusts neither.
 
 **`Anthropic()` constructs fine with no credentials.** It only fails at
-request time, so treating construction as proof of availability made
-`eval.run --llm` print "rules + claude-opus-5" over numbers the model had
-never touched — every call failed, the pipeline degraded to rules-only, and
-the header still claimed otherwise. The eval now refuses to report stage-2
-numbers when zero calls succeeded, and `/health` states which stages are live.
+request time, so treating construction as availability made `eval.run --llm`
+print "rules + claude-opus-5" over numbers the model never touched. The eval
+now refuses to report stage-2 numbers when zero calls succeeded, and
+`/health` states which stages are live.
 
-All three have regression tests. Do not remove them.
-
----
+**A fresh phone's first sync had no shop row.** Transactions and customers
+saved fine, but `/summary` 404'd on a shop that demonstrably had data —
+indistinguishable from data loss. Saving now guarantees the shop row.
 
 ## Next up
 
@@ -164,7 +198,8 @@ All three have regression tests. Do not remove them.
    day.
 2. Room schema + `docs/api.yaml` frozen with all four people present.
 3. **Measure the stage-2 lift** — add credentials and run `eval.run --llm`.
-4. Grow the eval dataset from 30 cases toward 150.
+4. Grow the eval dataset from 122 cases toward 150, weighted toward
+   `real_world` — the weakest category at 50%.
 5. **Have a Marathi speaker review `summary.py`'s `mr-IN` template** — the
    sentence frames are drafted, but the amounts still come out in Hindi
    number words. Ship it only once someone who speaks Marathi has read it.
