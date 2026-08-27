@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import app.vaaniledger.data.Aging
 import app.vaaniledger.data.LedgerDatabase
 import app.vaaniledger.data.ShopEntity
 import app.vaaniledger.data.TransactionEntity
@@ -47,6 +48,7 @@ class OverlayService : Service() {
     private var bubble: View? = null
     private var panel: View? = null
     private var confirmSheet: View? = null
+    private var khataSheet: View? = null
 
     // SupervisorJob so one failed extraction cannot cancel the scope and
     // silently kill every capture after it.
@@ -61,6 +63,18 @@ class OverlayService : Service() {
         }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Voice transcripts arrive here from VoiceActivity and join the same
+        // extract -> confirm -> save path as a chat capture.
+        if (intent?.action == ACTION_EXTRACT_TEXT) {
+            intent.getStringExtra(EXTRA_TEXT)?.takeIf { it.isNotBlank() }?.let {
+                android.util.Log.i(TAG, "voice: $it")
+                extractText(it, senderName = null)
+            }
+        }
+        return START_STICKY
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -176,10 +190,8 @@ class OverlayService : Service() {
         // One sheet at a time. Tapping the bubble while a confirm sheet is up
         // stacked the panel on top of it, leaving two half-visible sheets and
         // no way to tell which buttons belonged to which.
-        if (confirmSheet != null) {
-            dismissConfirm()
-            return
-        }
+        if (confirmSheet != null) { dismissConfirm(); return }
+        if (khataSheet != null) { dismissKhata(); return }
 
         // Read today's figures from Room before drawing anything. Room, never
         // the network: this has to open instantly on a counter with no signal,
@@ -227,6 +239,8 @@ class OverlayService : Service() {
             today = totals,
             onDismiss = { collapse() },
             onCapture = { capture() },
+            onVoice = { startVoice() },
+            onKhata = { showKhata() },
         )
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -239,6 +253,62 @@ class OverlayService : Service() {
         windowManager.addView(view, params)
         panel = view
         bubble?.visibility = View.GONE
+    }
+
+    /**
+     * "Bol ke likho" — hand off to the voice Activity.
+     *
+     * A Service cannot request RECORD_AUDIO or receive a speech result, so
+     * this launches a transparent Activity which posts the transcript back.
+     */
+    private fun startVoice() {
+        collapse()
+        startActivity(
+            android.content.Intent(this, app.vaaniledger.VoiceActivity::class.java)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+
+    /** "Khata" — balances and every entry behind them. */
+    private fun showKhata() {
+        collapse()
+        if (khataSheet != null) return
+
+        scope.launch {
+            val db = LedgerDatabase.get(this@OverlayService)
+            val all = runCatching { db.transactions().allOnce(SHOP_ID) }.getOrDefault(emptyList())
+            val names = runCatching { db.transactions().customersOnce(SHOP_ID) }
+                .getOrDefault(emptyList()).associate { it.id to it.name }
+            val recent = runCatching { db.transactions().recentOnce(SHOP_ID) }
+                .getOrDefault(emptyList())
+            val balances = Aging.balances(all, names)
+
+            withContext(Dispatchers.Main) {
+                if (khataSheet != null) return@withContext
+                val view = KhataView(
+                    context = this@OverlayService,
+                    balances = balances,
+                    recent = recent,
+                    onDismiss = { dismissKhata() },
+                )
+                val params = WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    layoutType,
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+                    PixelFormat.TRANSLUCENT,
+                ).apply { gravity = Gravity.BOTTOM }
+                windowManager.addView(view, params)
+                khataSheet = view
+                bubble?.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun dismissKhata() {
+        khataSheet?.let { windowManager.removeView(it) }
+        khataSheet = null
+        bubble?.visibility = View.VISIBLE
     }
 
     /**
@@ -300,7 +370,11 @@ class OverlayService : Service() {
             toast("Koi order nahi mila")
             return
         }
+        extractText(text, senderName)
+    }
 
+    /** Extract any text — chat capture and voice both land here. */
+    private fun extractText(text: String, senderName: String?) {
         scope.launch {
             val db = LedgerDatabase.get(this@OverlayService)
             val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
@@ -447,9 +521,11 @@ class OverlayService : Service() {
         bubble?.let { windowManager.removeView(it) }
         panel?.let { windowManager.removeView(it) }
         confirmSheet?.let { windowManager.removeView(it) }
+        khataSheet?.let { windowManager.removeView(it) }
         bubble = null
         panel = null
         confirmSheet = null
+        khataSheet = null
         isRunning = false
         scope.cancel()
     }
@@ -459,6 +535,9 @@ class OverlayService : Service() {
         @Volatile
         var isRunning: Boolean = false
             private set
+
+        const val ACTION_EXTRACT_TEXT = "app.vaaniledger.EXTRACT_TEXT"
+        const val EXTRA_TEXT = "text"
 
         private const val TAG = "VaaniCapture"
         /** Long enough for our own panel to be gone before we read the window. */

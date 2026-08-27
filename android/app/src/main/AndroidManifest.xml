@@ -84,6 +84,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Voice entry. Transparent: only an Activity can request
+             RECORD_AUDIO and receive a RecognizerIntent result. -->
+        <activity
+            android:name=".VoiceActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.VaaniLedger.Transparent" />
+
         <!-- The floating bubble + mini dashboard. -->
         <service
             android:name=".overlay.OverlayService"

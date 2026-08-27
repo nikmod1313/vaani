@@ -25,6 +25,8 @@ class PanelView(
     private val today: Totals,
     private val onDismiss: () -> Unit,
     private val onCapture: () -> Unit = {},
+    private val onVoice: () -> Unit = {},
+    private val onKhata: () -> Unit = {},
 ) : LinearLayout(context) {
 
     /** Today's figures, read from Room. Nothing here is a placeholder. */
@@ -146,9 +148,9 @@ class PanelView(
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
             setPadding(0, dp(8), 0, 0)
-            addView(button("Bol ke likho", "voice") {}, equalWeight())
+            addView(button("Bol ke likho", "voice") { onVoice() }, equalWeight())
             addView(View(context), LayoutParams(dp(8), 1))
-            addView(button("Khata", "all customers") {}, equalWeight())
+            addView(button("Khata", "all customers") { onKhata() }, equalWeight())
         })
     }
 

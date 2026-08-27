@@ -197,6 +197,22 @@ interface TransactionDao {
 
     @Query("SELECT COUNT(*) FROM transactions WHERE sync_state != 'SYNCED'")
     suspend fun pendingCountOnce(): Int
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE shop_id = :shopId AND deleted = 0
+        ORDER BY occurred_at DESC LIMIT :limit
+        """
+    )
+    suspend fun recentOnce(shopId: String, limit: Int = 40): List<TransactionEntity>
+
+    /** Every live transaction, for FIFO aging across all customers. */
+    @Query("SELECT * FROM transactions WHERE shop_id = :shopId AND deleted = 0 ORDER BY occurred_at")
+    suspend fun allOnce(shopId: String): List<TransactionEntity>
+
+    @Query("SELECT * FROM customers WHERE shop_id = :shopId")
+    suspend fun customersOnce(shopId: String): List<CustomerEntity>
 }
 
 
