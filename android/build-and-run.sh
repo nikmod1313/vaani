@@ -16,8 +16,12 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 ADB="$ANDROID_HOME/platform-tools/adb"
 AVD="${AVD:-Pixel_7_Pro}"
 
-GRADLE=$(find "$HOME/.gradle/wrapper/dists" -name gradle -type f -path '*/bin/*' 2>/dev/null | sort | tail -1)
+# -V is a version sort. Plain `sort` puts gradle-8.2 AFTER gradle-8.13
+# (lexicographically '2' > '1'), which silently selects an old Gradle that
+# the Android plugin rejects — and the failure looks like a code error.
+GRADLE=$(find "$HOME/.gradle/wrapper/dists" -name gradle -type f -path '*/bin/*' 2>/dev/null | sort -V | tail -1)
 [ -n "$GRADLE" ] || { echo "No Gradle found. Open android/ in Android Studio once to fetch it."; exit 1; }
+echo "▸ gradle: $("$GRADLE" --version 2>/dev/null | awk '/^Gradle/{print $2}')"
 
 echo "▸ building"
 "$GRADLE" :app:assembleDebug --console=plain -q

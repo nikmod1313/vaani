@@ -69,65 +69,39 @@ class LedgerAccessibilityService : AccessibilityService() {
         return collected.values.toList()
     }
 
-    private fun collectVisible() {
-        val root = rootInActiveWindow ?: return
-        try {
-            walk(root) { node ->
-                val text = node.text?.toString()?.trim()
-                if (!text.isNullOrEmpty() && looksLikeMessage(node, text)) {
-                    val message = CapturedMessage(
-                        text = text,
-                        isOutgoing = isOutgoing(node),
-                        timeLabel = siblingTimeLabel(node),
-                    )
-                    collected[message.hash] = message
-                }
-            }
+    /**
+     * Log the whole node tree.
+     *
+     * When capture starts returning nothing after a WhatsApp update, this
+     * tells you why in about a minute:
+     *
+     *     adb shell am broadcast -a app.vaaniledger.DUMP_TREE
+     *     adb logcat -d -s VaaniTree
+     */
+    fun dumpTree(): String {
+        val root = rootInActiveWindow ?: return "(no active window)"
+        return try {
+            ChatScraper.dump(root)
         } finally {
+            @Suppress("DEPRECATION")
             root.recycle()
         }
     }
 
-    /**
-     * Distinguish a message bubble from chrome.
-     *
-     * WhatsApp's view ids are not part of any public contract and DO change
-     * between versions, so this deliberately leans on structure and content
-     * rather than hardcoded ids alone. Re-verify against the WhatsApp build
-     * on the demo phone in Week 0 — this is the most version-fragile code in
-     * the project.
-     */
-    private fun looksLikeMessage(node: AccessibilityNodeInfo, text: String): Boolean {
-        val id = node.viewIdResourceName ?: ""
-        if (id.endsWith("message_text") || id.endsWith("conversation_text")) return true
-
-        // Fall back to shape: a TextView inside a list row, not a toolbar.
-        val isText = node.className?.contains("TextView") == true
-        val notChrome = !id.contains("toolbar") && !id.contains("entry")
-        return isText && notChrome && text.length > 1
-    }
-
-    private fun isOutgoing(node: AccessibilityNodeInfo): Boolean {
-        // Outgoing bubbles sit on the right. Compare the bubble's centre
-        // against the screen midpoint rather than trusting a view id.
-        val bounds = android.graphics.Rect()
-        node.getBoundsInScreen(bounds)
-        val screenWidth = resources.displayMetrics.widthPixels
-        return bounds.centerX() > screenWidth / 2
-    }
-
-    private fun siblingTimeLabel(node: AccessibilityNodeInfo): String? {
-        val parent = node.parent ?: return null
+    private fun collectVisible() {
+        val root = rootInActiveWindow ?: return
         try {
-            for (i in 0 until parent.childCount) {
-                val child = parent.getChild(i) ?: continue
-                val text = child.text?.toString()?.trim()
-                if (text != null && TIME_PATTERN.matches(text)) return text
+            val width = resources.displayMetrics.widthPixels
+            if (app.vaaniledger.BuildConfig.DEBUG) {
+                android.util.Log.d(TREE_TAG, ChatScraper.dump(root))
+            }
+            for (m in ChatScraper.scrape(root, width)) {
+                collected[m.hash] = CapturedMessage(m.text, m.isOutgoing, m.timeLabel)
             }
         } finally {
-            parent.recycle()
+            @Suppress("DEPRECATION")
+            root.recycle()
         }
-        return null
     }
 
     // ----------------------------------------------------------------------
@@ -198,21 +172,13 @@ class LedgerAccessibilityService : AccessibilityService() {
         return null
     }
 
-    private fun walk(node: AccessibilityNodeInfo, visit: (AccessibilityNodeInfo) -> Unit) {
-        visit(node)
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            walk(child, visit)
-            child.recycle()
-        }
-    }
-
     companion object {
         @Volatile
         var instance: LedgerAccessibilityService? = null
             private set
 
         private const val SCROLL_SETTLE_MS = 260L
+        private const val TREE_TAG = "VaaniTree"
         private val TIME_PATTERN = Regex("""\d{1,2}:\d{2}(\s?[apAP]\.?[mM]\.?)?""")
     }
 }

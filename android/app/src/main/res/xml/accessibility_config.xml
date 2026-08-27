@@ -2,8 +2,14 @@
 <!--
     Scoped as tightly as the feature allows.
 
-    packageNames limits us to WhatsApp only — we cannot read any other app,
-    which is the concrete privacy claim the report makes. canRetrieveWindow
+    packageNames limits which apps we can read at all — we cannot see any
+    app not on this list, which is the concrete privacy claim the report
+    makes.
+
+    Google Messages is here for DEVELOPMENT ONLY: WhatsApp cannot be
+    installed on a bare emulator without a Play account, and the parser has
+    to be proven against a real chat app's real view tree rather than an
+    imagined one. REMOVE IT BEFORE ANY BUILD LEAVES THE TEAM. canRetrieveWindow
     Content is what lets us read message text; flagRetrieveInteractiveWindows
     is what lets the scroll-harvest reach content above the fold.
 -->
@@ -15,6 +21,6 @@
     android:canRetrieveWindowContent="true"
     android:canPerformGestures="false"
     android:notificationTimeout="100"
-    android:packageNames="com.whatsapp,com.whatsapp.w4b"
+    android:packageNames="com.whatsapp,com.whatsapp.w4b,com.google.android.apps.messaging"
     android:description="@string/accessibility_description"
     android:settingsActivity="app.vaaniledger.MainActivity" />

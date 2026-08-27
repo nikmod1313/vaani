@@ -182,14 +182,27 @@ class OverlayService : Service() {
         collapse()
         val service = app.vaaniledger.capture.LedgerAccessibilityService.instance
         if (service == null) {
+            // Toasts are suppressed entirely when notifications are off, so
+            // never rely on one to tell you what happened. Log as well.
+            android.util.Log.w(TAG, "capture: accessibility service not connected")
             toast("Chat padhne ki ijaazat band hai")
             return
         }
-        val messages = service.captureVisible()
-        toast(
-            if (messages.isEmpty()) "Koi message nahi mila"
-            else "${messages.size} message mile — engine week 3 mein"
-        )
+
+        // Give the panel a moment to actually leave the screen — reading the
+        // window while our own view is still up captures the panel, not the
+        // chat underneath it.
+        android.os.Handler(mainLooper).postDelayed({
+            val messages = service.captureVisible()
+            android.util.Log.i(TAG, "capture: ${messages.size} message(s)")
+            messages.forEachIndexed { i, m ->
+                android.util.Log.i(TAG, "  [$i] out=${m.isOutgoing} t=${m.timeLabel} :: ${m.text}")
+            }
+            toast(
+                if (messages.isEmpty()) "Koi message nahi mila"
+                else "${messages.size} message mile"
+            )
+        }, PANEL_SETTLE_MS)
     }
 
     private fun toast(message: String) {
@@ -238,6 +251,9 @@ class OverlayService : Service() {
         var isRunning: Boolean = false
             private set
 
+        private const val TAG = "VaaniCapture"
+        /** Long enough for our own panel to be gone before we read the window. */
+        private const val PANEL_SETTLE_MS = 350L
         private const val CHANNEL_ID = "vaani_overlay"
         private const val NOTIFICATION_ID = 1001
         private const val TAP_SLOP = 12
