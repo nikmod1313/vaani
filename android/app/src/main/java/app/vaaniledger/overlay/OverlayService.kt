@@ -181,18 +181,60 @@ class OverlayService : Service() {
             return
         }
 
-        val view = PanelView(this, onDismiss = { collapse() }, onCapture = { capture() })
+        // Read today's figures from Room before drawing anything. Room, never
+        // the network: this has to open instantly on a counter with no signal,
+        // which is where it will most often open.
+        scope.launch {
+            val totals = runCatching { loadTodayTotals() }
+                .getOrDefault(PanelView.Totals())
+            withContext(Dispatchers.Main) { showPanel(totals) }
+        }
+    }
+
+    /**
+     * Today, in the device's own timezone.
+     *
+     * Deliberately not "the last 24 hours" — a shopkeeper's "aaj ka hisaab"
+     * means since this morning, and a rolling window would keep yesterday
+     * evening's sales in today's total.
+     */
+    private suspend fun loadTodayTotals(): PanelView.Totals {
+        val db = LedgerDatabase.get(this)
+        val cal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val start = cal.timeInMillis
+        val end = start + java.util.concurrent.TimeUnit.DAYS.toMillis(1) - 1
+
+        val totals = db.transactions().dayTotalsOnce(SHOP_ID, start, end)
+        return PanelView.Totals(
+            sale = totals.sale,
+            cashIn = totals.cashIn,
+            udhaar = totals.udhaar,
+            entries = totals.entries,
+            pendingSync = db.transactions().pendingCountOnce(),
+        )
+    }
+
+    private fun showPanel(totals: PanelView.Totals) {
+        if (panel != null) return
+
+        val view = PanelView(
+            context = this,
+            today = totals,
+            onDismiss = { collapse() },
+            onCapture = { capture() },
+        )
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutType,
-            // Focusable here so the panel's own controls take input, but
-            // WATCH_OUTSIDE_TOUCH lets us dismiss on an outside tap.
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.BOTTOM
-        }
+        ).apply { gravity = Gravity.BOTTOM }
 
         windowManager.addView(view, params)
         panel = view
@@ -223,7 +265,9 @@ class OverlayService : Service() {
         // Let our own panel leave the screen first — reading the window while
         // it is still up captures the panel, not the chat underneath it.
         android.os.Handler(mainLooper).postDelayed({
-            val pkg = service.activePackage()
+            // Fall back to the last chat seen: our own overlay can leave the
+            // active window null, and refusing then rejects a valid capture.
+            val pkg = service.activePackage() ?: service.lastChatPackage
             if (!service.isSupportedChat(pkg)) {
                 android.util.Log.i(TAG, "capture: refusing to read $pkg")
                 toast("Pehle WhatsApp chat kholiye")

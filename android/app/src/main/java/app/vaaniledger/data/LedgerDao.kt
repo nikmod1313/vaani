@@ -172,6 +172,31 @@ interface TransactionDao {
         """
     )
     fun totalOutstanding(shopId: String): Flow<Double>
+
+    // ---- one-shot reads for the overlay panel -----------------------------
+    //
+    // The panel is opened, read once and dismissed, so it wants a plain
+    // suspend read rather than a Flow it would immediately have to cancel.
+
+    @Query(
+        """
+        SELECT
+          COALESCE(SUM(CASE WHEN direction='sale' THEN amount END), 0)            AS sale,
+          COALESCE(SUM(CASE WHEN direction='sale' AND mode IN ('cash','upi')
+                            THEN amount END), 0)                                  AS cashIn,
+          COALESCE(SUM(CASE WHEN direction='sale' AND mode='udhaar'
+                            THEN amount END), 0)                                  AS udhaar,
+          COUNT(*)                                                                AS entries,
+          COALESCE(SUM(CASE WHEN confidence >= 0.85 THEN 1 ELSE 0 END), 0)         AS autoFilled
+        FROM transactions
+        WHERE shop_id = :shopId AND deleted = 0
+          AND occurred_at BETWEEN :startOfDay AND :endOfDay
+        """
+    )
+    suspend fun dayTotalsOnce(shopId: String, startOfDay: Long, endOfDay: Long): DayTotals
+
+    @Query("SELECT COUNT(*) FROM transactions WHERE sync_state != 'SYNCED'")
+    suspend fun pendingCountOnce(): Int
 }
 
 

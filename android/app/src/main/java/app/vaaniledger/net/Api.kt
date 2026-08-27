@@ -2,6 +2,7 @@ package app.vaaniledger.net
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -135,7 +136,16 @@ data class SyncRequest(
 data class SyncResponse(
     val accepted: Int,
     val duplicates: Int,
-    val transactions: List<Map<String, String?>> = emptyList(),
+    /**
+     * Rows the server changed. Kept as raw JSON because the server sends
+     * mixed types — amount is a number, deleted a boolean — and typing this
+     * as Map<String, String?> made every sync fail to parse AFTER the server
+     * had already accepted the write. The entry was saved and the phone still
+     * showed it as pending.
+     *
+     * Pull-down is not implemented yet, so nothing reads these.
+     */
+    val transactions: List<JsonElement> = emptyList(),
 )
 
 

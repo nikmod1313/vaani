@@ -22,9 +22,19 @@ import android.widget.TextView
 @SuppressLint("ViewConstructor")
 class PanelView(
     context: Context,
+    private val today: Totals,
     private val onDismiss: () -> Unit,
     private val onCapture: () -> Unit = {},
 ) : LinearLayout(context) {
+
+    /** Today's figures, read from Room. Nothing here is a placeholder. */
+    data class Totals(
+        val sale: Double = 0.0,
+        val cashIn: Double = 0.0,
+        val udhaar: Double = 0.0,
+        val entries: Int = 0,
+        val pendingSync: Int = 0,
+    )
 
     private val ink = Color.rgb(0x12, 0x15, 0x1A)
     private val muted = Color.rgb(0x8B, 0x91, 0xA0)
@@ -45,6 +55,7 @@ class PanelView(
 
         addView(header())
         addView(stats())
+        addView(subtitle())
         addView(actions())
 
         // Tapping outside collapses back to the bubble.
@@ -80,12 +91,33 @@ class PanelView(
         })
     }
 
+    private fun rupees(v: Double) = "₹%,.0f".format(v)
+
+    /**
+     * The honest line under the numbers: how many entries today, and how many
+     * have not reached the server yet.
+     *
+     * The pending count is the visible offline queue — it is the difference
+     * between "sync is broken" and "sync has not run yet", and the shopkeeper
+     * should be able to see which.
+     */
+    private fun subtitle(): View = TextView(context).apply {
+        text = when {
+            today.entries == 0 -> "Aaj koi entry nahi"
+            today.pendingSync > 0 -> "${today.entries} entries · ${today.pendingSync} pending sync"
+            else -> "${today.entries} entries · sab synced"
+        }
+        setTextColor(if (today.pendingSync > 0) saffron else muted)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+        setPadding(0, dp(2), 0, 0)
+    }
+
     private fun stats(): View = LinearLayout(context).apply {
         orientation = HORIZONTAL
         setPadding(0, dp(14), 0, dp(6))
-        addView(stat("SALE", "₹4,240", ink), equalWeight())
-        addView(stat("CASH", "₹3,100", good), equalWeight())
-        addView(stat("UDHAAR", "₹1,140", saffron), equalWeight())
+        addView(stat("SALE", rupees(today.sale), ink), equalWeight())
+        addView(stat("CASH", rupees(today.cashIn), good), equalWeight())
+        addView(stat("UDHAAR", rupees(today.udhaar), saffron), equalWeight())
     }
 
     private fun stat(label: String, value: String, colour: Int): View =

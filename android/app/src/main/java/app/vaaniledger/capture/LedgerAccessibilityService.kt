@@ -45,9 +45,28 @@ class LedgerAccessibilityService : AccessibilityService() {
         instance = this
     }
 
+    /**
+     * The last chat app we saw an event from.
+     *
+     * `rootInActiveWindow` returns null while our own overlay holds focus, so
+     * checking the live package refused perfectly good captures. Remembering
+     * the last real chat keeps the guard strict without breaking the case it
+     * was written for.
+     */
+    @Volatile
+    var lastChatPackage: String? = null
+        private set
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Only react while actively harvesting. Reacting to every event would
-        // be background scraping, which is exactly what we promised not to do.
+        val pkg = event?.packageName?.toString()
+        if (app.vaaniledger.BuildConfig.DEBUG) {
+            android.util.Log.v(TREE_TAG, "event from $pkg type=${event?.eventType}")
+        }
+        pkg?.takeIf { it in SUPPORTED_CHAT_PACKAGES }?.let { lastChatPackage = it }
+
+        // Beyond noting which chat is open, only react while actively
+        // harvesting. Reacting to every event would be background scraping,
+        // which is exactly what we promised not to do.
         if (!harvesting) return
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             collectVisible()

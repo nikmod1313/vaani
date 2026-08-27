@@ -31,7 +31,7 @@ Everything here has been run, not just written.
 | **Floater** | Draws over the home screen and other apps; taps open the panel |
 | **Chat capture** | Reads exactly 4 real messages from a live chat app, 0 chrome |
 | **Capture → engine** | Those 4 strings → ₹250, udhaar, AUTO 0.89 |
-| **Full loop on device** | Chat → `POST /extract` 200 → confirm sheet → Room row: `₹250 udhaar sale [chawal 2kg,chai 1packet] src=chat PENDING` |
+| **Full loop on device** | Wiped DB → panel `₹0 · "Aaj koi entry nahi"` → capture → confirm → panel `₹250 sale / ₹250 udhaar · "1 entries · sab synced"`, matching the server |
 
 ---
 
@@ -40,8 +40,8 @@ Everything here has been run, not just written.
 Compiles, is covered by no runtime path, and must not be described as working.
 
 - **`ReminderLinks` is never called.**
-- The panel's ₹4,240 / ₹3,100 / ₹1,140 are still **hardcoded** — the confirm
-  sheet reads live data, the panel does not.
+- *(The panel's hardcoded ₹4,240 was removed on 28 Aug — it now reads today's
+  totals and the pending-sync count from Room.)*
 - `ScreenCaptureService` and `MessageNotificationListener` are stubs.
 - `Badlo` on the confirm sheet dismisses; there is no edit screen yet.
 
@@ -67,7 +67,7 @@ What the capstone needs. Roughly two weeks for two people.
 
 1. ~~Capture → `/extract` → confirm sheet → Room.~~ **Done 27 Aug.**
 2. Khata list and customer detail screens; a real `Badlo` edit screen.
-3. Panel reads real numbers from Room (still hardcoded).
+3. ~~Panel reads real numbers from Room.~~ **Done 28 Aug.**
 4. Backend reachable from the phone — LAN IP, not localhost.
 5. Enqueue `SyncWorker`; show the pending badge.
 6. Reminder composer calling `ReminderLinks`.
