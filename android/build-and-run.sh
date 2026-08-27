@@ -5,15 +5,46 @@
 #   ./build-and-run.sh            emulator
 #   ./build-and-run.sh -d         a plugged-in phone
 #
+# macOS / Linux: run it directly.
+# Windows:       run it from Git Bash, not cmd or PowerShell.
+#
 # Uses Android Studio's bundled JDK and the cached Gradle, so it needs neither
 # on PATH.
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
-export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
-export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+# Find Android Studio's bundled JDK and the SDK across macOS, Linux and
+# Windows (Git Bash / WSL). Set JAVA_HOME or ANDROID_HOME yourself to skip
+# the search entirely.
+find_first() { for d in "$@"; do [ -e "$d" ] && { echo "$d"; return; }; done; }
+
+if [ -z "${JAVA_HOME:-}" ]; then
+  JAVA_HOME=$(find_first \
+    "/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+    "$HOME/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+    "/opt/android-studio/jbr" \
+    "/usr/local/android-studio/jbr" \
+    "$HOME/android-studio/jbr" \
+    "/c/Program Files/Android/Android Studio/jbr" \
+    "/mnt/c/Program Files/Android/Android Studio/jbr")
+fi
+if [ -z "${ANDROID_HOME:-}" ]; then
+  ANDROID_HOME=$(find_first \
+    "$HOME/Library/Android/sdk" \
+    "$HOME/Android/Sdk" \
+    "$HOME/AppData/Local/Android/Sdk" \
+    "/c/Users/$USER/AppData/Local/Android/Sdk" \
+    "${ANDROID_SDK_ROOT:-}")
+fi
+
+[ -n "${JAVA_HOME:-}" ]    || { echo "No JDK found. Install Android Studio, or set JAVA_HOME."; exit 1; }
+[ -n "${ANDROID_HOME:-}" ] || { echo "No Android SDK found. Open Android Studio once, or set ANDROID_HOME."; exit 1; }
+export JAVA_HOME ANDROID_HOME
+
+# .exe suffixes on Windows; harmless everywhere else.
 ADB="$ANDROID_HOME/platform-tools/adb"
+[ -x "$ADB" ] || ADB="$ADB.exe"
 AVD="${AVD:-Pixel_7_Pro}"
 
 # -V is a version sort. Plain `sort` puts gradle-8.2 AFTER gradle-8.13
@@ -28,7 +59,8 @@ echo "▸ building"
 
 if [ "${1:-}" != "-d" ] && ! "$ADB" get-state >/dev/null 2>&1; then
   echo "▸ booting $AVD"
-  "$ANDROID_HOME/emulator/emulator" -avd "$AVD" -no-boot-anim -no-audio >/dev/null 2>&1 &
+  EMU="$ANDROID_HOME/emulator/emulator"; [ -x "$EMU" ] || EMU="$EMU.exe"
+  "$EMU" -avd "$AVD" -no-boot-anim -no-audio >/dev/null 2>&1 &
   for _ in $(seq 1 60); do
     [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
     sleep 5
