@@ -21,7 +21,7 @@ No WhatsApp Business API anywhere on the critical path.
 | Correction store | **Working** — few-shot retrieval per shop |
 | Eval harness | **Working** — `python -m eval.run [--llm]` |
 | FastAPI endpoints | **All live** against a real store |
-| Android | **Not compiled** — Room, sync, deep links written; needs Android Studio |
+| Android | **Builds and runs** — floater verified over other apps on API 36 |
 | Dashboard | **Working** — zero-build, served at `/` |
 
 ---
@@ -34,6 +34,13 @@ cd backend && python3 -m unittest discover -s tests -t .
 
 ```bash
 cd backend && python3 -m eval.run --verbose
+```
+
+**Android** — needs Android Studio's JDK and the SDK, both of which it finds
+itself:
+
+```bash
+cd android && ./build-and-run.sh
 ```
 
 ```bash
@@ -118,8 +125,13 @@ backend/
 docs/api.yaml       the frozen contract everyone codes against
 docs/*.pptx         progress-review deck
 dashboard/          one HTML file, no build step, served at /
-android/            manifest, overlay + accessibility services, Room,
-                    sync worker, reminder deep links — NOT yet compiled
+android/            builds to a 4.7MB debug APK
+  MainActivity      permission flow + start/stop the floater
+  overlay/          OverlayService, BubbleView, PanelView
+  capture/          accessibility, notification listener, export share target
+  data/             Room entities, DAOs, FIFO aging
+  sync/             WorkManager sync worker
+  reminder/         wa.me + upi:// deep links
 ```
 
 ---

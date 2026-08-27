@@ -48,6 +48,7 @@ class OverlayService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startForeground(NOTIFICATION_ID, buildNotification())
         showBubble()
+        isRunning = true
     }
 
     // ----------------------------------------------------------------------
@@ -154,7 +155,7 @@ class OverlayService : Service() {
     private fun expand() {
         if (panel != null) return
 
-        val view = PanelView(this) { collapse() }
+        val view = PanelView(this, onDismiss = { collapse() }, onCapture = { capture() })
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -170,6 +171,29 @@ class OverlayService : Service() {
         windowManager.addView(view, params)
         panel = view
         bubble?.visibility = View.GONE
+    }
+
+    /**
+     * "Yeh likh lo" — read whatever chat is on screen behind the panel.
+     *
+     * Collapses first so the panel is not part of what gets read.
+     */
+    private fun capture() {
+        collapse()
+        val service = app.vaaniledger.capture.LedgerAccessibilityService.instance
+        if (service == null) {
+            toast("Chat padhne ki ijaazat band hai")
+            return
+        }
+        val messages = service.captureVisible()
+        toast(
+            if (messages.isEmpty()) "Koi message nahi mila"
+            else "${messages.size} message mile — engine week 3 mein"
+        )
+    }
+
+    private fun toast(message: String) {
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun collapse() {
@@ -205,9 +229,15 @@ class OverlayService : Service() {
         panel?.let { windowManager.removeView(it) }
         bubble = null
         panel = null
+        isRunning = false
     }
 
     companion object {
+        /** Read by MainActivity to label its start/stop button. */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         private const val CHANNEL_ID = "vaani_overlay"
         private const val NOTIFICATION_ID = 1001
         private const val TAP_SLOP = 12
