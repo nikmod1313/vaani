@@ -21,7 +21,7 @@ No WhatsApp Business API anywhere on the critical path.
 | Correction store | **Working** — few-shot retrieval per shop |
 | Eval harness | **Working** — `python -m eval.run [--llm]` |
 | FastAPI endpoints | **All live** against a real store |
-| Android | **Builds and runs** — floater verified over other apps on API 36 |
+| Android | **Core loop works** — capture → extract → confirm → Room, verified on device |
 | Dashboard | **Working** — zero-build, served at `/` |
 
 ---

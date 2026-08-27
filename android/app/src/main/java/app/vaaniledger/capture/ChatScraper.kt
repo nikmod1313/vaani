@@ -109,14 +109,45 @@ object ChatScraper {
         val times = candidates.filter { TIME_PATTERN.matches(it.second) }
         val bodies = candidates.filter { isBody(it.first, it.second) }
 
-        return bodies.map { (node, text) ->
-            val bounds = Rect().also { node.getBoundsInScreen(it) }
-            Message(
-                text = text,
-                isOutgoing = bounds.centerX() > screenWidth / 2,
-                timeLabel = nearestTime(bounds, times),
-            )
-        }
+        // Sort by vertical position, NOT traversal order. Chat lists are
+        // commonly laid out reversed, so walking the tree yields newest
+        // first — which silently reverses every multi-message order before
+        // it reaches the engine.
+        return bodies
+            .map { (node, text) -> Rect().also { node.getBoundsInScreen(it) } to text }
+            .sortedBy { (r, _) -> r.top }
+            .map { (r, text) ->
+                Message(
+                    text = text,
+                    isOutgoing = r.centerX() > screenWidth / 2,
+                    timeLabel = nearestTime(r, times),
+                )
+            }
+    }
+
+    /**
+     * The conversation title — the contact name, which is the strongest
+     * customer signal available and free.
+     *
+     * It sits ABOVE the message list, so take the topmost text node that is
+     * not inside the list itself.
+     */
+    fun chatTitle(root: AccessibilityNodeInfo?): String? {
+        if (root == null) return null
+        val list = findScrollable(root)
+        val listTop = list?.let { Rect().also { r -> it.getBoundsInScreen(r) }.top } ?: Int.MAX_VALUE
+
+        val all = mutableListOf<Pair<AccessibilityNodeInfo, String>>()
+        collect(root, all)
+
+        return all
+            .map { (node, text) -> Rect().also { node.getBoundsInScreen(it) } to text }
+            .filter { (r, t) ->
+                r.top < listTop && r.top > 0 && t.length in 2..40 && !TIME_PATTERN.matches(t)
+            }
+            .minByOrNull { (r, _) -> r.top }
+            ?.second
+            ?.takeIf { !PHONE_ONLY.matches(it) }   // a number is not a name
     }
 
     /** The message list. Everything outside it is chrome. */

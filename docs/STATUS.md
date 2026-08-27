@@ -30,7 +30,8 @@ Everything here has been run, not just written.
 | Spoken summary | 386 chars Hindi, amounts spelled out, under Bulbul's 2500 cap |
 | **Floater** | Draws over the home screen and other apps; taps open the panel |
 | **Chat capture** | Reads exactly 4 real messages from a live chat app, 0 chrome |
-| **Capture → engine** | Those 4 strings → ₹250, udhaar, Rahul Verma, AUTO 0.89 |
+| **Capture → engine** | Those 4 strings → ₹250, udhaar, AUTO 0.89 |
+| **Full loop on device** | Chat → `POST /extract` 200 → confirm sheet → Room row: `₹250 udhaar sale [chawal 2kg,chai 1packet] src=chat PENDING` |
 
 ---
 
@@ -38,12 +39,14 @@ Everything here has been run, not just written.
 
 Compiles, is covered by no runtime path, and must not be described as working.
 
-- **Room is never written to.** No entry has ever been saved on the device.
-- **Retrofit is never instantiated.** The app has never called the API.
-- **`SyncWorker` is never enqueued.**
 - **`ReminderLinks` is never called.**
-- The panel's ₹4,240 / ₹3,100 / ₹1,140 are **hardcoded**.
+- The panel's ₹4,240 / ₹3,100 / ₹1,140 are still **hardcoded** — the confirm
+  sheet reads live data, the panel does not.
 - `ScreenCaptureService` and `MessageNotificationListener` are stubs.
+- `Badlo` on the confirm sheet dismisses; there is no edit screen yet.
+
+*(Room, Retrofit and `SyncWorker` moved out of this list on 27 Aug — the core
+loop now exercises all three.)*
 
 ---
 
@@ -62,10 +65,9 @@ Wired, credential-gated, and honestly unknown until someone runs them.
 
 What the capstone needs. Roughly two weeks for two people.
 
-1. **Capture → `/extract` → confirm sheet → Room.** The single highest-value
-   item; it turns a nice UI into a working product.
-2. Confirm sheet with per-field confidence; khata list; customer detail.
-3. Panel reads real numbers from Room.
+1. ~~Capture → `/extract` → confirm sheet → Room.~~ **Done 27 Aug.**
+2. Khata list and customer detail screens; a real `Badlo` edit screen.
+3. Panel reads real numbers from Room (still hardcoded).
 4. Backend reachable from the phone — LAN IP, not localhost.
 5. Enqueue `SyncWorker`; show the pending badge.
 6. Reminder composer calling `ReminderLinks`.

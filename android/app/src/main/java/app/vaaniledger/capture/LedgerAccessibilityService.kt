@@ -78,6 +78,17 @@ class LedgerAccessibilityService : AccessibilityService() {
      *     adb shell am broadcast -a app.vaaniledger.DUMP_TREE
      *     adb logcat -d -s VaaniTree
      */
+    /** The contact name of the chat on screen, if we can read it. */
+    fun currentChatTitle(): String? {
+        val root = rootInActiveWindow ?: return null
+        return try {
+            ChatScraper.chatTitle(root)
+        } finally {
+            @Suppress("DEPRECATION")
+            root.recycle()
+        }
+    }
+
     fun dumpTree(): String {
         val root = rootInActiveWindow ?: return "(no active window)"
         return try {

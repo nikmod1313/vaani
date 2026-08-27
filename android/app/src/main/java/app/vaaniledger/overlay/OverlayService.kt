@@ -13,6 +13,20 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import app.vaaniledger.data.LedgerDatabase
+import app.vaaniledger.data.ShopEntity
+import app.vaaniledger.data.TransactionEntity
+import app.vaaniledger.net.ApiClient
+import app.vaaniledger.net.Confidence
+import app.vaaniledger.net.ExtractRequest
+import app.vaaniledger.net.Extraction
+import app.vaaniledger.sync.SyncWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 /**
@@ -32,6 +46,11 @@ class OverlayService : Service() {
     private lateinit var windowManager: WindowManager
     private var bubble: View? = null
     private var panel: View? = null
+    private var confirmSheet: View? = null
+
+    // SupervisorJob so one failed extraction cannot cancel the scope and
+    // silently kill every capture after it.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val layoutType =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -174,35 +193,163 @@ class OverlayService : Service() {
     }
 
     /**
-     * "Yeh likh lo" — read whatever chat is on screen behind the panel.
+     * "Yeh likh lo" — the core loop.
      *
-     * Collapses first so the panel is not part of what gets read.
+     * read the chat -> extract -> confirm -> save.
+     *
+     * Extraction goes to the server because that is where the rules engine
+     * and the model layer live. If the call fails for any reason, we do NOT
+     * lose the capture: the raw text still reaches the confirm sheet with
+     * empty fields, so the shopkeeper can enter it by hand. Losing an entry
+     * is worse than asking him to type one.
      */
     private fun capture() {
         collapse()
+
         val service = app.vaaniledger.capture.LedgerAccessibilityService.instance
         if (service == null) {
-            // Toasts are suppressed entirely when notifications are off, so
-            // never rely on one to tell you what happened. Log as well.
             android.util.Log.w(TAG, "capture: accessibility service not connected")
             toast("Chat padhne ki ijaazat band hai")
             return
         }
 
-        // Give the panel a moment to actually leave the screen — reading the
-        // window while our own view is still up captures the panel, not the
-        // chat underneath it.
+        // Let our own panel leave the screen first — reading the window while
+        // it is still up captures the panel, not the chat underneath it.
         android.os.Handler(mainLooper).postDelayed({
             val messages = service.captureVisible()
             android.util.Log.i(TAG, "capture: ${messages.size} message(s)")
-            messages.forEachIndexed { i, m ->
-                android.util.Log.i(TAG, "  [$i] out=${m.isOutgoing} t=${m.timeLabel} :: ${m.text}")
+            if (messages.isEmpty()) {
+                toast("Koi message nahi mila")
+                return@postDelayed
             }
-            toast(
-                if (messages.isEmpty()) "Koi message nahi mila"
-                else "${messages.size} message mile"
-            )
+            extractAndConfirm(messages, service.currentChatTitle())
         }, PANEL_SETTLE_MS)
+    }
+
+    private fun extractAndConfirm(
+        messages: List<app.vaaniledger.capture.LedgerAccessibilityService.CapturedMessage>,
+        senderName: String?,
+    ) {
+        // Incoming messages only: what the shopkeeper sent is not an order
+        // placed with him. Consecutive ones join, because an order routinely
+        // arrives across three messages and means nothing split apart.
+        val text = messages.filter { !it.isOutgoing }
+            .takeLast(MAX_MESSAGES_PER_CAPTURE)
+            .joinToString(" ") { it.text }
+            .trim()
+
+        if (text.isBlank()) {
+            toast("Koi order nahi mila")
+            return
+        }
+
+        scope.launch {
+            val db = LedgerDatabase.get(this@OverlayService)
+            val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
+
+            val extraction = runCatching {
+                ApiClient.api.extract(
+                    ExtractRequest(
+                        text = text,
+                        senderName = senderName,
+                        knownCustomers = known,
+                        shopId = SHOP_ID,
+                        source = "chat",
+                    )
+                )
+            }.onFailure {
+                android.util.Log.w(TAG, "extract failed: ${it.message}")
+            }.getOrNull()
+
+            withContext(Dispatchers.Main) {
+                if (extraction == null) {
+                    // Degrade, never drop. The text survives into the sheet.
+                    toast("Server nahi mila — haath se bhariye")
+                    showConfirm(blankExtraction(text))
+                } else {
+                    showConfirm(extraction)
+                }
+            }
+        }
+    }
+
+    /** An empty result carrying the captured text, for the offline path. */
+    private fun blankExtraction(text: String) = Extraction(
+        text = text,
+        confidence = Confidence(overall = 0.0, route = "manual"),
+    )
+
+    private fun showConfirm(extraction: Extraction) {
+        if (confirmSheet != null) return
+
+        val view = ConfirmSheetView(
+            context = this,
+            extraction = extraction,
+            onConfirm = { save(extraction) },
+            onEdit = { dismissConfirm(); toast("Edit screen week 3 mein") },
+            onDismiss = { dismissConfirm() },
+        )
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutType,
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT,
+        ).apply { gravity = Gravity.BOTTOM }
+
+        windowManager.addView(view, params)
+        confirmSheet = view
+        bubble?.visibility = View.GONE
+    }
+
+    private fun dismissConfirm() {
+        confirmSheet?.let { windowManager.removeView(it) }
+        confirmSheet = null
+        bubble?.visibility = View.VISIBLE
+    }
+
+    /**
+     * "Sahi hai" — write it to Room, then ask for a sync.
+     *
+     * Room first and always. Sync is an optimisation; if it never runs the
+     * entry is still safely on the phone, which is the whole offline promise.
+     */
+    private fun save(extraction: Extraction) {
+        dismissConfirm()
+
+        scope.launch {
+            val db = LedgerDatabase.get(this@OverlayService)
+            runCatching {
+                db.shops().upsert(ShopEntity(id = SHOP_ID, name = SHOP_NAME))
+
+                val customer = extraction.customer?.takeIf { it.isNotBlank() }
+                    ?.let { db.customers().resolve(SHOP_ID, it) }
+
+                db.transactions().upsert(
+                    TransactionEntity(
+                        shopId = SHOP_ID,
+                        customerId = customer?.id,
+                        customerName = customer?.name,
+                        amount = extraction.amount ?: 0.0,
+                        mode = extraction.mode.takeIf { it != "unknown" } ?: "udhaar",
+                        direction = extraction.direction.takeIf { it != "unknown" } ?: "sale",
+                        items = extraction.items.joinToString(","),
+                        source = "chat",
+                        confidence = extraction.confidence.overall,
+                    )
+                )
+            }.onFailure {
+                android.util.Log.e(TAG, "save failed", it)
+            }
+
+            val pending = runCatching { db.transactions().pending().size }.getOrDefault(0)
+
+            withContext(Dispatchers.Main) {
+                val amount = extraction.amount?.let { "₹%,.0f".format(it) } ?: "entry"
+                toast("$amount saved · $pending pending sync")
+            }
+            SyncWorker.syncNow(this@OverlayService, SHOP_ID)
+        }
     }
 
     private fun toast(message: String) {
@@ -240,9 +387,12 @@ class OverlayService : Service() {
         super.onDestroy()
         bubble?.let { windowManager.removeView(it) }
         panel?.let { windowManager.removeView(it) }
+        confirmSheet?.let { windowManager.removeView(it) }
         bubble = null
         panel = null
+        confirmSheet = null
         isRunning = false
+        scope.cancel()
     }
 
     companion object {
@@ -254,6 +404,11 @@ class OverlayService : Service() {
         private const val TAG = "VaaniCapture"
         /** Long enough for our own panel to be gone before we read the window. */
         private const val PANEL_SETTLE_MS = 350L
+        /** Enough for a three-message order, not the whole scrollback. */
+        private const val MAX_MESSAGES_PER_CAPTURE = 6
+        // TODO(week 3): from onboarding, once a shop can be created in-app.
+        private const val SHOP_ID = "sharma-kirana"
+        private const val SHOP_NAME = "Sharma Kirana Store"
         private const val CHANNEL_ID = "vaani_overlay"
         private const val NOTIFICATION_ID = 1001
         private const val TAP_SLOP = 12
