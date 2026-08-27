@@ -78,6 +78,28 @@ class LedgerAccessibilityService : AccessibilityService() {
      *     adb shell am broadcast -a app.vaaniledger.DUMP_TREE
      *     adb logcat -d -s VaaniTree
      */
+    /**
+     * The package of the window currently in front.
+     *
+     * `packageNames` in accessibility_config limits which apps send us
+     * EVENTS — it does NOT stop `rootInActiveWindow` handing back whatever
+     * window happens to be focused. Without this check, tapping capture
+     * while our own setup screen was open read OUR OWN UI text and offered
+     * to save it as an order.
+     */
+    fun activePackage(): String? {
+        val root = rootInActiveWindow ?: return null
+        return try {
+            root.packageName?.toString()
+        } finally {
+            @Suppress("DEPRECATION")
+            root.recycle()
+        }
+    }
+
+    /** Chat apps we are allowed to read. Must match accessibility_config. */
+    fun isSupportedChat(pkg: String?): Boolean = pkg in SUPPORTED_CHAT_PACKAGES
+
     /** The contact name of the chat on screen, if we can read it. */
     fun currentChatTitle(): String? {
         val root = rootInActiveWindow ?: return null
@@ -190,6 +212,16 @@ class LedgerAccessibilityService : AccessibilityService() {
 
         private const val SCROLL_SETTLE_MS = 260L
         private const val TREE_TAG = "VaaniTree"
+
+        /**
+         * Keep in step with accessibility_config.xml. Google Messages is
+         * present for development only — remove both before shipping.
+         */
+        val SUPPORTED_CHAT_PACKAGES = setOf(
+            "com.whatsapp",
+            "com.whatsapp.w4b",
+            "com.google.android.apps.messaging",
+        )
         private val TIME_PATTERN = Regex("""\d{1,2}:\d{2}(\s?[apAP]\.?[mM]\.?)?""")
     }
 }

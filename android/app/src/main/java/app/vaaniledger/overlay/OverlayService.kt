@@ -173,6 +173,13 @@ class OverlayService : Service() {
      */
     private fun expand() {
         if (panel != null) return
+        // One sheet at a time. Tapping the bubble while a confirm sheet is up
+        // stacked the panel on top of it, leaving two half-visible sheets and
+        // no way to tell which buttons belonged to which.
+        if (confirmSheet != null) {
+            dismissConfirm()
+            return
+        }
 
         val view = PanelView(this, onDismiss = { collapse() }, onCapture = { capture() })
         val params = WindowManager.LayoutParams(
@@ -216,6 +223,13 @@ class OverlayService : Service() {
         // Let our own panel leave the screen first — reading the window while
         // it is still up captures the panel, not the chat underneath it.
         android.os.Handler(mainLooper).postDelayed({
+            val pkg = service.activePackage()
+            if (!service.isSupportedChat(pkg)) {
+                android.util.Log.i(TAG, "capture: refusing to read $pkg")
+                toast("Pehle WhatsApp chat kholiye")
+                return@postDelayed
+            }
+
             val messages = service.captureVisible()
             android.util.Log.i(TAG, "capture: ${messages.size} message(s)")
             if (messages.isEmpty()) {
@@ -281,6 +295,7 @@ class OverlayService : Service() {
 
     private fun showConfirm(extraction: Extraction) {
         if (confirmSheet != null) return
+        collapse()   // never leave the panel behind the sheet
 
         val view = ConfirmSheetView(
             context = this,
