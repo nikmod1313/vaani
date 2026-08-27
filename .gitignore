@@ -16,3 +16,6 @@ android/app/build/
 *.apk
 .idea/
 backend/data/
+
+# Office lock files (created while a doc is open)
+~$*
