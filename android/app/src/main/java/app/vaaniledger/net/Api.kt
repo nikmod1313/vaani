@@ -126,6 +126,7 @@ data class TransactionPayload(
 @Serializable
 data class SyncRequest(
     @SerialName("shop_id") val shopId: String,
+    @SerialName("shop_name") val shopName: String? = null,
     val since: String? = null,
     val transactions: List<TransactionPayload> = emptyList(),
 )

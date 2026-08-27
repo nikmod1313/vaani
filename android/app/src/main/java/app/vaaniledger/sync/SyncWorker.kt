@@ -14,6 +14,7 @@ import androidx.work.WorkerParameters
 import app.vaaniledger.data.LedgerDatabase
 import app.vaaniledger.data.SyncState
 import app.vaaniledger.data.TransactionEntity
+import app.vaaniledger.net.ApiClient
 import app.vaaniledger.net.SyncRequest
 import app.vaaniledger.net.TransactionPayload
 import app.vaaniledger.net.VaaniApi
@@ -36,8 +37,15 @@ import java.util.concurrent.TimeUnit
 class SyncWorker(
     context: Context,
     params: WorkerParameters,
-    private val api: VaaniApi,
 ) : CoroutineWorker(context, params) {
+
+    // Taken from the singleton rather than injected. WorkManager's default
+    // factory constructs workers with exactly (Context, WorkerParameters);
+    // an extra constructor parameter makes every instantiation fail, and it
+    // fails QUIETLY — the job reports FAILED and nothing is ever posted.
+    // Injecting properly needs a custom WorkerFactory, which is not worth it
+    // for one dependency.
+    private val api: VaaniApi get() = ApiClient.api
 
     private val db = LedgerDatabase.get(context)
 
@@ -49,6 +57,7 @@ class SyncWorker(
             val response = api.sync(
                 SyncRequest(
                     shopId = shopId,
+                    shopName = inputData.getString(KEY_SHOP_NAME),
                     since = null,
                     transactions = pending.map { it.toPayload() },
                 )
@@ -66,6 +75,7 @@ class SyncWorker(
             pushCorrections(shopId)
             Result.success()
         } catch (e: Exception) {
+            android.util.Log.w("VaaniSync", "sync failed: ${e.message}")
             // Retry with backoff. The rows stay PENDING and the offline badge
             // keeps showing them, which is the honest state.
             if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
@@ -85,6 +95,7 @@ class SyncWorker(
 
     companion object {
         const val KEY_SHOP_ID = "shop_id"
+        const val KEY_SHOP_NAME = "shop_name"
         private const val MAX_ATTEMPTS = 5
         private const val UNIQUE_PERIODIC = "vaani-sync-periodic"
         private const val UNIQUE_NOW = "vaani-sync-now"
@@ -94,10 +105,12 @@ class SyncWorker(
             .build()
 
         /** Called after every confirmed entry. Coalesces if one is queued. */
-        fun syncNow(context: Context, shopId: String) {
+        fun syncNow(context: Context, shopId: String, shopName: String? = null) {
             val request = OneTimeWorkRequestBuilder<SyncWorker>()
                 .setConstraints(constraints)
-                .setInputData(androidx.work.workDataOf(KEY_SHOP_ID to shopId))
+                .setInputData(
+                    androidx.work.workDataOf(KEY_SHOP_ID to shopId, KEY_SHOP_NAME to shopName)
+                )
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
 

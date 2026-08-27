@@ -348,7 +348,7 @@ class OverlayService : Service() {
                 val amount = extraction.amount?.let { "₹%,.0f".format(it) } ?: "entry"
                 toast("$amount saved · $pending pending sync")
             }
-            SyncWorker.syncNow(this@OverlayService, SHOP_ID)
+            SyncWorker.syncNow(this@OverlayService, SHOP_ID, SHOP_NAME)
         }
     }
 
