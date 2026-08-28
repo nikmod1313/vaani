@@ -31,6 +31,7 @@ class KhataView(
     private val balances: List<CustomerBalance>,
     private val recent: List<TransactionEntity>,
     private val onDismiss: () -> Unit,
+    private val onRemind: (CustomerBalance) -> Unit = {},
 ) : LinearLayout(context) {
 
     private val ink = Color.rgb(0x12, 0x15, 0x1A)
@@ -156,6 +157,26 @@ class KhataView(
             setTextColor(saffron)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             typeface = Typeface.DEFAULT_BOLD
+        })
+
+        // Assisted reminder: drafts the message and opens WhatsApp with it
+        // pre-filled. He taps send himself — nothing leaves the phone without
+        // a human seeing it, which for a system that contacts people about
+        // money they owe is the right default, not a compromise.
+        addView(TextView(context).apply {
+            text = "Yaad dilao"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(10), dp(6), dp(10), dp(6))
+            background = GradientDrawable().apply {
+                setColor(BubbleView.INDIGO)
+                cornerRadius = dp(8).toFloat()
+            }
+            isClickable = true
+            setOnClickListener { onRemind(b) }
+        }, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            marginStart = dp(10)
         })
     }
 

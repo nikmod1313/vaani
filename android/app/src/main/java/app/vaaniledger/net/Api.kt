@@ -173,6 +173,19 @@ data class CorrectionRequest(
 )
 
 @Serializable
+data class CorrectionResponse(
+    /**
+     * Typed to what the server actually sends — stored is an INT and
+     * weakest_fields maps to INTs. The sync path already taught us this
+     * lesson: typing a response as strings when the server sends numbers
+     * fails AFTER the request succeeded, which is the most confusing place
+     * a bug can live.
+     */
+    val stored: Int = 0,
+    @SerialName("weakest_fields") val weakestFields: Map<String, Int> = emptyMap(),
+)
+
+@Serializable
 data class Health(
     val status: String,
     val version: String,
@@ -207,5 +220,5 @@ interface VaaniApi {
     ): Narration
 
     @POST("corrections")
-    suspend fun correction(@Body request: CorrectionRequest): Map<String, String>
+    suspend fun correction(@Body request: CorrectionRequest): CorrectionResponse
 }

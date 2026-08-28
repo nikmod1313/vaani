@@ -98,30 +98,46 @@ class LedgerAccessibilityService : AccessibilityService() {
      *     adb logcat -d -s VaaniTree
      */
     /**
-     * The package of the window currently in front.
+     * The root node of a visible, supported chat window.
      *
-     * `packageNames` in accessibility_config limits which apps send us
-     * EVENTS — it does NOT stop `rootInActiveWindow` handing back whatever
-     * window happens to be focused. Without this check, tapping capture
-     * while our own setup screen was open read OUR OWN UI text and offered
-     * to save it as an order.
+     * This deliberately does NOT rely on `rootInActiveWindow`. Two failure
+     * modes taught us why:
+     *
+     *  1. It hands back whatever window is focused — including our own
+     *     setup screen, whose UI text capture then offered to save as an
+     *     order. `packageNames` in accessibility_config limits which apps
+     *     send us EVENTS; it does not scope that call.
+     *  2. It is null in the moments after our own overlay releases focus,
+     *     and `lastChatPackage` (set from events) is also null when the
+     *     service binds while the chat is already open and idle — a static
+     *     screen fires no events. Result: valid captures refused.
+     *
+     * Enumerating `windows` sidesteps both: we look for a chat window by
+     * package, wherever focus happens to be. The caller must recycle.
      */
-    fun activePackage(): String? {
-        val root = rootInActiveWindow ?: return null
-        return try {
-            root.packageName?.toString()
-        } finally {
-            @Suppress("DEPRECATION")
-            root.recycle()
+    fun chatRoot(): AccessibilityNodeInfo? {
+        rootInActiveWindow?.let { root ->
+            if (root.packageName?.toString() in SUPPORTED_CHAT_PACKAGES) return root
+            @Suppress("DEPRECATION") root.recycle()
         }
+        for (window in windows) {
+            val root = window.root ?: continue
+            if (root.packageName?.toString() in SUPPORTED_CHAT_PACKAGES) return root
+            @Suppress("DEPRECATION") root.recycle()
+        }
+        return null
     }
 
-    /** Chat apps we are allowed to read. Must match accessibility_config. */
-    fun isSupportedChat(pkg: String?): Boolean = pkg in SUPPORTED_CHAT_PACKAGES
+    /** Is a supported chat app on screen at all? */
+    fun hasChatWindow(): Boolean {
+        val root = chatRoot() ?: return false
+        @Suppress("DEPRECATION") root.recycle()
+        return true
+    }
 
     /** The contact name of the chat on screen, if we can read it. */
     fun currentChatTitle(): String? {
-        val root = rootInActiveWindow ?: return null
+        val root = chatRoot() ?: return null
         return try {
             ChatScraper.chatTitle(root)
         } finally {
@@ -141,7 +157,7 @@ class LedgerAccessibilityService : AccessibilityService() {
     }
 
     private fun collectVisible() {
-        val root = rootInActiveWindow ?: return
+        val root = chatRoot() ?: return
         try {
             val width = resources.displayMetrics.widthPixels
             if (app.vaaniledger.BuildConfig.DEBUG) {

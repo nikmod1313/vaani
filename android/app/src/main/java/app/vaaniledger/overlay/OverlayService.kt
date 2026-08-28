@@ -49,6 +49,7 @@ class OverlayService : Service() {
     private var panel: View? = null
     private var confirmSheet: View? = null
     private var khataSheet: View? = null
+    private var editSheet: View? = null
 
     // SupervisorJob so one failed extraction cannot cancel the scope and
     // silently kill every capture after it.
@@ -192,6 +193,7 @@ class OverlayService : Service() {
         // no way to tell which buttons belonged to which.
         if (confirmSheet != null) { dismissConfirm(); return }
         if (khataSheet != null) { dismissKhata(); return }
+        if (editSheet != null) { dismissEdit(); return }
 
         // Read today's figures from Room before drawing anything. Room, never
         // the network: this has to open instantly on a counter with no signal,
@@ -282,6 +284,8 @@ class OverlayService : Service() {
             val recent = runCatching { db.transactions().recentOnce(SHOP_ID) }
                 .getOrDefault(emptyList())
             val balances = Aging.balances(all, names)
+            val phones = runCatching { db.transactions().customersOnce(SHOP_ID) }
+                .getOrDefault(emptyList()).associate { it.id to it.phone }
 
             withContext(Dispatchers.Main) {
                 if (khataSheet != null) return@withContext
@@ -290,6 +294,7 @@ class OverlayService : Service() {
                     balances = balances,
                     recent = recent,
                     onDismiss = { dismissKhata() },
+                    onRemind = { balance -> sendReminder(balance, phones[balance.id]) },
                 )
                 val params = WindowManager.LayoutParams(
                     WindowManager.LayoutParams.MATCH_PARENT,
@@ -309,6 +314,54 @@ class OverlayService : Service() {
         khataSheet?.let { windowManager.removeView(it) }
         khataSheet = null
         bubble?.visibility = View.VISIBLE
+    }
+
+    /**
+     * "Yaad dilao" — the assisted reminder.
+     *
+     * Composes the message with the amount and opens WhatsApp pre-filled;
+     * the shopkeeper taps send himself. This is the design that replaced the
+     * WhatsApp Business API: it needs no approval, works with any customer
+     * today, and no message about owed money ever leaves the phone without a
+     * human seeing it first.
+     *
+     * If WhatsApp is not installed (this emulator), fall back to the system
+     * share sheet so the draft still goes somewhere useful.
+     */
+    private fun sendReminder(balance: app.vaaniledger.data.CustomerBalance, phone: String?) {
+        dismissKhata()
+
+        val intent = app.vaaniledger.reminder.ReminderLinks.reminderIntent(
+            phone = phone,
+            customerName = balance.name,
+            shopName = SHOP_NAME,
+            amount = balance.outstanding,
+            payeeVpa = null,   // TODO(onboarding): the shop's UPI id
+        ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        // Log the composed draft. Android elides long URIs in logs, so the
+        // intent alone does not show what the customer would actually read.
+        android.util.Log.i(
+            TAG,
+            "reminder to ${balance.name}: " +
+                app.vaaniledger.reminder.ReminderLinks.composeMessage(
+                    balance.name, SHOP_NAME, balance.outstanding,
+                ),
+        )
+
+        runCatching { startActivity(intent) }
+            .recoverCatching {
+                startActivity(
+                    android.content.Intent.createChooser(
+                        app.vaaniledger.reminder.ReminderLinks.untargetedFallback(intent),
+                        "Reminder bhejein",
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            .onFailure {
+                android.util.Log.e(TAG, "reminder intent failed", it)
+                toast("Koi messaging app nahi mili")
+            }
     }
 
     /**
@@ -335,11 +388,8 @@ class OverlayService : Service() {
         // Let our own panel leave the screen first — reading the window while
         // it is still up captures the panel, not the chat underneath it.
         android.os.Handler(mainLooper).postDelayed({
-            // Fall back to the last chat seen: our own overlay can leave the
-            // active window null, and refusing then rejects a valid capture.
-            val pkg = service.activePackage() ?: service.lastChatPackage
-            if (!service.isSupportedChat(pkg)) {
-                android.util.Log.i(TAG, "capture: refusing to read $pkg")
+            if (!service.hasChatWindow()) {
+                android.util.Log.i(TAG, "capture: no chat window on screen")
                 toast("Pehle WhatsApp chat kholiye")
                 return@postDelayed
             }
@@ -419,7 +469,7 @@ class OverlayService : Service() {
             context = this,
             extraction = extraction,
             onConfirm = { save(extraction) },
-            onEdit = { dismissConfirm(); toast("Edit screen week 3 mein") },
+            onEdit = { dismissConfirm(); showEdit(extraction) },
             onDismiss = { dismissConfirm() },
         )
         val params = WindowManager.LayoutParams(
@@ -433,6 +483,116 @@ class OverlayService : Service() {
         windowManager.addView(view, params)
         confirmSheet = view
         bubble?.visibility = View.GONE
+    }
+
+    /**
+     * "Badlo" — let the human overrule the engine.
+     *
+     * The window is focusable (no NOT_FOCUSABLE flag) so its EditTexts can
+     * take the keyboard, and SOFT_INPUT_ADJUST_RESIZE keeps the fields
+     * visible above it.
+     */
+    private fun showEdit(extraction: Extraction) {
+        if (editSheet != null) return
+
+        val view = EditSheetView(
+            context = this,
+            extraction = extraction,
+            onSave = { corrected -> saveCorrected(extraction, corrected) },
+            onDismiss = { dismissEdit() },
+        )
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutType,
+            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        }
+
+        windowManager.addView(view, params)
+        editSheet = view
+        bubble?.visibility = View.GONE
+    }
+
+    private fun dismissEdit() {
+        editSheet?.let { windowManager.removeView(it) }
+        editSheet = null
+        bubble?.visibility = View.VISIBLE
+    }
+
+    /**
+     * Save the human's version, then feed the learning loop.
+     *
+     * The corrected entry is written with confidence 1.0 — a human said so,
+     * and the whole confidence system exists to route attention, which this
+     * entry no longer needs.
+     *
+     * Then the (predicted, corrected) pair goes to /corrections. Strictly
+     * best-effort: the correction store improving future extractions must
+     * never block the save that already happened. Losing a training example
+     * is a shame; losing an entry is money.
+     */
+    private fun saveCorrected(predicted: Extraction, corrected: EditSheetView.Corrected) {
+        dismissEdit()
+
+        scope.launch {
+            val db = LedgerDatabase.get(this@OverlayService)
+            runCatching {
+                db.shops().upsert(ShopEntity(id = SHOP_ID, name = SHOP_NAME))
+
+                val customer = corrected.customer
+                    ?.let { db.customers().resolve(SHOP_ID, it) }
+
+                db.transactions().upsert(
+                    TransactionEntity(
+                        shopId = SHOP_ID,
+                        customerId = customer?.id,
+                        customerName = customer?.name,
+                        amount = corrected.amount ?: 0.0,
+                        mode = corrected.mode,
+                        direction = predicted.direction.takeIf { it != "unknown" } ?: "sale",
+                        items = corrected.items.joinToString(","),
+                        source = "chat",
+                        confidence = 1.0,   // human-confirmed
+                    )
+                )
+            }.onFailure { android.util.Log.e(TAG, "saveCorrected failed", it) }
+
+            // The learning loop: what the engine said vs what the human said.
+            runCatching {
+                ApiClient.api.correction(
+                    app.vaaniledger.net.CorrectionRequest(
+                        shopId = SHOP_ID,
+                        rawText = predicted.text,
+                        predicted = mapOf(
+                            "amount" to (predicted.amount?.toString() ?: ""),
+                            "customer" to (predicted.customer ?: ""),
+                            "mode" to predicted.mode,
+                            "items" to predicted.items.joinToString(","),
+                        ),
+                        corrected = mapOf(
+                            "amount" to (corrected.amount?.toString() ?: ""),
+                            "customer" to (corrected.customer ?: ""),
+                            "mode" to corrected.mode,
+                            "items" to corrected.items.joinToString(","),
+                        ),
+                    )
+                )
+            }.onSuccess {
+                android.util.Log.i(TAG, "correction stored (${it.stored} total)")
+            }.onFailure {
+                android.util.Log.w(TAG, "correction upload failed: ${it.message}")
+            }
+
+            withContext(Dispatchers.Main) {
+                val amount = corrected.amount?.let { "₹%,.0f".format(it) } ?: "entry"
+                toast("$amount saved (badla hua)")
+            }
+            SyncWorker.syncNow(this@OverlayService, SHOP_ID, SHOP_NAME)
+        }
     }
 
     private fun dismissConfirm() {
@@ -522,10 +682,12 @@ class OverlayService : Service() {
         panel?.let { windowManager.removeView(it) }
         confirmSheet?.let { windowManager.removeView(it) }
         khataSheet?.let { windowManager.removeView(it) }
+        editSheet?.let { windowManager.removeView(it) }
         bubble = null
         panel = null
         confirmSheet = null
         khataSheet = null
+        editSheet = null
         isRunning = false
         scope.cancel()
     }

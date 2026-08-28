@@ -32,6 +32,9 @@ Everything here has been run, not just written.
 | **Chat capture** | Reads exactly 4 real messages from a live chat app, 0 chrome |
 | **Capture → engine** | Those 4 strings → ₹250, udhaar, AUTO 0.89 |
 | **Full loop on device** | Wiped DB → panel `₹0 · "Aaj koi entry nahi"` → capture → confirm → panel `₹250 sale / ₹250 udhaar · "1 entries · sab synced"`, matching the server |
+| **Badlo → learning loop** | Edit sheet prefilled, customer typed in, `POST /corrections 200`, pair stored: `customer '' → 'Rahul Verma'` |
+| **Khata** | `Kul baaki ₹250` · `Rahul Verma ₹250` · entries with source tags |
+| **Reminder** | Draft composed and intent fired: *"Namaste Rahul Verma ji 🙏 Sharma Kirana Store se — aapka ₹250 baaki hai (28 Aug tak)…"* — targeted at `com.whatsapp`, falls back to the share sheet when it is absent |
 
 ---
 
