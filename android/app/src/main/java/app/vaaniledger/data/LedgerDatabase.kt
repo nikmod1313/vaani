@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.concurrent.TimeUnit
 
 @Database(
@@ -15,7 +17,7 @@ import java.util.concurrent.TimeUnit
         StagedMessageEntity::class,
         CorrectionEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class LedgerDatabase : RoomDatabase() {
@@ -30,6 +32,26 @@ abstract class LedgerDatabase : RoomDatabase() {
     companion object {
         @Volatile private var instance: LedgerDatabase? = null
 
+        /**
+         * v1 -> v2: shops gain a category.
+         *
+         * Written rather than falling back to a destructive migration,
+         * because v1 databases on real phones hold entries that were never
+         * synced -- dropping the file to add one column would delete money
+         * the server has never seen.
+         *
+         * NOT NULL with a DEFAULT so every existing row is valid the moment
+         * the column appears; without the default the ALTER fails outright on
+         * a table that already has rows.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE shops ADD COLUMN category TEXT NOT NULL DEFAULT 'general'"
+                )
+            }
+        }
+
         fun get(context: Context): LedgerDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -40,6 +62,7 @@ abstract class LedgerDatabase : RoomDatabase() {
                     // No fallbackToDestructiveMigration. This database is the
                     // shopkeeper's money; a schema change must migrate it, not
                     // drop it. Write the Migration before bumping version.
+                    .addMigrations(MIGRATION_1_2)
                     .build()
                     .also { instance = it }
             }

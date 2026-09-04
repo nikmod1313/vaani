@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from .conversation import ResolvedOrder, Turn, build_threads, resolve
 from .numbers import normalise
 from .rules import _ITEMS, _MODE_WORDS, _UNITS, apply_rules
 
@@ -36,7 +37,10 @@ _BRACKETED = re.compile(
 # 26/08/26, 9:41 am - Rahul Verma: message
 _DASHED = re.compile(
     r"^(?P<date>\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+"
-    r"(?P<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\s+-\s+"
+    # The separator is a hyphen on most builds and an en-dash on some
+    # locales. Matching only the hyphen silently parses zero messages out of
+    # an otherwise perfect export.
+    r"(?P<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\s+[-\u2013\u2014]\s+"
     r"(?P<sender>[^:]{1,60}?):\s(?P<body>.*)$"
 )
 
@@ -323,4 +327,140 @@ def ingest(
         blocks=len(blocks),
         candidates=candidates,
         dropped=len(blocks) - len(candidates),
+    )
+
+
+# --------------------------------------------------------------------------
+# Conversation lane
+# --------------------------------------------------------------------------
+#
+# `ingest` above answers "which blocks might be orders". That is the right
+# question for a shopkeeper dictating entries to himself, and the wrong one
+# for a two-sided negotiation, where the item and the quantity are spoken by
+# different people several turns apart. Everything below threads the two
+# sides instead. Both lanes run over the same watermark, so an order can
+# never be booked twice by arriving down both.
+
+# Names the export uses for the phone's own owner.
+_SELF_ALIASES = {"you", "me", "aap", "आप"}
+
+
+def is_shopkeeper(sender: str, customer: str, aliases: set[str] | None = None) -> bool:
+    """
+    Which side of the chat sent this?
+
+    Decided by naming the CUSTOMER rather than the shop. A 1:1 chat has
+    exactly two participants and the customer's name is the one thing the
+    app reliably knows -- it is the chat title, and on the phone it is the
+    contact the bubble was opened over. Trying to recognise the shopkeeper by
+    name instead fails on the first export, where WhatsApp writes the owner's
+    own contact name and nobody has told us what that is.
+    """
+    who = sender.strip().lower()
+    if who in _SELF_ALIASES:
+        return True
+    if aliases and who in {a.strip().lower() for a in aliases}:
+        return True
+    return who != customer.strip().lower()
+
+
+def infer_customer(
+    messages: list[Message],
+    shop_aliases: set[str] | None = None,
+) -> str | None:
+    """
+    Work out which participant is the customer.
+
+    A WhatsApp export written on the shopkeeper's phone names the owner by
+    their OWN contact name, not "You", so there is no fixed string to look
+    for. What the app does know is its own shop name -- so eliminate that,
+    eliminate the self-aliases, and in a 1:1 chat exactly one participant is
+    left.
+
+    Picks the most talkative remaining sender when several are left, which
+    is the right answer for a group and a harmless one for a 1:1. Returns
+    None when nobody qualifies, and the caller then has to ask rather than
+    guess -- attributing an order to the wrong person is worse than pausing
+    to check.
+    """
+    excluded = {a.strip().lower() for a in (shop_aliases or set())} | _SELF_ALIASES
+
+    counts: dict[str, int] = {}
+    for m in messages:
+        who = m.sender.strip()
+        if who.lower() in excluded:
+            continue
+        counts[who] = counts.get(who, 0) + 1
+
+    if not counts:
+        return None
+    return max(counts, key=lambda name: counts[name])
+
+
+def to_turns(
+    messages: list[Message],
+    customer: str,
+    shop_aliases: set[str] | None = None,
+) -> list[Turn]:
+    """Parsed export messages -> conversation turns."""
+    return [
+        Turn(
+            sender=m.sender,
+            body=m.body,
+            timestamp=m.timestamp,
+            is_shopkeeper=is_shopkeeper(m.sender, customer, shop_aliases),
+            content_hash=m.content_hash,
+        )
+        for m in messages
+    ]
+
+
+@dataclass
+class ConversationResult:
+    total_messages: int
+    new_messages: int
+    threads: int
+    orders: list[ResolvedOrder]
+
+    @property
+    def hashes(self) -> list[str]:
+        """Every hash the caller should record once the user has approved."""
+        return [h for order in self.orders for h in order.content_hashes]
+
+
+def ingest_conversation(
+    content: str,
+    cursor: ChatCursor,
+    customer: str,
+    category: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    shop_aliases: set[str] | None = None,
+    gap_minutes: int = 45,
+) -> ConversationResult:
+    """
+    Run an export through the conversation lane.
+
+    Like `ingest`, this deliberately does NOT advance the cursor. The caller
+    advances it after the shopkeeper approves the review queue, so a crash
+    mid-review re-offers the orders instead of losing them.
+    """
+    messages = parse_export(content)
+    total = len(messages)
+
+    fresh = [m for m in messages if not cursor.has_seen(m)]
+    if since:
+        fresh = [m for m in fresh if m.timestamp and m.timestamp >= since]
+    if until:
+        fresh = [m for m in fresh if m.timestamp and m.timestamp <= until]
+
+    turns = to_turns(fresh, customer, shop_aliases)
+    threads = build_threads(turns, customer, gap_minutes)
+    orders = [o for t in threads if (o := resolve(t, category)) is not None]
+
+    return ConversationResult(
+        total_messages=total,
+        new_messages=len(fresh),
+        threads=len(threads),
+        orders=orders,
     )

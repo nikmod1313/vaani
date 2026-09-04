@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS shops (
     name        TEXT NOT NULL,
     language    TEXT NOT NULL DEFAULT 'hi-IN',
     speaker     TEXT NOT NULL DEFAULT 'anushka',
+    category    TEXT NOT NULL DEFAULT 'general',
     created_at  TEXT NOT NULL
 );
 
@@ -102,7 +103,32 @@ class LedgerStore:
         self._conn = sqlite3.connect(self.path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(SCHEMA)
+        self._migrate()
         self._conn.commit()
+
+    def _migrate(self) -> None:
+        """
+        Additive column migrations.
+
+        `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so a
+        database created before a column existed never grows it -- and the
+        first SELECT naming that column fails on a store that has been
+        working for weeks. Adding columns here keeps old ledgers readable.
+
+        Only ever ADD. Dropping or retyping a column in a file that holds
+        someone's khata needs a real migration with a backup, not a line in
+        this list.
+        """
+        additive = [
+            ("shops", "category", "TEXT NOT NULL DEFAULT 'general'"),
+        ]
+        for table, column, spec in additive:
+            existing = {
+                row["name"]
+                for row in self._conn.execute(f"PRAGMA table_info({table})")
+            }
+            if column not in existing:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {spec}")
 
     @contextmanager
     def _tx(self):
@@ -126,17 +152,26 @@ class LedgerStore:
         name: str,
         language: str = "hi-IN",
         speaker: str = "anushka",
+        category: str | None = None,
     ) -> None:
-        """Create, or update the name of an existing shop."""
+        """
+        Create, or update the name of an existing shop.
+
+        `category` is only written when supplied. A sync that does not carry
+        one must not reset a shop that has already chosen -- the phone sends
+        this on setup, not on every push.
+        """
         with self._tx() as conn:
             conn.execute(
                 """
-                INSERT INTO shops (id, name, language, speaker, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET name = excluded.name
+                INSERT INTO shops (id, name, language, speaker, category, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name     = excluded.name,
+                    category = COALESCE(?, shops.category)
                 """,
-                (shop_id, name, language, speaker,
-                 datetime.now().isoformat(timespec="seconds")),
+                (shop_id, name, language, speaker, category or "general",
+                 datetime.now().isoformat(timespec="seconds"), category),
             )
 
     def _ensure_shop(self, shop_id: str) -> None:

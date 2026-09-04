@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    DEBUG ONLY. Overrides the main config, which is HTTPS-only apart from a
+    handful of named dev hosts.
+
+    Why this file exists: the main config lists 192.168.0.0 and 192.168.1.0 as
+    domains, which reads like it covers a home network but does not. Android
+    matches those as HOSTNAMES. There is no CIDR support, and includeSubdomains
+    on an IP literal matches nothing useful. A phone handed 192.168.29.187 by
+    its router was therefore refused before the request ever left the device,
+    and that failure surfaces as a generic connection error, so it looks
+    exactly like a server that is down.
+
+    Rather than guess which range a given router hands out, debug builds allow
+    cleartext outright. The release build never sees this file, so the shipped
+    APK still cannot fall back to plaintext.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

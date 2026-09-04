@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import app.vaaniledger.data.Strings
 
 /**
  * The mini dashboard the bubble expands into.
@@ -23,6 +24,7 @@ import android.widget.TextView
 class PanelView(
     context: Context,
     private val today: Totals,
+    private val strings: Strings.Panel,
     private val onDismiss: () -> Unit,
     private val onCapture: () -> Unit = {},
     private val onVoice: () -> Unit = {},
@@ -105,9 +107,9 @@ class PanelView(
      */
     private fun subtitle(): View = TextView(context).apply {
         text = when {
-            today.entries == 0 -> "Aaj koi entry nahi"
+            today.entries == 0 -> strings.noEntriesToday
             today.pendingSync > 0 -> "${today.entries} entries · ${today.pendingSync} pending sync"
-            else -> "${today.entries} entries · sab synced"
+            else -> "${today.entries} entries · synced"
         }
         setTextColor(if (today.pendingSync > 0) saffron else muted)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
@@ -117,9 +119,9 @@ class PanelView(
     private fun stats(): View = LinearLayout(context).apply {
         orientation = HORIZONTAL
         setPadding(0, dp(14), 0, dp(6))
-        addView(stat("SALE", rupees(today.sale), ink), equalWeight())
-        addView(stat("CASH", rupees(today.cashIn), good), equalWeight())
-        addView(stat("UDHAAR", rupees(today.udhaar), saffron), equalWeight())
+        addView(stat(strings.statLabelSale, rupees(today.sale), ink), equalWeight())
+        addView(stat(strings.statLabelCash, rupees(today.cashIn), good), equalWeight())
+        addView(stat(strings.statLabelCredit, rupees(today.udhaar), saffron), equalWeight())
     }
 
     private fun stat(label: String, value: String, colour: Int): View =
@@ -143,14 +145,14 @@ class PanelView(
         orientation = VERTICAL
         setPadding(0, dp(12), 0, 0)
 
-        addView(button("Yeh likh lo", "read this chat", primary = true) { onCapture() })
+        addView(button("📖  ${strings.readChat}", strings.readChatSub, primary = true) { onCapture() })
 
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
             setPadding(0, dp(8), 0, 0)
-            addView(button("Bol ke likho", "voice") { onVoice() }, equalWeight())
+            addView(button("🎙️  ${strings.speak}", strings.speakSub) { onVoice() }, equalWeight())
             addView(View(context), LayoutParams(dp(8), 1))
-            addView(button("Khata", "all customers") { onKhata() }, equalWeight())
+            addView(button("📒  ${strings.ledger}", strings.ledgerSub) { onKhata() }, equalWeight())
         })
     }
 

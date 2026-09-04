@@ -28,6 +28,27 @@ data class ExtractRequest(
     @SerialName("known_customers") val knownCustomers: List<String> = emptyList(),
     @SerialName("shop_id") val shopId: String? = null,
     val source: String = "chat",
+    /** Overrides the shop's stored category. Normally left null. */
+    val category: String? = null,
+)
+
+/**
+ * One line of an order.
+ *
+ * `unitPrice` is only ever set when the message STATED a rate. It is never
+ * derived by dividing an amount by a quantity -- that invents a per-unit
+ * price nobody agreed to, and it is the number a customer will argue about.
+ */
+@Serializable
+data class LineItem(
+    val name: String = "",
+    val modifier: String? = null,
+    @SerialName("display_name") val displayName: String = "",
+    val quantity: Double? = null,
+    val unit: String? = null,
+    @SerialName("unit_price") val unitPrice: Double? = null,
+    @SerialName("line_total") val lineTotal: Double? = null,
+    val label: String = "",
 )
 
 @Serializable
@@ -51,8 +72,28 @@ data class Extraction(
     val mode: String = "unknown",
     val direction: String = "unknown",
     val items: List<String> = emptyList(),
+    @SerialName("line_items") val lineItems: List<LineItem> = emptyList(),
     val confidence: Confidence,
     val source: String = "rules",
+
+    // ---- conversation lane only ----------------------------------------
+    //
+    // Defaulted so the same type still parses a plain /extract response.
+
+    /** The tidied sentence the engine read. Shown as provenance, not as evidence. */
+    @SerialName("canonical_text") val canonicalText: String? = null,
+    /** When the customer committed, ISO-8601. Drives occurredAt on the row. */
+    @SerialName("occurred_at") val occurredAt: String? = null,
+    /**
+     * Hashes of every message this order was built from. Recorded in the
+     * chat cursor ONLY after the shopkeeper approves, which is what makes a
+     * re-import skip it instead of booking it twice.
+     */
+    @SerialName("content_hashes") val contentHashes: List<String> = emptyList(),
+    /** Why the resolver believes this is an order. Shown in the review card. */
+    val signals: List<String> = emptyList(),
+    /** The item came from an earlier turn than the commitment. */
+    @SerialName("carried_topic") val carriedTopic: Boolean = false,
 )
 
 @Serializable
@@ -92,16 +133,77 @@ data class IngestRequest(
     val cursor: CursorPayload? = null,
     @SerialName("known_customers") val knownCustomers: List<String> = emptyList(),
     @SerialName("shop_id") val shopId: String? = null,
+    val category: String? = null,
+    /**
+     * The other party in the chat. Supplying it switches the server to the
+     * conversation lane, the only one that can resolve an order split across
+     * turns ("blue kurti?" ... "mujhe 3 chahiye").
+     */
+    @SerialName("customer_name") val customerName: String? = null,
+    @SerialName("shop_aliases") val shopAliases: List<String> = emptyList(),
+    val lane: String? = null,
 )
 
 @Serializable
 data class IngestResponse(
-    @SerialName("total_messages") val totalMessages: Int,
-    @SerialName("new_messages") val newMessages: Int,
-    val blocks: Int,
-    val dropped: Int,
-    @SerialName("drop_rate") val dropRate: Double,
-    val candidates: List<Extraction>,
+    /** Which lane answered: "conversation" or "blocks". */
+    val lane: String = "",
+    val category: String = "",
+    @SerialName("total_messages") val totalMessages: Int = 0,
+    @SerialName("new_messages") val newMessages: Int = 0,
+    val threads: Int = 0,
+    val blocks: Int = 0,
+    val dropped: Int = 0,
+    @SerialName("drop_rate") val dropRate: Double = 0.0,
+    /** Conversation lane. Prefer this. */
+    val orders: List<Extraction> = emptyList(),
+    /** Block lane. Empty whenever `orders` is populated -- never both. */
+    val candidates: List<Extraction> = emptyList(),
+)
+
+
+// --------------------------------------------------------------------------
+// Live screen capture
+// --------------------------------------------------------------------------
+
+@Serializable
+data class ScreenMessage(
+    val body: String,
+    val sender: String? = null,
+    /** ISO-8601. Null when the bubble carried no readable time label. */
+    val timestamp: String? = null,
+    @SerialName("is_outgoing") val isOutgoing: Boolean = false,
+    @SerialName("content_hash") val contentHash: String? = null,
+)
+
+@Serializable
+data class ScreenRequest(
+    @SerialName("chat_id") val chatId: String,
+    @SerialName("customer_name") val customerName: String,
+    val messages: List<ScreenMessage> = emptyList(),
+    val cursor: CursorPayload? = null,
+    @SerialName("shop_id") val shopId: String? = null,
+    val category: String? = null,
+    @SerialName("known_customers") val knownCustomers: List<String> = emptyList(),
+)
+
+@Serializable
+data class ScreenResponse(
+    val lane: String = "",
+    val category: String = "",
+    @SerialName("total_messages") val totalMessages: Int = 0,
+    @SerialName("new_messages") val newMessages: Int = 0,
+    val threads: Int = 0,
+    val orders: List<Extraction> = emptyList(),
+)
+
+@Serializable
+data class CategoryOption(val id: String, val label: String)
+
+@Serializable
+data class CategoriesResponse(
+    val categories: List<CategoryOption> = emptyList(),
+    val default: String = "general",
 )
 
 
@@ -128,6 +230,12 @@ data class TransactionPayload(
 data class SyncRequest(
     @SerialName("shop_id") val shopId: String,
     @SerialName("shop_name") val shopName: String? = null,
+    /**
+     * Sent on setup and whenever it changes, not on every push. The server
+     * only overwrites a stored category when this is non-null, so an ordinary
+     * sync cannot reset a choice the shopkeeper already made.
+     */
+    @SerialName("shop_category") val shopCategory: String? = null,
     val since: String? = null,
     val transactions: List<TransactionPayload> = emptyList(),
 )
@@ -208,6 +316,12 @@ interface VaaniApi {
 
     @POST("ingest/export")
     suspend fun ingestExport(@Body request: IngestRequest): IngestResponse
+
+    @POST("ingest/screen")
+    suspend fun ingestScreen(@Body request: ScreenRequest): ScreenResponse
+
+    @GET("categories")
+    suspend fun categories(): CategoriesResponse
 
     @POST("sync")
     suspend fun sync(@Body request: SyncRequest): SyncResponse

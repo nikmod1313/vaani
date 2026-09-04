@@ -78,7 +78,22 @@ object ChatScraper {
         "saving this number will add", "you deleted this message",
         "this message was deleted", "media omitted", "tap to download",
         "missed voice call", "missed video call",
+        // Group chats render their own system chrome as plain, non-clickable
+        // TextViews sitting right in the message list -- "Isha added you",
+        // "2 members, 1 contact - Group created today by Isha", "Add
+        // description..." -- indistinguishable from a real message by any
+        // structural signal available here. A capture on a group chat
+        // concatenated this straight into the text sent for extraction.
+        "added you", "group created", "created this group",
+        "changed the subject", "changed this group's icon",
+        "changed the group description", "you're now an admin",
+        "joined using this group", "left the group", "add description",
+        "add members", "add your member tag",
     )
+
+    /** "2 members, 1 contact" -- group metadata, wherever it appears in a line. */
+    private val GROUP_METADATA_PATTERN =
+        Regex("""\d+\s+members?,?\s*\d*\s*contacts?""", RegexOption.IGNORE_CASE)
 
     /** A bare phone number is a chat title, not an order. */
     private val PHONE_ONLY = Regex("""^[+(]?[\d\s()+-]{7,20}$""")
@@ -199,6 +214,7 @@ object ChatScraper {
         if (PHONE_ONLY.matches(text)) return false
         if (CHROME_EXACT.any { lower == it }) return false
         if (CHROME_CONTAINS.any { lower.contains(it) }) return false
+        if (GROUP_METADATA_PATTERN.containsMatchIn(text)) return false
         if (CHROME_IDS.any { id.contains(it) }) return false
         if (node.isClickable && text.length < 25) return false // action label
 

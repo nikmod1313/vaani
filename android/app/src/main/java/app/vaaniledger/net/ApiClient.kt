@@ -1,5 +1,6 @@
 package app.vaaniledger.net
 
+import android.content.Context
 import android.util.Log
 import app.vaaniledger.BuildConfig
 import kotlinx.serialization.json.Json
@@ -11,26 +12,44 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import java.util.concurrent.TimeUnit
 
 /**
- * The one Retrofit instance.
+ * The Retrofit instance, rebuilt when the server address changes.
  *
- * Built lazily so a cold start never pays for it, and so a bad base URL
- * fails at the first call with a clear message rather than at process start
- * with a stack trace nobody reads.
+ * Used to be a bare `by lazy` over a compile-time constant, which is exactly
+ * why the app was unusable on a real phone: `BuildConfig.API_BASE` defaults
+ * to the emulator's loopback alias, baked in at build time, and no amount of
+ * retrying from the phone would ever reach it. [ServerSettings] now owns the
+ * address; this class just has to notice when it changes.
  */
 object ApiClient {
 
-    /**
-     * Lenient on purpose. The server may add fields before the app knows
-     * about them, and an unknown key must not crash an entry the shopkeeper
-     * is halfway through confirming.
-     */
     private val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
         coerceInputValues = true
     }
 
-    val api: VaaniApi by lazy {
+    @Volatile private var cachedUrl: String? = null
+    @Volatile private var cachedApi: VaaniApi? = null
+
+    /** The live API, pointed at whatever [ServerSettings] currently holds. */
+    fun api(context: Context): VaaniApi {
+        val url = ServerSettings.baseUrl(context)
+        val cached = cachedApi
+        if (cached != null && url == cachedUrl) return cached
+
+        val built = build(url)
+        cachedUrl = url
+        cachedApi = built
+        return built
+    }
+
+    /** Force the next [api] call to rebuild, e.g. after a settings change. */
+    fun invalidate() {
+        cachedApi = null
+        cachedUrl = null
+    }
+
+    private fun build(baseUrl: String): VaaniApi {
         val logging = HttpLoggingInterceptor { Log.d("VaaniHttp", it) }.apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
                     else HttpLoggingInterceptor.Level.NONE
@@ -44,8 +63,8 @@ object ApiClient {
             .addInterceptor(logging)
             .build()
 
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.API_BASE)
+        return Retrofit.Builder()
+            .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()

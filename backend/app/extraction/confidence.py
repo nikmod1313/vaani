@@ -108,6 +108,11 @@ def score_amount(amount: float | None, source: str | None, agreed: bool | None) 
 
     base = {
         "currency-adjacent": 0.96,
+        # A stated rate times a stated quantity. Both halves came out of the
+        # message, so the total is arithmetic rather than a pick -- which
+        # makes it the one source MORE trustworthy than a currency marker,
+        # since nothing had to be chosen between competing numbers.
+        "line-totals": 0.97,
         "mode-adjacent": 0.88,
         "largest-unused": 0.55,
         "largest-overall": 0.40,
@@ -157,11 +162,20 @@ def score_items(
     labels = [getattr(i, "name", str(i)) for i in items]
     missing_qty = sum(1 for i in items if getattr(i, "quantity", None) is None)
 
+    # A per-item rate parsed off the message is direct evidence and beats the
+    # caller's textual guess. Without this an order that spelled its rate out
+    # ("3 kurti 500 each") was still marked "rate not stated" and sent to the
+    # user to confirm a number the message had already given us.
+    priced = sum(1 for i in items if getattr(i, "unit_price", None) is not None)
+    rates_known = rates_known or priced == len(items)
+
     base = 0.90
     reasons = [f"{len(items)} item(s)"]
     if missing_qty:
         base -= 0.20 * (missing_qty / len(items))
         reasons.append(f"{missing_qty} without quantity")
+    if priced:
+        reasons.append(f"{priced} with a stated rate")
     if not rates_known:
         base -= 0.25
         reasons.append("rate not stated")

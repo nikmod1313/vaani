@@ -27,6 +27,7 @@ from .confidence import (
     score_items,
     score_mode,
 )
+from .categories import Category
 from .names import resolve as resolve_name
 from .rules import Direction, PaymentMode, RuleResult, apply_rules, detect_mode
 
@@ -57,6 +58,10 @@ class Extraction:
     mode: str = PaymentMode.UNKNOWN.value
     direction: str = Direction.UNKNOWN.value
     items: list[str] = field(default_factory=list)
+    #: Structured line items -- name, modifier, quantity, unit, unit_price,
+    #: line_total. `items` above stays a list of labels so every existing
+    #: caller and the Kotlin DTO keep working unchanged.
+    line_items: list[dict] = field(default_factory=list)
     confidence: dict = field(default_factory=dict)
     source: str = "rules"
     extracted_at: str = ""
@@ -68,7 +73,10 @@ class Extraction:
 def _stated_rate(text: str) -> bool:
     """Did the message state a per-unit rate, or only a total?"""
     lowered = text.lower()
-    return any(marker in lowered for marker in ("/kg", "per kg", "rate", "ke hisab", "/-"))
+    return any(
+        marker in lowered
+        for marker in ("/kg", "per kg", "rate", "ke hisab", "/-", " each", " per ", "prati")
+    )
 
 
 def extract(
@@ -76,15 +84,20 @@ def extract(
     known_customers: list[str] | None = None,
     sender_name: str | None = None,
     llm: LLMLayer | None = None,
+    category: Category | str | None = None,
 ) -> Extraction:
     """
     Run one message through the full pipeline.
 
     `sender_name` is the WhatsApp contact the message came from -- the
     strongest customer signal available, and free.
+
+    `category` selects the item lexicon. Omitted, it falls back to the open
+    vocabulary, so every caller written before categories existed keeps the
+    behaviour it had.
     """
     known_customers = known_customers or []
-    rules = apply_rules(text)
+    rules = apply_rules(text, category)
 
     # --- stage 2: only ask the model about what rules could not settle -----
     gaps = [f for f in ("amount", "mode", "items") if f not in rules.resolved]
@@ -107,8 +120,10 @@ def extract(
         mode = llm_result["mode"]
 
     items = [i.label() for i in rules.items]
+    line_items = [i.to_dict() for i in rules.items]
     if not items and llm_result.get("items"):
         items = list(llm_result["items"])
+        line_items = [{"name": label, "label": label} for label in items]
 
     # --- customer: sender name first, then anything the model found -------
     raw_name = sender_name or llm_result.get("customer")
@@ -134,6 +149,7 @@ def extract(
         mode=mode,
         direction=rules.direction.value,
         items=items,
+        line_items=line_items,
         confidence=conf.as_dict(),
         source="rules+llm" if llm_result else "rules",
         extracted_at=datetime.now().isoformat(timespec="seconds"),
@@ -145,6 +161,7 @@ def extract_batch(
     known_customers: list[str] | None = None,
     senders: list[str | None] | None = None,
     llm: LLMLayer | None = None,
+    category: Category | str | None = None,
 ) -> list[Extraction]:
     """
     Bulk path.
@@ -159,7 +176,7 @@ def extract_batch(
 
     batched: list[dict] | None = None
     if llm is not None and hasattr(llm, "extract_many") and texts:
-        rule_results = [apply_rules(t) for t in texts]
+        rule_results = [apply_rules(t, category) for t in texts]
         try:
             batched = llm.extract_many(texts, known_customers, rule_results)
         except Exception:
@@ -167,14 +184,14 @@ def extract_batch(
 
     if batched is None:
         return [
-            extract(text, known_customers, sender, llm)
+            extract(text, known_customers, sender, llm, category)
             for text, sender in zip(texts, senders)
         ]
 
     # Replay each pre-computed model result through the single-message path so
     # confidence scoring and name resolution stay in exactly one place.
     return [
-        extract(text, known_customers, sender, _Prefilled(result))
+        extract(text, known_customers, sender, _Prefilled(result), category)
         for text, sender, result in zip(texts, senders, batched)
     ]
 

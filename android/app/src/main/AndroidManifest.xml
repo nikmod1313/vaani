@@ -7,31 +7,30 @@
 
     Note on distribution: AccessibilityService is restricted on the Play
     Store. This app is sideload / enterprise, and the report says so
-    explicitly rather than leaving it as a gap for the examiner to find.
--->
+    explicitly rather than leaving it as a gap for the examiner to find.-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- The floating bubble. Without this the product does not exist. -->
+    <!-- The floating bubble. Without this the product does not exist.-->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <!-- Overlay + capture both run in a long-lived foreground service. -->
+    <!-- Overlay + capture both run in a long-lived foreground service.-->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Voice entry (on-device recogniser). -->
+    <!-- Voice entry (on-device recogniser).-->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Sync + Sarvam calls. -->
+    <!-- Sync + Sarvam calls.-->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Optional: parse bank credit SMS to SUGGEST a settlement. Never auto-settles. -->
+    <!-- Optional: parse bank credit SMS to SUGGEST a settlement. Never auto-settles.-->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
 
-    <!-- Resolve wa.me and upi:// intents on Android 11+. -->
+    <!-- Resolve wa.me and upi:// intents on Android 11+.-->
     <queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
@@ -61,11 +60,27 @@
         </activity>
 
         <!--
+            First-run setup: category, then language. Runs exactly once —
+            MainActivity redirects here until ShopSettings.hasCompletedOnboarding
+            is true, and never again after.-->
+        <activity
+            android:name=".OnboardingActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!--
+            Category / language / server address, changed on purpose after
+            setup. Distinct from onboarding, which never asks twice.-->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!--
             Lane 1 — Export Chat.
             Registers VaaniLedger as a share target so WhatsApp's
             "Export chat -> Without media" hands us the whole .txt.
-            This is the answer to bulk orders, and it needs no permissions.
-        -->
+            This is the answer to bulk orders, and it needs no permissions.-->
         <activity
             android:name=".capture.ImportExportActivity"
             android:exported="true"
@@ -82,17 +97,39 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/zip" />
             </intent-filter>
+            <!--
+                The in-app "Export file se import karein" button hands the
+                picked file straight here as a content:// Uri, so the same
+                activity serves both routes into the export lane.-->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
         </activity>
 
+        <!--
+            The review queue. Both ingestion lanes end here, and nothing
+            reaches the khata without passing through it.
+
+            Not exported: it renders orders already extracted from someone's
+            private chat, and no other app has any business launching it.-->
+        <activity
+            android:name=".capture.ReviewActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:launchMode="singleTop" />
+
         <!-- Voice entry. Transparent: only an Activity can request
-             RECORD_AUDIO and receive a RecognizerIntent result. -->
+             RECORD_AUDIO and receive a RecognizerIntent result.-->
         <activity
             android:name=".VoiceActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.VaaniLedger.Transparent" />
 
-        <!-- The floating bubble + mini dashboard. -->
+        <!-- The floating bubble + mini dashboard.-->
         <service
             android:name=".overlay.OverlayService"
             android:exported="false"
@@ -105,8 +142,7 @@
         <!--
             Lane 2 — Accessibility.
             Reads chat text directly and drives scroll-harvest for
-            "entry kar do". Unaffected by FLAG_SECURE.
-        -->
+            "entry kar do". Unaffected by FLAG_SECURE.-->
         <service
             android:name=".capture.LedgerAccessibilityService"
             android:exported="false"
@@ -122,8 +158,7 @@
         <!--
             Lane 3 — Notification listener.
             Stages every incoming WhatsApp message so the backlog is ready
-            before the shopkeeper asks for it.
-        -->
+            before the shopkeeper asks for it.-->
         <service
             android:name=".capture.MessageNotificationListener"
             android:exported="false"
@@ -133,7 +168,7 @@
             </intent-filter>
         </service>
 
-        <!-- Screenshot + OCR. One long-lived projection: Android 14 prompts once. -->
+        <!-- Screenshot + OCR. One long-lived projection: Android 14 prompts once.-->
         <service
             android:name=".capture.ScreenCaptureService"
             android:exported="false"

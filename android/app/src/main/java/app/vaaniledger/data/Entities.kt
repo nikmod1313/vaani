@@ -50,8 +50,42 @@ data class ShopEntity(
     val name: String,
     val language: String = "hi-IN",
     val speaker: String = "anushka",
+    /**
+     * What the shop sells. Chooses the item lexicon the extraction engine
+     * uses, because one closed grocery word list cannot name a single thing
+     * a clothes shop stocks.
+     *
+     * Defaults to "general", which on the server means the OPEN vocabulary --
+     * every word every category knows -- not an empty one. So a shop that
+     * never picks still recognises items; picking just makes it sharper.
+     */
+    val category: String = ShopCategory.GENERAL.wire,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
 )
+
+
+/**
+ * Shop categories, mirroring `backend/app/extraction/categories.py`.
+ *
+ * The labels live here so the picker renders instantly on first launch,
+ * before the phone has ever reached the server. `GET /categories` is the
+ * authority and the list refreshes from it, but a shopkeeper setting the app
+ * up on a counter with no signal must still be able to choose.
+ */
+enum class ShopCategory(val wire: String, val label: String) {
+    KIRANA("kirana", "Kirana / General Store"),
+    APPAREL("apparel", "Kapde / Clothing"),
+    PHARMACY("pharmacy", "Dawai / Medical"),
+    HARDWARE("hardware", "Hardware / Building"),
+    STATIONERY("stationery", "Stationery / Books"),
+    ELECTRONICS("electronics", "Electronics / Mobile"),
+    GENERAL("general", "Doosra / Other");
+
+    companion object {
+        fun from(value: String?) =
+            entries.firstOrNull { it.wire == value } ?: GENERAL
+    }
+}
 
 
 @Entity(

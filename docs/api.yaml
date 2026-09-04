@@ -10,6 +10,11 @@ info:
     Changing anything here requires all four people in the room. The whole
     stub-first workflow depends on this file not moving underneath people.
 
+    AMENDED — conversation lane. Every change below is ADDITIVE: new
+    endpoints, and new optional fields with defaults that reproduce the old
+    behaviour exactly. No existing request or response shape changed, so a
+    client built against the frozen version keeps working untouched.
+
 servers:
   - url: http://localhost:8000
     description: Local dev
@@ -110,9 +115,23 @@ paths:
     post:
       summary: Ingest a WhatsApp chat export
       description: |
-        Accepts the .txt from WhatsApp's "Export chat". Applies the watermark,
-        segments into blocks, classifies, and returns only the candidates
-        worth reviewing.
+        Accepts the .txt from WhatsApp's "Export chat".
+
+        TWO LANES, and exactly one runs per request.
+
+        `conversation` threads both sides of the chat together and resolves an
+        order stated across turns — the customer asks what is available, the
+        shop quotes a rate, the customer commits with only a quantity. It
+        needs to know which participant is the customer; supply
+        `customer_name`, or `shop_aliases` and let the server work it out.
+
+        `blocks` is the original per-sender lane, and still the better unit
+        for a shopkeeper dictating entries to himself.
+
+        Running both would offer the same order twice in one review queue and
+        approving both would book it twice, so `lane` picks and the response
+        says which one answered. `orders` and `candidates` are never both
+        populated.
 
         Does NOT advance the cursor — the client does that after the user
         approves the review queue, so a crash mid-review cannot lose orders.
@@ -130,6 +149,25 @@ paths:
                 until: { type: string, format: date-time, nullable: true }
                 cursor:
                   $ref: "#/components/schemas/ChatCursor"
+                shop_id: { type: string, nullable: true }
+                category:
+                  $ref: "#/components/schemas/ShopCategory"
+                customer_name:
+                  type: string
+                  nullable: true
+                  description: |
+                    The other party in the chat. Selects the conversation
+                    lane. Omit it and the server infers the customer by
+                    eliminating `shop_aliases` and "you"/"me".
+                shop_aliases:
+                  type: array
+                  items: { type: string }
+                  description: Names the export uses for the shop's own side.
+                lane:
+                  type: string
+                  enum: [conversation, blocks]
+                  nullable: true
+                  description: Defaults to conversation when a customer is known.
       responses:
         "200":
           description: Ingestion summary plus review candidates
@@ -138,14 +176,116 @@ paths:
               schema:
                 type: object
                 properties:
+                  lane: { type: string, enum: [conversation, blocks] }
+                  category: { type: string }
+                  customer: { type: string, nullable: true }
                   total_messages: { type: integer }
                   new_messages: { type: integer }
+                  threads: { type: integer }
                   blocks: { type: integer }
                   dropped: { type: integer }
                   drop_rate: { type: number, format: float }
+                  orders:
+                    type: array
+                    description: Conversation lane. Empty when `candidates` is used.
+                    items: { $ref: "#/components/schemas/Extraction" }
                   candidates:
                     type: array
+                    description: Block lane. Empty when `orders` is used.
                     items: { $ref: "#/components/schemas/Extraction" }
+
+  /ingest/screen:
+    post:
+      summary: Ingest messages read off the screen
+      description: |
+        The live lane, backing "Yeh likh lo".
+
+        Unlike an export this arrives already structured — the accessibility
+        capture knows which side sent each bubble — so there is nothing to
+        parse, only to thread and resolve.
+
+        Shares the same watermark as `/ingest/export`. A message seen on
+        screen and then again in a later export of the same chat hashes
+        identically and is booked once. That is why the two lanes share a
+        cursor rather than keeping one each.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [chat_id, customer_name]
+              properties:
+                chat_id: { type: string }
+                customer_name: { type: string }
+                shop_id: { type: string, nullable: true }
+                category:
+                  $ref: "#/components/schemas/ShopCategory"
+                known_customers:
+                  type: array
+                  items: { type: string }
+                cursor:
+                  $ref: "#/components/schemas/ChatCursor"
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [body]
+                    properties:
+                      body: { type: string }
+                      sender: { type: string, nullable: true }
+                      timestamp:
+                        type: string
+                        format: date-time
+                        nullable: true
+                        description: |
+                          Null is expected — a chat bubble carries a time
+                          label, not a date. Messages with no timestamp keep
+                          the order they were sent in.
+                      is_outgoing:
+                        type: boolean
+                        description: The shopkeeper sent it, not the customer.
+                      content_hash: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Resolved orders awaiting review
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lane: { type: string, enum: [screen] }
+                  category: { type: string }
+                  total_messages: { type: integer }
+                  new_messages: { type: integer }
+                  threads: { type: integer }
+                  orders:
+                    type: array
+                    items: { $ref: "#/components/schemas/Extraction" }
+
+  /categories:
+    get:
+      summary: Shop categories offered by the setup picker
+      description: |
+        Served rather than hardcoded in the app, so adding a category ships
+        without an APK update. The phone keeps a built-in copy for first
+        launch on a counter with no signal.
+      responses:
+        "200":
+          description: The categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  default: { type: string }
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        label: { type: string }
 
   /summary/narrate:
     get:
@@ -289,10 +429,81 @@ components:
           enum: [sale, payment, unknown]
         items:
           type: array
+          description: Human-readable labels. Unchanged from the frozen contract.
           items: { type: string }
+        line_items:
+          type: array
+          description: Structured form of `items`. Added, never replacing it.
+          items: { $ref: "#/components/schemas/LineItem" }
         confidence: { $ref: "#/components/schemas/Confidence" }
         source: { type: string }
         extracted_at: { type: string, format: date-time }
+
+        # ---- conversation lane only ------------------------------------
+        # Absent from /extract responses; clients must default them.
+        canonical_text:
+          type: string
+          nullable: true
+          description: >
+            The tidied sentence the engine parsed. Provenance only — `text`
+            holds the messages the customer actually sent, and that is what a
+            review screen must show. Never present a canonical sentence to
+            someone as evidence of what they owe.
+        occurred_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the customer committed. Drives the row's date.
+        content_hashes:
+          type: array
+          items: { type: string }
+          description: >
+            Every message this order was built from. The client records these
+            in the chat cursor ONLY after the shopkeeper approves — that is
+            what makes a re-import skip the order instead of booking it twice.
+        signals:
+          type: array
+          items: { type: string }
+          description: Why the resolver believes this is an order.
+        carried_topic:
+          type: boolean
+          description: >
+            The item came from an earlier turn than the commitment. The case
+            per-sender segmentation cannot resolve, and the one worth a second
+            look before approving.
+
+    LineItem:
+      type: object
+      properties:
+        name: { type: string, description: Singular, however the customer spelled it. }
+        modifier:
+          type: string
+          nullable: true
+          description: The adjective used — "blue" in "blue kurti".
+        display_name: { type: string }
+        quantity: { type: number, nullable: true }
+        unit: { type: string, nullable: true }
+        unit_price:
+          type: number
+          nullable: true
+          description: >
+            Set only when the message STATED a rate. Never derived by dividing
+            an amount by a quantity — that invents a per-unit price nobody
+            agreed to, and it is the number a customer will argue about.
+        line_total:
+          type: number
+          nullable: true
+          description: quantity x unit_price, only when both were stated.
+        label: { type: string }
+
+    ShopCategory:
+      type: string
+      nullable: true
+      enum: [kirana, apparel, pharmacy, hardware, stationery, electronics, general]
+      description: >
+        Selects the item lexicon. `general` is the OPEN vocabulary — every
+        word every category knows — not an empty one, so an unset category
+        widens recognition rather than disabling it.
 
     Confidence:
       type: object

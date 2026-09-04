@@ -14,11 +14,13 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import app.vaaniledger.data.Aging
+import app.vaaniledger.capture.ReviewQueue
 import app.vaaniledger.data.LedgerDatabase
+import app.vaaniledger.data.ShopSettings
+import app.vaaniledger.extract.OfflineExtractor
 import app.vaaniledger.data.ShopEntity
 import app.vaaniledger.data.TransactionEntity
 import app.vaaniledger.net.ApiClient
-import app.vaaniledger.net.Confidence
 import app.vaaniledger.net.ExtractRequest
 import app.vaaniledger.net.Extraction
 import app.vaaniledger.sync.SyncWorker
@@ -239,6 +241,7 @@ class OverlayService : Service() {
         val view = PanelView(
             context = this,
             today = totals,
+            strings = app.vaaniledger.data.Strings.of(ShopSettings.language(this)).panel,
             onDismiss = { collapse() },
             onCapture = { capture() },
             onVoice = { startVoice() },
@@ -381,7 +384,7 @@ class OverlayService : Service() {
         val service = app.vaaniledger.capture.LedgerAccessibilityService.instance
         if (service == null) {
             android.util.Log.w(TAG, "capture: accessibility service not connected")
-            toast("Chat padhne ki ijaazat band hai")
+            toast(captureStrings().accessibilityOff)
             return
         }
 
@@ -390,18 +393,105 @@ class OverlayService : Service() {
         android.os.Handler(mainLooper).postDelayed({
             if (!service.hasChatWindow()) {
                 android.util.Log.i(TAG, "capture: no chat window on screen")
-                toast("Pehle WhatsApp chat kholiye")
+                toast(captureStrings().openWhatsAppFirst)
                 return@postDelayed
             }
 
-            val messages = service.captureVisible()
-            android.util.Log.i(TAG, "capture: ${messages.size} message(s)")
-            if (messages.isEmpty()) {
-                toast("Koi message nahi mila")
-                return@postDelayed
+            val chatTitle = service.currentChatTitle()
+            toast(captureStrings().reading)
+
+            // Scroll back through the conversation rather than reading only
+            // what happens to be on screen. An order routinely spans an
+            // enquiry, a reply and a commitment, and on a phone-sized screen
+            // those three rarely fit together -- which is exactly the case
+            // single-screen capture used to get wrong.
+            service.harvest(maxScrolls = HARVEST_SCROLLS) { messages ->
+                android.util.Log.i(TAG, "capture: ${messages.size} message(s)")
+                if (messages.isEmpty()) {
+                    toast(captureStrings().noMessagesFound)
+                } else {
+                    screenAndReview(messages, chatTitle)
+                }
             }
-            extractAndConfirm(messages, service.currentChatTitle())
         }, PANEL_SETTLE_MS)
+    }
+
+    /**
+     * Send a harvested chat through the conversation lane.
+     *
+     * Falls back to the single-message path when the lane resolves nothing.
+     * That is not a formality: the resolver deliberately refuses to invent an
+     * order out of a conversation that never committed to one, and a
+     * shopkeeper who pressed "Yeh likh lo" on a plain "250 ka udhaar likh
+     * lena" still expects a confirm sheet.
+     */
+    private fun screenAndReview(
+        messages: List<app.vaaniledger.capture.LedgerAccessibilityService.CapturedMessage>,
+        chatTitle: String?,
+    ) {
+        val customer = chatTitle?.takeIf { it.isNotBlank() }
+        if (customer == null) {
+            // Without a name there is no way to say WHOSE khata this belongs
+            // to, and the conversation lane cannot tell the two sides apart.
+            extractAndConfirm(messages, null)
+            return
+        }
+
+        val chatId = "screen:" + customer.lowercase()
+
+        scope.launch {
+            val db = LedgerDatabase.get(this@OverlayService)
+            val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
+
+            val response = runCatching {
+                ApiClient.api(this@OverlayService).ingestScreen(
+                    app.vaaniledger.net.ScreenRequest(
+                        chatId = chatId,
+                        customerName = customer,
+                        // Both sides go up. The shopkeeper's own replies are
+                        // what carry the quoted rate, and dropping them was
+                        // why a price stated by the shop never reached the
+                        // entry it belonged to.
+                        messages = messages.map {
+                            app.vaaniledger.net.ScreenMessage(
+                                body = it.text,
+                                sender = if (it.isOutgoing) SHOP_NAME else customer,
+                                isOutgoing = it.isOutgoing,
+                                contentHash = it.hash,
+                            )
+                        },
+                        cursor = ReviewQueue.cursorFor(this@OverlayService, chatId),
+                        shopId = SHOP_ID,
+                        category = ShopSettings.category(this@OverlayService).wire,
+                        knownCustomers = known,
+                    )
+                )
+            }.onFailure {
+                android.util.Log.w(TAG, "screen ingest failed: ${it.message}")
+            }.getOrNull()
+
+            withContext(Dispatchers.Main) {
+                val orders = response?.orders.orEmpty()
+                if (orders.isEmpty()) {
+                    extractAndConfirm(messages, customer)
+                    return@withContext
+                }
+
+                ReviewQueue.offer(
+                    orders.map { ReviewQueue.Pending(it, chatId, it.customer ?: customer) },
+                    if (ShopSettings.language(this@OverlayService) == app.vaaniledger.data.AppLanguage.EN)
+                        "$customer's chat"
+                    else
+                        "$customer ki chat se",
+                )
+                startActivity(
+                    android.content.Intent(
+                        this@OverlayService,
+                        app.vaaniledger.capture.ReviewActivity::class.java,
+                    ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
     }
 
     private fun extractAndConfirm(
@@ -417,7 +507,7 @@ class OverlayService : Service() {
             .trim()
 
         if (text.isBlank()) {
-            toast("Koi order nahi mila")
+            toast(captureStrings().noOrderFound)
             return
         }
         extractText(text, senderName)
@@ -430,7 +520,7 @@ class OverlayService : Service() {
             val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
 
             val extraction = runCatching {
-                ApiClient.api.extract(
+                ApiClient.api(this@OverlayService).extract(
                     ExtractRequest(
                         text = text,
                         senderName = senderName,
@@ -443,23 +533,25 @@ class OverlayService : Service() {
                 android.util.Log.w(TAG, "extract failed: ${it.message}")
             }.getOrNull()
 
+            // Degrade, never drop -- and degrading no longer means handing
+            // back an empty form. The same rules engine the server runs is
+            // ported to Kotlin and parses the text on-device, so a shop
+            // counter with no signal still gets the amount, the mode and the
+            // items filled in. Only the LLM stage and cross-turn threading
+            // need the network.
+            val result = extraction ?: OfflineExtractor.extract(
+                text = text,
+                knownCustomers = known,
+                senderName = senderName,
+                category = ShopSettings.category(this@OverlayService),
+            )
+
             withContext(Dispatchers.Main) {
-                if (extraction == null) {
-                    // Degrade, never drop. The text survives into the sheet.
-                    toast("Server nahi mila — haath se bhariye")
-                    showConfirm(blankExtraction(text))
-                } else {
-                    showConfirm(extraction)
-                }
+                if (extraction == null) toast(captureStrings().offlineParsed)
+                showConfirm(result)
             }
         }
     }
-
-    /** An empty result carrying the captured text, for the offline path. */
-    private fun blankExtraction(text: String) = Extraction(
-        text = text,
-        confidence = Confidence(overall = 0.0, route = "manual"),
-    )
 
     private fun showConfirm(extraction: Extraction) {
         if (confirmSheet != null) return
@@ -563,7 +655,7 @@ class OverlayService : Service() {
 
             // The learning loop: what the engine said vs what the human said.
             runCatching {
-                ApiClient.api.correction(
+                ApiClient.api(this@OverlayService).correction(
                     app.vaaniledger.net.CorrectionRequest(
                         shopId = SHOP_ID,
                         rawText = predicted.text,
@@ -645,6 +737,9 @@ class OverlayService : Service() {
         }
     }
 
+    private fun captureStrings() =
+        app.vaaniledger.data.Strings.of(ShopSettings.language(this)).capture
+
     private fun toast(message: String) {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
     }
@@ -703,12 +798,17 @@ class OverlayService : Service() {
 
         private const val TAG = "VaaniCapture"
         /** Long enough for our own panel to be gone before we read the window. */
+        /** Enough to cover a normal back-and-forth without a long stall. */
+        private const val HARVEST_SCROLLS = 12
         private const val PANEL_SETTLE_MS = 350L
         /** Enough for a three-message order, not the whole scrollback. */
         private const val MAX_MESSAGES_PER_CAPTURE = 6
         // TODO(week 3): from onboarding, once a shop can be created in-app.
-        private const val SHOP_ID = "sharma-kirana"
-        private const val SHOP_NAME = "Sharma Kirana Store"
+        // Delegated so the overlay, the review queue and the import all
+        // write into the SAME khata. Three entry points with their own copy
+        // of this string would split one ledger into three half-empty ones.
+        private val SHOP_ID = app.vaaniledger.data.ShopSettings.ID
+        private val SHOP_NAME = app.vaaniledger.data.ShopSettings.NAME
         private const val CHANNEL_ID = "vaani_overlay"
         private const val NOTIFICATION_ID = 1001
         private const val TAP_SLOP = 12

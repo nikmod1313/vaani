@@ -45,7 +45,7 @@ class SyncWorker(
     // fails QUIETLY — the job reports FAILED and nothing is ever posted.
     // Injecting properly needs a custom WorkerFactory, which is not worth it
     // for one dependency.
-    private val api: VaaniApi get() = ApiClient.api
+    private val api: VaaniApi get() = ApiClient.api(applicationContext)
 
     private val db = LedgerDatabase.get(context)
 

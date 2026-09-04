@@ -28,6 +28,18 @@ class LedgerAccessibilityService : AccessibilityService() {
 
     private val collected = LinkedHashMap<String, CapturedMessage>()
 
+    /**
+     * What each scroll round newly revealed, in screen order.
+     *
+     * Kept separately from [collected] because a harvest walks BACKWARDS: the
+     * first round holds the newest messages and each later round is older.
+     * Flattening the map's insertion order and reversing it, as this used to
+     * do, reverses each screen internally as well -- so a three-message order
+     * came back in the wrong order and the resolver saw the quantity before
+     * the item it belonged to. Rounds are reversed; their contents are not.
+     */
+    private val rounds = mutableListOf<List<CapturedMessage>>()
+
     data class CapturedMessage(
         val text: String,
         val isOutgoing: Boolean,
@@ -84,9 +96,13 @@ class LedgerAccessibilityService : AccessibilityService() {
     /** Read everything currently on screen. Backs the "Yeh likh lo" action. */
     fun captureVisible(): List<CapturedMessage> {
         collected.clear()
+        rounds.clear()
         collectVisible()
         return collected.values.toList()
     }
+
+    /** Oldest first, which is the only order the conversation resolver can read. */
+    private fun chronological(): List<CapturedMessage> = rounds.reversed().flatten()
 
     /**
      * Log the whole node tree.
@@ -163,9 +179,12 @@ class LedgerAccessibilityService : AccessibilityService() {
             if (app.vaaniledger.BuildConfig.DEBUG) {
                 android.util.Log.d(TREE_TAG, ChatScraper.dump(root))
             }
+            val fresh = mutableListOf<CapturedMessage>()
             for (m in ChatScraper.scrape(root, width)) {
-                collected[m.hash] = CapturedMessage(m.text, m.isOutgoing, m.timeLabel)
+                val message = CapturedMessage(m.text, m.isOutgoing, m.timeLabel)
+                if (collected.put(m.hash, message) == null) fresh.add(message)
             }
+            if (fresh.isNotEmpty()) rounds.add(fresh)
         } finally {
             @Suppress("DEPRECATION")
             root.recycle()
@@ -189,6 +208,7 @@ class LedgerAccessibilityService : AccessibilityService() {
         onComplete: (List<CapturedMessage>) -> Unit,
     ) {
         collected.clear()
+        rounds.clear()
         harvesting = true
 
         var scrolls = 0
@@ -197,7 +217,7 @@ class LedgerAccessibilityService : AccessibilityService() {
         fun step() {
             if (!harvesting || scrolls >= maxScrolls || emptyRounds >= 2) {
                 harvesting = false
-                onComplete(collected.values.reversed())
+                onComplete(chronological())
                 return
             }
 
@@ -206,7 +226,7 @@ class LedgerAccessibilityService : AccessibilityService() {
 
             if (stopAtHash != null && collected.containsKey(stopAtHash)) {
                 harvesting = false
-                onComplete(collected.values.reversed())
+                onComplete(chronological())
                 return
             }
 
@@ -216,7 +236,7 @@ class LedgerAccessibilityService : AccessibilityService() {
             val list = findScrollable(rootInActiveWindow)
             if (list == null) {
                 harvesting = false
-                onComplete(collected.values.reversed())
+                onComplete(chronological())
                 return
             }
 
