@@ -344,6 +344,9 @@ object RulesEngine {
         val items = mutableListOf<LineItem>()
         var pendingQty: Double? = null
         var pendingUnit: String? = null
+        // True when pendingQty arrived with a unit ("2kg"), making it a
+        // measure a later bare number must not overwrite.
+        var pendingMeasured = false
         var pendingModifier: String? = null
 
         var i = 0
@@ -352,6 +355,7 @@ object RulesEngine {
 
             if (token == NumberParser.BOUNDARY) {
                 pendingQty = null; pendingUnit = null; pendingModifier = null
+                pendingMeasured = false
                 i++
                 continue
             }
@@ -362,9 +366,32 @@ object RulesEngine {
                 while (j < tokens.size && NumberParser.isNumberToken(tokens[j].trim('.'))) j++
                 val value = NumberParser.parseNumberPhrase(tokens.subList(i, j))
                 val next = if (j < tokens.size) tokens[j].trim('.') else ""
+
+                // A number followed by a unit is a MEASURE -- "2kg" is two
+                // kilos, and nothing later in the sentence can turn it into
+                // something else.
+                val measured = next in units
+
                 // "paune sau ka chai" -- a price, not a count. Leaving
                 // pendingQty unset keeps the number available as the amount.
-                if (value != null && next !in PRICE_MARKERS) pendingQty = value
+                if (value != null && next !in PRICE_MARKERS) {
+                    if (pendingQty != null && pendingMeasured && !measured) {
+                        // A BARE number after an established measure is a
+                        // price, not a replacement count. Real chat states
+                        // them in this order, often across separate messages:
+                        //
+                        //     "2kg for"  "500 only"  "organic"  "tamatar"
+                        //
+                        // Overwriting booked FIVE HUNDRED KILOS of tomatoes,
+                        // because the unit from the measure survived next to
+                        // the new number. Mirrors rules.py exactly.
+                    } else {
+                        pendingQty = value
+                        pendingMeasured = measured
+                        // A bare number carries no unit of its own.
+                        if (!measured) pendingUnit = null
+                    }
+                }
                 i = j
                 continue
             }
@@ -403,6 +430,7 @@ object RulesEngine {
                 var unit = pendingUnit
                 val modifier = pendingModifier
                 pendingQty = null; pendingUnit = null; pendingModifier = null
+                pendingMeasured = false
                 i++
 
                 // Trailing quantity: shopkeepers write both "2 kilo chawal"

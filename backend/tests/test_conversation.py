@@ -262,6 +262,114 @@ class TestStatedRates(unittest.TestCase):
         self.assertIsNone(apply_rules("3 kurti 1500 ka udhaar", "apparel").items[0].unit_price)
 
 
+class TestMeasureSurvivesAPrice(unittest.TestCase):
+    """
+    From a real chat, sent one word per message:
+
+        "2kg for"  "500 only"  "organic"  "grown"  "tamatar"
+
+    Joined for extraction, the 500 overwrote the 2 as the pending quantity
+    while the unit "kg" from the measure survived beside it -- so the entry
+    booked FIVE HUNDRED KILOS of tomatoes for no money at all.
+    """
+
+    def test_a_bare_number_does_not_overwrite_a_measure(self):
+        result = apply_rules("2kg for 500 only organic grown tamatar", "kirana")
+        self.assertEqual(result.items[0].quantity, 2)
+        self.assertEqual(result.items[0].unit, "kg")
+
+    def test_the_bare_number_becomes_the_amount(self):
+        self.assertEqual(
+            apply_rules("2kg for 500 only organic grown tamatar", "kirana").amount,
+            500.0,
+        )
+
+    def test_a_bare_number_carries_no_borrowed_unit(self):
+        """Without clearing the unit, "500" inherited the "kg" beside it."""
+        result = apply_rules("5 kg 200 rupaye aloo", "kirana")
+        self.assertEqual(result.items[0].quantity, 5)
+        self.assertEqual(result.items[0].unit, "kg")
+        self.assertEqual(result.amount, 200.0)
+
+    def test_a_second_measure_still_replaces_the_first(self):
+        """Only BARE numbers are refused; a real measure must still win."""
+        items = apply_rules("2 kilo chawal aur 5 kilo atta", "kirana").items
+        self.assertEqual((items[0].name, items[0].quantity), ("chawal", 2))
+        self.assertEqual((items[1].name, items[1].quantity), ("atta", 5))
+
+
+class TestQuotedRateVersusTotal(unittest.TestCase):
+    """
+    Whether a quoted price is per-unit or for the whole bundle decides
+    whether the bill gets multiplied. Getting it backwards is the difference
+    between Rs 500 and Rs 1000 of someone's money.
+
+    The separator is whether the shopkeeper's own run of messages mentioned a
+    quantity: a bare price answers "what does one cost", a price beside a
+    measure prices that bundle.
+    """
+
+    def _order(self, rows, category="kirana"):
+        turns = []
+        for i, (body, shop) in enumerate(rows):
+            turns.append(
+                Turn(
+                    sender="Sharma Kirana" if shop else "Rachit M",
+                    body=body,
+                    timestamp=T0 + timedelta(minutes=i),
+                    is_shopkeeper=shop,
+                    content_hash=f"q{i}",
+                )
+            )
+        orders = resolve_all(turns, "Rachit M", category)
+        return orders[0] if orders else None
+
+    def test_a_price_beside_a_measure_is_a_total(self):
+        """From a real chat: "2kg for" / "500 only" is 500, not 2 x 500."""
+        order = self._order([
+            ("2kg tamatar chaiye", False),
+            ("2kg for", True), ("500 only", True), ("organic grown tamatar", True),
+            ("haan bhej do", False),
+        ])
+        self.assertEqual(order.amount, 500.0)
+        self.assertIsNone(order.items[0].unit_price)
+
+    def test_a_bare_price_is_a_per_unit_rate(self):
+        order = self._order([
+            ("is there an availability of blue kurtis", False),
+            ("yes, 500 ka", True),
+            ("mujhe 3 kharidne hai", False),
+        ], "apparel")
+        self.assertEqual(order.items[0].unit_price, 500.0)
+        self.assertEqual(order.amount, 1500.0)
+
+    def test_an_explicit_each_still_multiplies(self):
+        order = self._order([
+            ("red saree hai kya", False),
+            ("haan, 1200 each", True),
+            ("i want 2 pieces", False),
+        ], "apparel")
+        self.assertEqual(order.amount, 2400.0)
+
+    def test_quantity_falls_back_to_the_topic(self):
+        """"haan bhej do" carries no number; the earlier 2kg is the answer."""
+        order = self._order([
+            ("2kg tamatar chaiye", False),
+            ("organic grown tamatar", True),
+            ("haan bhej do", False),
+        ])
+        self.assertEqual(order.items[0].quantity, 2)
+        self.assertEqual(order.items[0].unit, "kg")
+
+    def test_a_later_bare_mention_does_not_erase_an_earlier_one(self):
+        order = self._order([
+            ("2kg tamatar chaiye", False),
+            ("tamatar", True),
+            ("bhej do", False),
+        ])
+        self.assertEqual(order.items[0].quantity, 2)
+
+
 class TestSides(unittest.TestCase):
     def test_you_is_always_the_shop(self):
         self.assertTrue(is_shopkeeper("You", "Rahul Verma"))

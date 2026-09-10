@@ -271,4 +271,40 @@ class OfflineParityTest {
         assertEquals("Rahul Verma", result.customer)
         assertTrue(!result.customerIsNew)
     }
+
+    // ----------------------------------------------------------------------
+    // A measure must survive a price that follows it.
+    //
+    // From a real chat, sent one word per message:
+    //     "2kg for"  "500 only"  "organic"  "grown"  "tamatar"
+    // The 500 overwrote the 2 and kept its "kg", booking FIVE HUNDRED KILOS
+    // of tomatoes. Pinned in both engines so they cannot drift apart on it.
+    // ----------------------------------------------------------------------
+
+    @Test
+    fun `bare number does not overwrite a measured quantity`() {
+        val result = RulesEngine.applyRules(
+            "2kg for 500 only organic grown tamatar", ShopCategory.KIRANA,
+        )
+        assertEquals(2.0, result.items[0].quantity!!, 0.001)
+        assertEquals("kg", result.items[0].unit)
+        assertEquals(500.0, result.amount!!, 0.001)
+    }
+
+    @Test
+    fun `a bare number carries no borrowed unit`() {
+        val result = RulesEngine.applyRules("5 kg 200 rupaye aloo", ShopCategory.KIRANA)
+        assertEquals(5.0, result.items[0].quantity!!, 0.001)
+        assertEquals("kg", result.items[0].unit)
+        assertEquals(200.0, result.amount!!, 0.001)
+    }
+
+    @Test
+    fun `a second real measure still replaces the first`() {
+        val items = RulesEngine.applyRules(
+            "2 kilo chawal aur 5 kilo atta", ShopCategory.KIRANA,
+        ).items
+        assertEquals(2.0, items[0].quantity!!, 0.001)
+        assertEquals(5.0, items[1].quantity!!, 0.001)
+    }
 }

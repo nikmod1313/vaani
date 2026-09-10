@@ -419,6 +419,9 @@ def extract_items(
     pending_qty: float | None = None
     pending_unit: str | None = None
     pending_modifier: str | None = None
+    #: True when pending_qty came with a unit attached ("2kg"), which makes it
+    #: a measure that a later bare number must not overwrite.
+    pending_measured = False
 
     from .numbers import is_number_token, parse_number_phrase
 
@@ -428,6 +431,7 @@ def extract_items(
 
         if tok == BOUNDARY:
             pending_qty, pending_unit, pending_modifier = None, None, None
+            pending_measured = False
             i += 1
             continue
 
@@ -438,10 +442,36 @@ def extract_items(
                 j += 1
             value = parse_number_phrase(tokens[i:j])
             nxt = tokens[j].strip(".") if j < len(tokens) else ""
+
+            # A number followed by a unit is a MEASURE -- "2kg" is two kilos,
+            # and nothing later in the sentence can turn it into something
+            # else.
+            measured = nxt in units
+
             # "paune sau ka chai" — a price, not a count. Leaving pending_qty
             # unset keeps the number available as the amount.
             if value is not None and nxt not in _PRICE_MARKERS:
-                pending_qty = value
+                if pending_qty is not None and pending_measured and not measured:
+                    # A BARE number arriving after an established measure is a
+                    # price, not a replacement count. Real chat states them in
+                    # exactly this order and often across separate messages:
+                    #
+                    #     "2kg for"  "500 only"  "organic"  "grown"  "tamatar"
+                    #
+                    # Overwriting here made pending_qty 500 while the unit
+                    # "kg" from the measure survived alongside it, so the
+                    # entry booked FIVE HUNDRED KILOS of tomatoes. Leaving the
+                    # number alone keeps the measure intact and lets the
+                    # amount picker claim 500 as the price, which is what it
+                    # is.
+                    pass
+                else:
+                    pending_qty = value
+                    pending_measured = measured
+                    if not measured:
+                        # A bare number carries no unit of its own; a unit
+                        # left over from an earlier number is not its.
+                        pending_unit = None
             i = j
             continue
 
@@ -475,6 +505,7 @@ def extract_items(
             quantity, unit = pending_qty, pending_unit
             modifier = pending_modifier
             pending_qty, pending_unit, pending_modifier = None, None, None
+            pending_measured = False
             i += 1
 
             # Trailing quantity: shopkeepers write both "2 kilo chawal" and

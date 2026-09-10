@@ -238,6 +238,19 @@ def _bare_quantity(
     return value, unit
 
 
+def _measure_mentioned(text: str, category: Category | str | None) -> bool:
+    """
+    Does this message state a quantity with a unit ("2kg", "5 packet")?
+
+    Used to read a quoted price as a bundle total rather than a per-unit
+    rate. Deliberately looks for a UNIT rather than any number, because a
+    bare number in a price quote is the price itself.
+    """
+    units = {**_UNITS, **units_for(category)}
+    tokens = normalise(text).split()
+    return any(t.strip(".") in units for t in tokens)
+
+
 def resolve(
     thread: Thread,
     category: Category | str | None = None,
@@ -258,6 +271,9 @@ def resolve(
     topic: LineItem | None = None
     topic_turn: Turn | None = None
     quoted_rate: float | None = None
+    quoted_total: float | None = None
+    shop_run_has_measure = False
+    previous_speaker_was_shop: bool | None = None
     commit_turn: Turn | None = None
     commit_rules = None
     signals: list[str] = []
@@ -269,15 +285,58 @@ def resolve(
         # "blue kurti hai, 500 ka" names it just as usefully as the customer
         # asking for it.
         if rules.items:
-            topic = rules.items[-1]
+            named = rules.items[-1]
+            # A later mention of the SAME item must not erase what an earlier
+            # one established. Real chat names a thing repeatedly, and the
+            # barest mention is often the last:
+            #
+            #     "2kg tamatar chaiye" ... "organic grown tamatar"
+            #
+            # Replacing outright dropped the quantity and left the order as
+            # a bare "tamatar", which is the exact detail the shopkeeper
+            # needed. Same item name means merge, keeping whichever mention
+            # actually stated each field.
+            if topic is not None and topic.name == named.name:
+                topic = LineItem(
+                    name=named.name,
+                    quantity=named.quantity if named.quantity is not None else topic.quantity,
+                    unit=named.unit or topic.unit,
+                    modifier=named.modifier or topic.modifier,
+                    unit_price=named.unit_price
+                    if named.unit_price is not None
+                    else topic.unit_price,
+                )
+            else:
+                topic = named
             topic_turn = turn
             if topic.unit_price is not None:
                 quoted_rate = topic.unit_price
 
-        # A price the shopkeeper states is the rate on offer.
-        if turn.is_shopkeeper and rules.amount is not None:
-            quoted_rate = rules.amount
-            signals.append("shop-quoted-rate")
+        # A price the shopkeeper states. Whether it is a RATE or a TOTAL is
+        # genuinely ambiguous in chat, and getting it backwards multiplies or
+        # divides someone's bill:
+        #
+        #     "blue kurti?"  "500 ka"          -> 500 EACH   (x3 = 1500)
+        #     "2kg for"      "500 only"        -> 500 TOTAL  (not x2)
+        #
+        # The signal that separates them is whether the shopkeeper's own run
+        # of messages mentioned a quantity. Quoting a bare price answers
+        # "what does one cost"; quoting a price alongside a measure prices
+        # that bundle. Runs are used rather than single messages because a
+        # quote routinely arrives split -- "2kg for" then "500 only".
+        if turn.is_shopkeeper:
+            if previous_speaker_was_shop is False:
+                shop_run_has_measure = False
+            if rules.items or _measure_mentioned(turn.body, category):
+                shop_run_has_measure = True
+            if rules.amount is not None:
+                if shop_run_has_measure:
+                    quoted_total = rules.amount
+                    signals.append("shop-quoted-total")
+                else:
+                    quoted_rate = rules.amount
+                    signals.append("shop-quoted-rate")
+        previous_speaker_was_shop = turn.is_shopkeeper
 
         if turn.is_customer and is_commitment(turn.body):
             commit_turn = turn
@@ -291,6 +350,7 @@ def resolve(
         # anything and cannot be checked later.
         return None
 
+    signals = list(dict.fromkeys(signals))
     signals.append("customer-commitment")
 
     # ---- the item -------------------------------------------------------
@@ -304,17 +364,28 @@ def resolve(
             name=topic.name,
             modifier=topic.modifier,
             unit=topic.unit,
+            unit_price=topic.unit_price,
         )
         carried = True
         signals.append("carried-topic")
 
     # ---- the quantity ---------------------------------------------------
+    #
+    # Precedence: a number in the commitment itself, then whatever the topic
+    # already established. "2 chahiye" after asking about 3 kurtis means two,
+    # so the commitment wins -- but when the commitment carries no number at
+    # all ("haan bhej do"), the quantity named earlier in the same thread is
+    # the answer and must not be thrown away.
     if item.quantity is None:
         quantity, unit = _bare_quantity(commit_turn.body, category)
         if quantity is not None:
             item.quantity = quantity
             item.unit = unit or item.unit
             signals.append("quantity-from-commitment")
+        elif carried and topic.quantity is not None:
+            item.quantity = topic.quantity
+            item.unit = topic.unit or item.unit
+            signals.append("quantity-from-topic")
 
     # ---- the rate -------------------------------------------------------
     if item.unit_price is None and quoted_rate is not None:
@@ -361,8 +432,12 @@ def resolve(
         if t in (topic_turn, commit_turn) or apply_rules(t.body, category).amount is not None
     )
 
+    # A quoted TOTAL is the amount outright -- multiplying it by the
+    # quantity it already covers is how a Rs 500 sale becomes Rs 1000.
     amount = item.line_total
-    if amount is None and item.quantity is None:
+    if quoted_total is not None:
+        amount = quoted_total
+    elif amount is None and item.quantity is None:
         amount = quoted_rate
 
     return ResolvedOrder(

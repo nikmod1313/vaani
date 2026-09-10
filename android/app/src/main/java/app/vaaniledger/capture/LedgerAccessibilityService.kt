@@ -196,11 +196,24 @@ class LedgerAccessibilityService : AccessibilityService() {
     // ----------------------------------------------------------------------
 
     /**
-     * Walk backwards through the chat collecting messages.
+     * Read the conversation, newest first.
      *
-     * Stops on any of: the watermark hash appearing, [maxScrolls] reached, or
-     * two consecutive scrolls yielding nothing new. That last guard is what
-     * prevents an infinite loop at the top of a conversation.
+     * TWO PHASES, and the first one is not optional.
+     *
+     * An order is almost always the LAST thing in a chat -- it is why the
+     * shopkeeper reached for the app. But the harvest can only start from
+     * wherever the chat happens to be sitting, and if the shopkeeper had
+     * scrolled up to check something, walking backwards from there marches
+     * further into last week and never sees the order at all. That is not a
+     * rare case: WhatsApp restores the scroll position it was left at.
+     *
+     * So phase one seeks DOWN to the newest message, and only then does
+     * phase two walk back for context. The result is anchored at the latest
+     * message regardless of where the user left the view.
+     *
+     * Phase two stops on any of: the watermark hash appearing, [maxScrolls]
+     * reached, or two consecutive scrolls yielding nothing new. That last
+     * guard is what prevents an infinite loop at the top of a conversation.
      */
     fun harvest(
         stopAtHash: String? = null,
@@ -210,6 +223,61 @@ class LedgerAccessibilityService : AccessibilityService() {
         collected.clear()
         rounds.clear()
         harvesting = true
+
+        seekToNewest { harvestBackward(stopAtHash, maxScrolls, onComplete) }
+    }
+
+    /**
+     * Scroll to the bottom of the chat.
+     *
+     * Driven by ACTION_SCROLL_FORWARD returning false, which is the framework
+     * telling us there is nothing left to scroll -- a structural signal, not a
+     * guess about WhatsApp's layout, so it survives the version changes that
+     * break anything keyed on view ids.
+     *
+     * The cap matters: a chat left open far up its own history would
+     * otherwise scroll for as long as the history is long, in front of a
+     * shopkeeper waiting to book a sale.
+     */
+    private fun seekToNewest(onDone: () -> Unit) {
+        var seeks = 0
+
+        fun step() {
+            if (!harvesting || seeks >= SEEK_SCROLLS) {
+                onDone()
+                return
+            }
+
+            val list = scrollableList()
+            if (list == null) {
+                onDone()
+                return
+            }
+
+            val moved = list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            @Suppress("DEPRECATION") list.recycle()
+
+            if (!moved) {
+                onDone()   // already at the newest message
+                return
+            }
+
+            seeks++
+            android.os.Handler(mainLooper).postDelayed(::step, SCROLL_SETTLE_MS)
+        }
+
+        step()
+    }
+
+    /** The message list, found through the same guarded root as everything else. */
+    private fun scrollableList(): AccessibilityNodeInfo? =
+        findScrollable(chatRoot())
+
+    private fun harvestBackward(
+        stopAtHash: String?,
+        maxScrolls: Int,
+        onComplete: (List<CapturedMessage>) -> Unit,
+    ) {
 
         var scrolls = 0
         var emptyRounds = 0
@@ -233,7 +301,7 @@ class LedgerAccessibilityService : AccessibilityService() {
             emptyRounds = if (collected.size == before) emptyRounds + 1 else 0
             scrolls++
 
-            val list = findScrollable(rootInActiveWindow)
+            val list = scrollableList()
             if (list == null) {
                 harvesting = false
                 onComplete(chronological())
@@ -266,6 +334,13 @@ class LedgerAccessibilityService : AccessibilityService() {
             private set
 
         private const val SCROLL_SETTLE_MS = 260L
+
+        /**
+         * Cap on the seek-to-bottom phase. Twelve screens is far more
+         * than a shopkeeper scrolls back by hand, and bounds the wait
+         * when a chat was left open deep in its own history.
+         */
+        private const val SEEK_SCROLLS = 12
         private const val TREE_TAG = "VaaniTree"
 
         /**
