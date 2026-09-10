@@ -334,6 +334,39 @@ class TestQuotedRateVersusTotal(unittest.TestCase):
         self.assertEqual(order.amount, 500.0)
         self.assertIsNone(order.items[0].unit_price)
 
+    def test_a_price_against_one_unit_is_a_rate_not_a_bundle(self):
+        """
+        From a real chat, and a bug this suite shipped before catching:
+
+            Isha  "i need aloo" / "2kg" / "what is the price?"
+            shop  "500 for 1kg"
+            Isha  "i need 2 kilos"
+
+        "500 for 1kg" states a PER-KILO rate, so two kilos is Rs 1000. An
+        earlier rule asked only whether the quote mentioned a measure at all,
+        saw the "1kg", called it a bundle total and booked Rs 500 -- half the
+        real bill. The size of the quantity is the signal, not its presence.
+        """
+        order = self._order([
+            ("hello sir", False), ("i need aloo", False), ("2kg", False),
+            ("what is the price?", False),
+            ("500 for 1kg", True),
+            ("i need 2 kilos", False),
+        ])
+        self.assertEqual(order.items[0].quantity, 2)
+        self.assertEqual(order.items[0].unit, "kg")
+        self.assertEqual(order.items[0].unit_price, 500.0)
+        self.assertEqual(order.amount, 1000.0)
+
+    def test_ordering_off_a_bundle_quote_is_flagged_not_divided(self):
+        """A bundle priced for 2kg but 5kg ordered must not be scaled by guess."""
+        order = self._order([
+            ("tamatar chaiye", False),
+            ("2kg for", True), ("500 only", True),
+            ("5 kilo chahiye", False),
+        ])
+        self.assertIn("bundle-quantity-mismatch", order.signals)
+
     def test_a_bare_price_is_a_per_unit_rate(self):
         order = self._order([
             ("is there an availability of blue kurtis", False),

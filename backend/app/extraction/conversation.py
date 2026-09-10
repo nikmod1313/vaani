@@ -238,17 +238,40 @@ def _bare_quantity(
     return value, unit
 
 
-def _measure_mentioned(text: str, category: Category | str | None) -> bool:
+def _measure_quantity(
+    text: str,
+    category: Category | str | None,
+) -> float | None:
     """
-    Does this message state a quantity with a unit ("2kg", "5 packet")?
+    The quantity this message attaches to a unit: 2 in "2kg", 1 in "500 for 1kg".
 
-    Used to read a quoted price as a bundle total rather than a per-unit
-    rate. Deliberately looks for a UNIT rather than any number, because a
-    bare number in a price quote is the price itself.
+    Returns None when no measure is stated at all. Looks for a number FOLLOWED
+    BY A UNIT rather than any number, because a bare number in a price quote
+    is the price itself.
+
+    The SIZE matters, not merely the presence, which is the distinction that
+    decides whether a quote is a rate or a bundle -- see the caller.
     """
+    from .numbers import is_number_token, parse_number_phrase
+    from .numbers import tokenize as _tokenize
+
     units = {**_UNITS, **units_for(category)}
-    tokens = normalise(text).split()
-    return any(t.strip(".") in units for t in tokens)
+    tokens = _tokenize(text)
+
+    i = 0
+    while i < len(tokens):
+        if not is_number_token(tokens[i].strip(".")):
+            i += 1
+            continue
+        j = i
+        while j < len(tokens) and is_number_token(tokens[j].strip(".")):
+            j += 1
+        if j < len(tokens) and tokens[j].strip(".") in units:
+            value = parse_number_phrase(tokens[i:j])
+            if value is not None:
+                return value
+        i = max(j, i + 1)
+    return None
 
 
 def resolve(
@@ -272,7 +295,8 @@ def resolve(
     topic_turn: Turn | None = None
     quoted_rate: float | None = None
     quoted_total: float | None = None
-    shop_run_has_measure = False
+    quoted_total_qty: float | None = None
+    shop_run_qty: float | None = None
     previous_speaker_was_shop: bool | None = None
     commit_turn: Turn | None = None
     commit_rules = None
@@ -316,22 +340,33 @@ def resolve(
         # genuinely ambiguous in chat, and getting it backwards multiplies or
         # divides someone's bill:
         #
-        #     "blue kurti?"  "500 ka"          -> 500 EACH   (x3 = 1500)
-        #     "2kg for"      "500 only"        -> 500 TOTAL  (not x2)
+        #     "blue kurti?"  "500 ka"        -> 500 EACH,  x3 = 1500
+        #     "500 for 1kg"                  -> 500 PER KG, x2 = 1000
+        #     "2kg for"      "500 only"      -> 500 TOTAL for the 2kg
         #
-        # The signal that separates them is whether the shopkeeper's own run
-        # of messages mentioned a quantity. Quoting a bare price answers
-        # "what does one cost"; quoting a price alongside a measure prices
-        # that bundle. Runs are used rather than single messages because a
-        # quote routinely arrives split -- "2kg for" then "500 only".
+        # What separates them is the SIZE of the quantity in the quote, not
+        # merely whether one is present. Quoting a price against ONE of
+        # something states a unit rate; quoting it against several prices
+        # that bundle; quoting it against nothing answers "what does one
+        # cost". An earlier version only asked whether a measure existed, so
+        # "500 for 1kg" was read as a bundle and two kilos of aloo were
+        # booked at Rs 500 instead of Rs 1000.
+        #
+        # Runs rather than single messages, because a quote routinely arrives
+        # split: "2kg for" then "500 only".
         if turn.is_shopkeeper:
             if previous_speaker_was_shop is False:
-                shop_run_has_measure = False
-            if rules.items or _measure_mentioned(turn.body, category):
-                shop_run_has_measure = True
+                shop_run_qty = None
+            stated = _measure_quantity(turn.body, category)
+            if stated is None and rules.items and rules.items[-1].quantity is not None:
+                stated = rules.items[-1].quantity
+            if stated is not None:
+                shop_run_qty = stated
+
             if rules.amount is not None:
-                if shop_run_has_measure:
+                if shop_run_qty is not None and shop_run_qty > 1:
                     quoted_total = rules.amount
+                    quoted_total_qty = shop_run_qty
                     signals.append("shop-quoted-total")
                 else:
                     quoted_rate = rules.amount
@@ -437,6 +472,15 @@ def resolve(
     amount = item.line_total
     if quoted_total is not None:
         amount = quoted_total
+        # The total priced a specific bundle. Ordering a different amount is
+        # not something to solve by dividing -- that invents a per-unit rate
+        # nobody stated. Flag it instead and let the review card ask.
+        if (
+            item.quantity is not None
+            and quoted_total_qty is not None
+            and abs(item.quantity - quoted_total_qty) > 1e-9
+        ):
+            signals.append("bundle-quantity-mismatch")
     elif amount is None and item.quantity is None:
         amount = quoted_rate
 
