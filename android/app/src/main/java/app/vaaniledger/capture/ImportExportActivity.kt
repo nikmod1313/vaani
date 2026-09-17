@@ -8,8 +8,8 @@ import android.widget.Toast
 import app.vaaniledger.data.LedgerDatabase
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.data.Strings
-import app.vaaniledger.net.ApiClient
-import app.vaaniledger.net.IngestRequest
+import app.vaaniledger.extract.ConversationResolver
+import app.vaaniledger.extract.ExportParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -128,46 +128,65 @@ class ImportExportActivity : Activity() {
         return "export:" + (name?.removeSuffix(".txt")?.trim()?.lowercase() ?: "unnamed")
     }
 
-    private fun ingest(content: String, chatId: String) {
+    /**
+     * Parse, thread and resolve the export ON THE PHONE.
+     *
+     * No network call anywhere in this path. That is the property that lets
+     * the app be handed to a shopkeeper as a thing that works, rather than a
+     * thing that works while a laptop on the same wifi is switched on. The
+     * same engine runs on the server for the dashboard, and the parity tests
+     * hold the two to identical answers, so going on-device costs nothing in
+     * what gets extracted -- only the LLM stage, which needs a key nobody
+     * has, stays server-side.
+     */
+    private fun ingest(content: String, chatIdHint: String) {
         scope.launch {
             val db = LedgerDatabase.get(this@ImportExportActivity)
+            val category = ShopSettings.category(this@ImportExportActivity)
+            val aliases = setOf(ShopSettings.NAME)
+
+            val parsed = ExportParser.parse(content)
+            if (parsed.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    toast(captureStrings().importNotAnExport)
+                    finish()
+                }
+                return@launch
+            }
+
+            val customer = ExportParser.inferCustomer(parsed, aliases)
+            if (customer == null) {
+                withContext(Dispatchers.Main) {
+                    toast(captureStrings().importCustomerUnknown)
+                    finish()
+                }
+                return@launch
+            }
+
+            // The watermark: everything already approved or declined from
+            // this customer's chat, by either lane.
+            val chatId = ReviewQueue.chatIdFor(customer)
+            val seen = db.cursors().byChat(chatId)?.hashes ?: emptySet()
+            val fresh = parsed.filter { it.contentHash !in seen }
+
             val known = runCatching { db.customers().names(ShopSettings.ID) }
                 .getOrDefault(emptyList())
+            val turns = ExportParser.toTurns(fresh, customer, aliases)
+            val orders = ConversationResolver.resolveAll(turns, customer, category)
+                .map { with(ConversationResolver) { it.toExtraction(known, category) } }
 
-            val attempt = runCatching {
-                ApiClient.api(this@ImportExportActivity).ingestExport(
-                    IngestRequest(
-                        chatId = chatId,
-                        content = content,
-                        cursor = ReviewQueue.cursorFor(this@ImportExportActivity, chatId),
-                        knownCustomers = known,
-                        shopId = ShopSettings.ID,
-                        category = ShopSettings.category(this@ImportExportActivity).wire,
-                        // The shop's own name, so the server can tell which
-                        // participant is the customer without asking.
-                        shopAliases = listOf(ShopSettings.NAME),
-                        lane = "conversation",
-                    )
-                )
-            }.onFailure { android.util.Log.e(TAG, "ingest failed", it) }
-
-            val response = attempt.getOrNull()
+            android.util.Log.i(
+                TAG,
+                "export: ${parsed.size} parsed, ${fresh.size} new, ${orders.size} order(s) for $customer",
+            )
 
             withContext(Dispatchers.Main) {
-                if (response == null) {
-                    toast(explain(attempt.exceptionOrNull()))
-                    finish()
-                    return@withContext
-                }
-
                 ReviewQueue.offer(
-                    response.orders.map {
-                        ReviewQueue.Pending(it, chatId, it.customer)
-                    },
-                    (if (ShopSettings.language(this@ImportExportActivity) == app.vaaniledger.data.AppLanguage.EN)
-                        "From export · ${response.newMessages} new messages"
+                    orders.map { ReviewQueue.Pending(it, chatId, it.customer ?: customer) },
+                    if (ShopSettings.language(this@ImportExportActivity) == app.vaaniledger.data.AppLanguage.EN)
+                        "From export · ${fresh.size} new messages"
                     else
-                        "Export se · ${response.newMessages} naye message"),
+                        "Export se · ${fresh.size} naye message",
                 )
                 startActivity(Intent(this@ImportExportActivity, ReviewActivity::class.java))
                 finish()
@@ -175,38 +194,8 @@ class ImportExportActivity : Activity() {
         }
     }
 
-    /**
-     * Turn a failure into something the shopkeeper can act on.
-     *
-     * Everything used to collapse into "Server nahi mila", including a 400
-     * the server had answered perfectly clearly. That is the worst kind of
-     * error message: it names a cause that is not the cause, and sends
-     * whoever reads it to check the network when the real problem was the
-     * file they picked.
-     *
-     * A rejected request and an unreachable server are genuinely different
-     * problems with different fixes, so they get different sentences.
-     */
-    private fun explain(error: Throwable?): String {
-        val t = captureStrings()
-        return when (error) {
-            is retrofit2.HttpException -> {
-                val body = runCatching { error.response()?.errorBody()?.string() }.getOrNull()
-                android.util.Log.w(TAG, "server rejected the import: $body")
-                when {
-                    body == null -> t.importServerRejected(error.code())
-                    body.contains("not_a_whatsapp_export") -> t.importNotAnExport
-                    body.contains("customer_unknown") -> t.importCustomerUnknown
-                    else -> t.importServerRejected(error.code())
-                }
-            }
-            is java.io.IOException -> t.importServerUnreachable
-            null -> t.importFailed
-            else -> "${t.importFailed}: ${error.javaClass.simpleName}"
-        }
-    }
-
-    private fun captureStrings() = Strings.of(ShopSettings.language(this)).capture
+    private fun captureStrings() =
+        app.vaaniledger.data.Strings.of(ShopSettings.language(this)).capture
 
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()

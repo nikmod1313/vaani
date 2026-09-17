@@ -68,7 +68,7 @@ _KIRANA = {
     "sabun", "soap", "साबुन", "detergent", "surf", "डिटर्जेंट",
     "biscuit", "biskut", "बिस्कुट", "maggi", "मैगी", "noodles",
     "masala", "मसाला", "haldi", "हल्दी", "mirch", "मिर्च",
-    "aalu", "aloo", "potato", "आलू", "pyaz", "onion", "प्याज",
+    "aalu", "aloo", "aalo", "alu", "potato", "आलू", "pyaz", "onion", "प्याज",
     "tamatar", "tomato", "टमाटर", "anda", "egg", "अंडा",
     "bread", "ब्रेड", "paneer", "पनीर", "ghee", "घी",
     "shampoo", "शैम्पू", "colgate", "toothpaste", "manjan",

@@ -44,6 +44,18 @@ object ReviewQueue {
     var sourceLabel: String = ""
         private set
 
+    /**
+     * The watermark key for a customer's chat.
+     *
+     * ONE id per customer, whichever lane the messages arrived by. The
+     * screen lane and the export lane used to derive different ids for the
+     * same conversation, so an order approved from the bubble was offered
+     * again by the next export of that chat -- the two watermarks could not
+     * see each other. The server docstring promised they shared a cursor;
+     * the phone was the side that broke it.
+     */
+    fun chatIdFor(customer: String): String = "chat:" + customer.trim().lowercase()
+
     fun offer(orders: List<Pending>, label: String) {
         pending = orders
         sourceLabel = label

@@ -25,3 +25,7 @@ android/build/
 android/.gradle/
 android/local.properties
 android/app/build/
+
+# WhatsApp exports dropped in for testing are private chats, never source
+WhatsApp Chat with *.zip
+WhatsApp Chat with *.txt

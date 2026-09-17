@@ -143,6 +143,10 @@ object RulesEngine {
     //
     // "ka / ki / ke" is the Hindi possessive: "paune sau ka chai" is
     // seventy-five rupees WORTH of tea, not seventy-five teas.
+    /** The shared unit table merged with a category's own. */
+    internal fun unitTable(category: ShopCategory): Map<String, String> =
+        UNITS + CategoryLexicon.unitsFor(category)
+
     private val PRICE_MARKERS = setOf(
         "ka", "ki", "ke", "का", "की", "के",
         "rupaye", "rupees", "rupay", "rs", "₹", "रुपये", "रुपए",

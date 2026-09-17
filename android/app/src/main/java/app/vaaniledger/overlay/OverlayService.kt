@@ -437,41 +437,47 @@ class OverlayService : Service() {
             return
         }
 
-        val chatId = "screen:" + customer.lowercase()
+        val chatId = ReviewQueue.chatIdFor(customer)
 
         scope.launch {
             val db = LedgerDatabase.get(this@OverlayService)
+            val category = ShopSettings.category(this@OverlayService)
             val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
 
-            val response = runCatching {
-                ApiClient.api(this@OverlayService).ingestScreen(
-                    app.vaaniledger.net.ScreenRequest(
-                        chatId = chatId,
-                        customerName = customer,
-                        // Both sides go up. The shopkeeper's own replies are
-                        // what carry the quoted rate, and dropping them was
-                        // why a price stated by the shop never reached the
-                        // entry it belonged to.
-                        messages = messages.map {
-                            app.vaaniledger.net.ScreenMessage(
-                                body = it.text,
-                                sender = if (it.isOutgoing) SHOP_NAME else customer,
-                                isOutgoing = it.isOutgoing,
-                                contentHash = it.hash,
-                            )
-                        },
-                        cursor = ReviewQueue.cursorFor(this@OverlayService, chatId),
-                        shopId = SHOP_ID,
-                        category = ShopSettings.category(this@OverlayService).wire,
-                        knownCustomers = known,
+            // Thread and resolve ON THE PHONE. The messages already carry
+            // which side sent each bubble, so there is nothing to parse --
+            // only to thread and resolve, and both now run here. No network
+            // is touched, which is what lets a shop counter with no signal
+            // read an order stated across five messages.
+            //
+            // Both sides go in. The shopkeeper's own replies carry the quoted
+            // rate, and dropping them was why a price stated by the shop
+            // never reached the entry it belonged to.
+            val seen = db.cursors().byChat(chatId)?.hashes ?: emptySet()
+            val turns = messages
+                .filter { it.hash !in seen }
+                .map {
+                    app.vaaniledger.extract.ConversationResolver.Turn(
+                        sender = if (it.isOutgoing) SHOP_NAME else customer,
+                        body = it.text,
+                        // A bubble carries a time label, not a date. Null keeps
+                        // send order, which is what the resolver needs.
+                        timestamp = null,
+                        isShopkeeper = it.isOutgoing,
+                        contentHash = it.hash,
                     )
-                )
-            }.onFailure {
-                android.util.Log.w(TAG, "screen ingest failed: ${it.message}")
-            }.getOrNull()
+                }
+
+            val orders = app.vaaniledger.extract.ConversationResolver
+                .resolveAll(turns, customer, category)
+                .map {
+                    with(app.vaaniledger.extract.ConversationResolver) {
+                        it.toExtraction(known, category)
+                    }
+                }
+            android.util.Log.i(TAG, "screen: ${turns.size} new turn(s), ${orders.size} order(s)")
 
             withContext(Dispatchers.Main) {
-                val orders = response?.orders.orEmpty()
                 if (orders.isEmpty()) {
                     extractAndConfirm(messages, customer)
                     return@withContext
@@ -519,37 +525,19 @@ class OverlayService : Service() {
             val db = LedgerDatabase.get(this@OverlayService)
             val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
 
-            val extraction = runCatching {
-                ApiClient.api(this@OverlayService).extract(
-                    ExtractRequest(
-                        text = text,
-                        senderName = senderName,
-                        knownCustomers = known,
-                        shopId = SHOP_ID,
-                        source = "chat",
-                    )
-                )
-            }.onFailure {
-                android.util.Log.w(TAG, "extract failed: ${it.message}")
-            }.getOrNull()
-
-            // Degrade, never drop -- and degrading no longer means handing
-            // back an empty form. The same rules engine the server runs is
-            // ported to Kotlin and parses the text on-device, so a shop
-            // counter with no signal still gets the amount, the mode and the
-            // items filled in. Only the LLM stage and cross-turn threading
-            // need the network.
-            val result = extraction ?: OfflineExtractor.extract(
+            // On-device, always. The same rules engine the server runs is
+            // ported to Kotlin and held to identical answers by the parity
+            // suite, so a shop counter with no signal gets the amount, the
+            // mode and the items filled in -- and a shop WITH signal no
+            // longer waits on a round trip to get the same result.
+            val result = OfflineExtractor.extract(
                 text = text,
                 knownCustomers = known,
                 senderName = senderName,
                 category = ShopSettings.category(this@OverlayService),
             )
 
-            withContext(Dispatchers.Main) {
-                if (extraction == null) toast(captureStrings().offlineParsed)
-                showConfirm(result)
-            }
+            withContext(Dispatchers.Main) { showConfirm(result) }
         }
     }
 
