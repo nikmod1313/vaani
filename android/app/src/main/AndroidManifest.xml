@@ -110,6 +110,19 @@
         </activity>
 
         <!--
+            The shopkeeper's own pages: the business report and the full
+            ledger. Both read Room only, so they open with no signal.
+        -->
+        <activity
+            android:name=".AnalyticsActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+        <activity
+            android:name=".LedgerActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <!--
             The review queue. Both ingestion lanes end here, and nothing
             reaches the khata without passing through it.
 

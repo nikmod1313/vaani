@@ -2,6 +2,7 @@ package app.vaaniledger.data
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
@@ -192,4 +193,57 @@ data class CorrectionEntity(
     val corrected: String,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     val synced: Boolean = false,
+)
+
+
+/**
+ * One line of an order, kept as its own row.
+ *
+ * Transactions store their items as a flattened label string
+ * ("chawal 2kg,chai 1packet") which is fine for showing a row back to the
+ * shopkeeper and useless for analytics. Two things are unrecoverable from
+ * it: which NAME was sold, once a modifier is folded in ("blue kurti 3"),
+ * and how much of a two-item bill belonged to each line. "Highest selling
+ * product" computed off that string would be a guess dressed as a number.
+ *
+ * The extraction engine already produces all of this -- name, quantity,
+ * unit, stated rate, line total -- and it was simply being discarded at save
+ * time. Now it is kept.
+ *
+ * `shopId` and `occurredAt` are DENORMALISED from the parent transaction so
+ * every analytics query can group by month or product without joining. They
+ * are written once, at save, and never updated -- an item cannot move to
+ * another shop or another day without the transaction itself being rewritten.
+ */
+@Entity(
+    tableName = "transaction_items",
+    indices = [
+        Index(value = ["transaction_id"]),
+        Index(value = ["shop_id", "occurred_at"]),
+        Index(value = ["shop_id", "name"]),
+    ],
+    foreignKeys = [
+        ForeignKey(
+            entity = TransactionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["transaction_id"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class TransactionItemEntity(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    @ColumnInfo(name = "transaction_id") val transactionId: String,
+    @ColumnInfo(name = "shop_id") val shopId: String,
+    /** Canonical singular, as the lexicon knows it: "kurti", never "kurtis". */
+    val name: String,
+    /** What the customer actually called it: "blue kurti". */
+    @ColumnInfo(name = "display_name") val displayName: String,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    /** Only when the message stated a rate. Never derived by division. */
+    @ColumnInfo(name = "unit_price") val unitPrice: Double? = null,
+    /** quantity x unitPrice, only when both were stated. */
+    @ColumnInfo(name = "line_total") val lineTotal: Double? = null,
+    @ColumnInfo(name = "occurred_at") val occurredAt: Long,
 )

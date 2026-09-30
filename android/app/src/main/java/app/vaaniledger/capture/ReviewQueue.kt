@@ -3,6 +3,7 @@ package app.vaaniledger.capture
 import android.content.Context
 import app.vaaniledger.data.ChatCursorEntity
 import app.vaaniledger.data.LedgerDatabase
+import app.vaaniledger.data.LineItems
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.data.TransactionEntity
 import app.vaaniledger.net.Extraction
@@ -131,6 +132,13 @@ object ReviewQueue {
             occurredAt = parseTimestamp(extraction.occurredAt),
         )
         db.transactions().upsert(transaction)
+
+        // The structured lines, kept rather than discarded. Without these the
+        // analytics page cannot say which product sold, only what a bill
+        // totalled. Cleared first so approving a corrected entry twice does
+        // not double its items.
+        db.analytics().clearItemsFor(transaction.id)
+        db.analytics().insertItems(LineItems.from(extraction, transaction))
 
         recordSeen(context, item.chatId, extraction.contentHashes, transaction.occurredAt)
         return transaction

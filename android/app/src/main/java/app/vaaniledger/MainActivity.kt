@@ -171,6 +171,23 @@ class MainActivity : Activity() {
         root.addView(actionCard("💬", t.openWhatsAppTitle, t.openWhatsAppDesc) { openWhatsApp() })
         root.addView(actionCard("📄", t.importTitle, t.importDesc) { pickExportFile() })
 
+        // Reading the business, as opposed to recording it. Separated under
+        // its own heading because these two are the shopkeeper's OWN pages --
+        // nothing here captures anything, and both work with no signal.
+        root.addView(TextView(this).apply {
+            text = t.businessHeading
+            setTextColor(muted)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(18), 0, dp(10))
+        })
+        root.addView(actionCard("📊", t.analyticsTitle, t.analyticsDesc) {
+            startActivity(Intent(this, AnalyticsActivity::class.java))
+        })
+        root.addView(actionCard("📒", t.ledgerTitle, t.ledgerDesc) {
+            startActivity(Intent(this, LedgerActivity::class.java))
+        })
+
         setContentView(ScrollView(this).apply { addView(root) })
         refresh()
     }

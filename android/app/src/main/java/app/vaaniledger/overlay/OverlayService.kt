@@ -16,6 +16,7 @@ import android.view.WindowManager
 import app.vaaniledger.data.Aging
 import app.vaaniledger.capture.ReviewQueue
 import app.vaaniledger.data.LedgerDatabase
+import app.vaaniledger.data.LineItems
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.extract.OfflineExtractor
 import app.vaaniledger.data.ShopEntity
@@ -626,19 +627,25 @@ class OverlayService : Service() {
                 val customer = corrected.customer
                     ?.let { db.customers().resolve(SHOP_ID, it) }
 
-                db.transactions().upsert(
-                    TransactionEntity(
-                        shopId = SHOP_ID,
-                        customerId = customer?.id,
-                        customerName = customer?.name,
-                        amount = corrected.amount ?: 0.0,
-                        mode = corrected.mode,
-                        direction = predicted.direction.takeIf { it != "unknown" } ?: "sale",
-                        items = corrected.items.joinToString(","),
-                        source = "chat",
-                        confidence = 1.0,   // human-confirmed
-                    )
+                val row = TransactionEntity(
+                    shopId = SHOP_ID,
+                    customerId = customer?.id,
+                    customerName = customer?.name,
+                    amount = corrected.amount ?: 0.0,
+                    mode = corrected.mode,
+                    direction = predicted.direction.takeIf { it != "unknown" } ?: "sale",
+                    items = corrected.items.joinToString(","),
+                    source = "chat",
+                    confidence = 1.0,   // human-confirmed
                 )
+                db.transactions().upsert(row)
+
+                // Keep the structured lines too, so this entry shows up in
+                // the analytics page as a product and not just a total. The
+                // shopkeeper edited these labels, so they are the truth here,
+                // not the prediction's stale structure.
+                db.analytics().clearItemsFor(row.id)
+                db.analytics().insertItems(LineItems.fromLabels(row))
             }.onFailure { android.util.Log.e(TAG, "saveCorrected failed", it) }
 
             // The learning loop: what the engine said vs what the human said.
@@ -698,19 +705,23 @@ class OverlayService : Service() {
                 val customer = extraction.customer?.takeIf { it.isNotBlank() }
                     ?.let { db.customers().resolve(SHOP_ID, it) }
 
-                db.transactions().upsert(
-                    TransactionEntity(
-                        shopId = SHOP_ID,
-                        customerId = customer?.id,
-                        customerName = customer?.name,
-                        amount = extraction.amount ?: 0.0,
-                        mode = extraction.mode.takeIf { it != "unknown" } ?: "udhaar",
-                        direction = extraction.direction.takeIf { it != "unknown" } ?: "sale",
-                        items = extraction.items.joinToString(","),
-                        source = "chat",
-                        confidence = extraction.confidence.overall,
-                    )
+                val row = TransactionEntity(
+                    shopId = SHOP_ID,
+                    customerId = customer?.id,
+                    customerName = customer?.name,
+                    amount = extraction.amount ?: 0.0,
+                    mode = extraction.mode.takeIf { it != "unknown" } ?: "udhaar",
+                    direction = extraction.direction.takeIf { it != "unknown" } ?: "sale",
+                    items = extraction.items.joinToString(","),
+                    source = "chat",
+                    confidence = extraction.confidence.overall,
                 )
+                db.transactions().upsert(row)
+
+                // Keep the structured lines too, so this entry shows up in the
+                // analytics page as a product and not just a total.
+                db.analytics().clearItemsFor(row.id)
+                db.analytics().insertItems(LineItems.from(extraction, row))
             }.onFailure {
                 android.util.Log.e(TAG, "save failed", it)
             }

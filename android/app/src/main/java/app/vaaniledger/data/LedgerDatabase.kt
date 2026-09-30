@@ -16,8 +16,9 @@ import java.util.concurrent.TimeUnit
         ChatCursorEntity::class,
         StagedMessageEntity::class,
         CorrectionEntity::class,
+        TransactionItemEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class LedgerDatabase : RoomDatabase() {
@@ -28,6 +29,7 @@ abstract class LedgerDatabase : RoomDatabase() {
     abstract fun cursors(): CursorDao
     abstract fun staged(): StagedMessageDao
     abstract fun corrections(): CorrectionDao
+    abstract fun analytics(): AnalyticsDao
 
     companion object {
         @Volatile private var instance: LedgerDatabase? = null
@@ -52,6 +54,54 @@ abstract class LedgerDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v2 -> v3: line items get their own table.
+         *
+         * Creates the table only. Existing transactions keep their flattened
+         * label string and are backfilled from it by [LineItemBackfill] on
+         * first use -- parsing belongs in Kotlin where it is testable, not in
+         * a migration where a bad regex corrupts a ledger with no way back.
+         *
+         * Index names and the exact column spellings must match what Room
+         * generates from the entity, or validation fails at open time on a
+         * device that has already migrated.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `transaction_items` (
+                        `id` TEXT NOT NULL,
+                        `transaction_id` TEXT NOT NULL,
+                        `shop_id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `display_name` TEXT NOT NULL,
+                        `quantity` REAL,
+                        `unit` TEXT,
+                        `unit_price` REAL,
+                        `line_total` REAL,
+                        `occurred_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`transaction_id`) REFERENCES `transactions`(`id`)
+                            ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_transaction_items_transaction_id` " +
+                        "ON `transaction_items` (`transaction_id`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_transaction_items_shop_id_occurred_at` " +
+                        "ON `transaction_items` (`shop_id`, `occurred_at`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_transaction_items_shop_id_name` " +
+                        "ON `transaction_items` (`shop_id`, `name`)"
+                )
+            }
+        }
+
         fun get(context: Context): LedgerDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -62,7 +112,7 @@ abstract class LedgerDatabase : RoomDatabase() {
                     // No fallbackToDestructiveMigration. This database is the
                     // shopkeeper's money; a schema change must migrate it, not
                     // drop it. Write the Migration before bumping version.
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                     .also { instance = it }
             }
