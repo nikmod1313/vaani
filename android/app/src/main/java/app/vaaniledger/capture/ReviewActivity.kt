@@ -1,5 +1,7 @@
 package app.vaaniledger.capture
 
+import app.vaaniledger.ui.Theme
+
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
@@ -45,12 +47,12 @@ class ReviewActivity : Activity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val ink = Color.rgb(0x17, 0x19, 0x1E)
-    private val muted = Color.rgb(0x7A, 0x7E, 0x88)
-    private val indigo = Color.rgb(0x25, 0x3A, 0x6E)
-    private val good = Color.rgb(0x2C, 0x61, 0x49)
-    private val warn = Color.rgb(0x8A, 0x5D, 0x0B)
-    private val paper = Color.rgb(0xF7, 0xF6, 0xF3)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val indigo = Theme.primary
+    private val good = Theme.good
+    private val warn = Theme.warn
+    private val paper = Theme.paper
 
     private lateinit var t: Strings.Review
     private lateinit var list: LinearLayout
@@ -139,7 +141,7 @@ class ReviewActivity : Activity() {
             background = GradientDrawable().apply {
                 setColor(Color.WHITE)
                 cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.rgb(0xDF, 0xDC, 0xD5))
+                setStroke(dp(1), Theme.border)
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -322,7 +324,7 @@ class ReviewActivity : Activity() {
         gravity = Gravity.CENTER
         setPadding(dp(13), dp(14), dp(13), dp(14))
         background = GradientDrawable().apply {
-            setColor(if (primary) indigo else Color.rgb(0xEC, 0xEB, 0xE7))
+            setColor(if (primary) indigo else Theme.subtle)
             cornerRadius = dp(11).toFloat()
         }
         isClickable = true

@@ -1,5 +1,7 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.Theme
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
@@ -44,10 +46,10 @@ class EditSheetView(
         val items: List<String>,
     )
 
-    private val ink = Color.rgb(0x12, 0x15, 0x1A)
-    private val muted = Color.rgb(0x8B, 0x91, 0xA0)
-    private val rule = Color.rgb(0xE3, 0xE6, 0xEB)
-    private val good = Color.rgb(0x1F, 0x7A, 0x52)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val rule = Theme.border
+    private val good = Theme.good
 
     private lateinit var amountField: EditText
     private lateinit var customerField: EditText
@@ -113,7 +115,7 @@ class EditSheetView(
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             setPadding(dp(12), dp(10), dp(12), dp(10))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(0xF4, 0xF5, 0xF7))
+                setColor(Theme.subtle)
                 cornerRadius = dp(9).toFloat()
                 setStroke(dp(1), rule)
             }
@@ -158,7 +160,7 @@ class EditSheetView(
             val on = value == mode
             chip.setTextColor(if (on) Color.WHITE else ink)
             chip.background = GradientDrawable().apply {
-                setColor(if (on) BubbleView.INDIGO else Color.rgb(0xF4, 0xF5, 0xF7))
+                setColor(if (on) BubbleView.INDIGO else Theme.subtle)
                 cornerRadius = dp(9).toFloat()
             }
         }
@@ -175,7 +177,7 @@ class EditSheetView(
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setPadding(dp(12), dp(13), dp(12), dp(13))
             background = GradientDrawable().apply {
-                setColor(Color.rgb(0xF4, 0xF5, 0xF7)); cornerRadius = dp(11).toFloat()
+                setColor(Theme.subtle); cornerRadius = dp(11).toFloat()
             }
             isClickable = true
             setOnClickListener { onDismiss() }

@@ -1,5 +1,7 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.Theme
+
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
@@ -52,6 +54,6 @@ class BubbleView(context: Context) : TextView(context) {
         (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        val INDIGO = Color.rgb(0x25, 0x3A, 0x6E)
+        val INDIGO = Theme.primary
     }
 }

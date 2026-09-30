@@ -1,5 +1,7 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.Theme
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
@@ -40,10 +42,10 @@ class PanelView(
         val pendingSync: Int = 0,
     )
 
-    private val ink = Color.rgb(0x12, 0x15, 0x1A)
-    private val muted = Color.rgb(0x8B, 0x91, 0xA0)
-    private val saffron = Color.rgb(0xC9, 0x75, 0x2F)
-    private val good = Color.rgb(0x1F, 0x7A, 0x52)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val saffron = Theme.accent
+    private val good = Theme.good
 
     init {
         orientation = VERTICAL
@@ -165,7 +167,7 @@ class PanelView(
         orientation = VERTICAL
         setPadding(dp(13), dp(11), dp(13), dp(11))
         background = GradientDrawable().apply {
-            setColor(if (primary) BubbleView.INDIGO else Color.rgb(0xF4, 0xF5, 0xF7))
+            setColor(if (primary) BubbleView.INDIGO else Theme.subtle)
             cornerRadius = dp(11).toFloat()
         }
         isClickable = true

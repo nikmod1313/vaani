@@ -86,6 +86,16 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun byId(id: String): TransactionEntity?
 
+    /**
+     * The existing row for this content, if any.
+     *
+     * Looked up BEFORE writing so a repeat approval updates the row it
+     * already made instead of inserting a second one -- and keeps the same
+     * transaction id, which is what makes the server sync idempotent too.
+     */
+    @Query("SELECT * FROM transactions WHERE dedupe_key = :key LIMIT 1")
+    suspend fun byDedupeKey(key: String): TransactionEntity?
+
     @Query(
         """
         SELECT * FROM transactions

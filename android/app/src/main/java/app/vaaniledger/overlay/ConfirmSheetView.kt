@@ -1,5 +1,7 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.Theme
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
@@ -33,13 +35,13 @@ class ConfirmSheetView(
     private val onDismiss: () -> Unit,
 ) : LinearLayout(context) {
 
-    private val ink = Color.rgb(0x12, 0x15, 0x1A)
-    private val muted = Color.rgb(0x8B, 0x91, 0xA0)
-    private val rule = Color.rgb(0xE3, 0xE6, 0xEB)
-    private val good = Color.rgb(0x1F, 0x7A, 0x52)
-    private val goodSoft = Color.rgb(0xE4, 0xF3, 0xEB)
-    private val warn = Color.rgb(0x9A, 0x6A, 0x0C)
-    private val warnSoft = Color.rgb(0xFB, 0xF0, 0xDA)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val rule = Theme.border
+    private val good = Theme.good
+    private val goodSoft = Theme.goodSoft
+    private val warn = Theme.warn
+    private val warnSoft = Theme.warnSoft
 
     init {
         orientation = VERTICAL
@@ -93,11 +95,11 @@ class ConfirmSheetView(
     /** The original message, so he can check the extraction against it. */
     private fun quote(): View = TextView(context).apply {
         text = "“${extraction.text}”"
-        setTextColor(Color.rgb(0x5A, 0x60, 0x70))
+        setTextColor(Theme.muted)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
         setPadding(dp(11), dp(9), dp(11), dp(9))
         background = GradientDrawable().apply {
-            setColor(Color.rgb(0xF4, 0xF5, 0xF7))
+            setColor(Theme.subtle)
             cornerRadius = dp(7).toFloat()
         }
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
@@ -182,12 +184,12 @@ class ConfirmSheetView(
         TextView(context).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextColor(if (primary) Color.WHITE else Color.rgb(0x5A, 0x60, 0x70))
+            setTextColor(if (primary) Color.WHITE else Theme.muted)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             typeface = Typeface.DEFAULT_BOLD
             setPadding(dp(12), dp(14), dp(12), dp(14))
             background = GradientDrawable().apply {
-                setColor(if (primary) good else Color.rgb(0xF4, 0xF5, 0xF7))
+                setColor(if (primary) good else Theme.subtle)
                 cornerRadius = dp(11).toFloat()
             }
             isClickable = true

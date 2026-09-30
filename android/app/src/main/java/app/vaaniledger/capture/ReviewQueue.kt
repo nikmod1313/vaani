@@ -7,6 +7,7 @@ import app.vaaniledger.data.LineItems
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.data.TransactionEntity
 import app.vaaniledger.net.Extraction
+import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
@@ -76,6 +77,36 @@ object ReviewQueue {
     private val ISO = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
 
     /**
+     * The content-derived identity for an entry.
+     *
+     * Built from the SOURCE MESSAGE HASHES when the extraction has them, so
+     * the same conversation yields the same key no matter which lane read it
+     * or how many times. Sorted first, because the screen lane and the export
+     * lane can legitimately encounter the same messages in different orders.
+     *
+     * Falls back to the entry's own fields for manual and voice entries,
+     * which have no source messages. Two of those colliding would need the
+     * same customer, amount, direction and items in the same millisecond.
+     */
+    fun dedupeKey(extraction: Extraction, shopId: String, occurredAt: Long): String {
+        val basis = if (extraction.contentHashes.isNotEmpty()) {
+            shopId + "|" + extraction.contentHashes.sorted().joinToString(",")
+        } else {
+            listOf(
+                shopId,
+                extraction.customer.orEmpty().trim().lowercase(),
+                occurredAt.toString(),
+                extraction.amount?.toString().orEmpty(),
+                extraction.direction,
+                extraction.items.sorted().joinToString(","),
+            ).joinToString("|")
+        }
+        return MessageDigest.getInstance("SHA-1")
+            .digest(basis.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+
+    /**
      * Parse the server's occurred_at.
      *
      * Falls back to "now" rather than throwing. An order whose timestamp we
@@ -117,7 +148,17 @@ object ReviewQueue {
             ?.takeIf { it.isNotBlank() }
             ?.let { db.customers().resolve(ShopSettings.ID, it) }
 
+        val occurredAt = parseTimestamp(extraction.occurredAt)
+        val key = dedupeKey(extraction, ShopSettings.ID, occurredAt)
+
+        // Reuse the row this content already made, if it made one. Keeping
+        // its id is what makes the server sync idempotent as well -- the
+        // server keys on the client's id, so a fresh UUID here would land as
+        // a second sale there however careful the phone was.
+        val existing = db.transactions().byDedupeKey(key)
+
         val transaction = TransactionEntity(
+            id = existing?.id ?: java.util.UUID.randomUUID().toString(),
             shopId = ShopSettings.ID,
             customerId = customer?.id,
             customerName = customer?.name,
@@ -129,7 +170,9 @@ object ReviewQueue {
             // Human-approved. The engine's own score described a guess; once
             // someone has read it and tapped yes, it is not a guess.
             confidence = 1.0,
-            occurredAt = parseTimestamp(extraction.occurredAt),
+            occurredAt = occurredAt,
+            createdAt = existing?.createdAt ?: System.currentTimeMillis(),
+            dedupeKey = key,
         )
         db.transactions().upsert(transaction)
 

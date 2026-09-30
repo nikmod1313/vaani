@@ -23,18 +23,22 @@ import android.view.View
  * should not be a crash.
  */
 
+/**
+ * Chart colours, aliased to [Theme] so the charts cannot drift from the rest
+ * of the app -- which is exactly what happened when they each held their own
+ * hex values.
+ */
 object ChartPalette {
-    val ink = Color.rgb(0x17, 0x19, 0x1E)
-    val muted = Color.rgb(0x7A, 0x7E, 0x88)
-    val grid = Color.rgb(0xE6, 0xE4, 0xDE)
-    val indigo = Color.rgb(0x25, 0x3A, 0x6E)
-    val good = Color.rgb(0x2C, 0x61, 0x49)
-    val warn = Color.rgb(0x8A, 0x5D, 0x0B)
-    val saffron = Color.rgb(0xC9, 0x75, 0x2F)
-
-    /** Series colours, in the order a chart assigns them. */
-    val series = intArrayOf(indigo, good, saffron, warn, Color.rgb(0x5B, 0x4B, 0x8A))
+    val ink = Theme.ink
+    val muted = Theme.muted
+    val grid = Theme.border
+    val indigo = Theme.primary
+    val good = Theme.good
+    val warn = Theme.warn
+    val saffron = Theme.accent
+    val series = Theme.series
 }
+
 
 private fun Paint.text(size: Float, colour: Int, bold: Boolean = false) = apply {
     isAntiAlias = true

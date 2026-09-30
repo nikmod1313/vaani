@@ -100,7 +100,37 @@ _DEFERRED_PHRASES = [
 # optional "e", so the trailing \b never lands on "diya" -- and "kar diya",
 # "de diya" and "bhej diya" are how people actually write it. Every payment
 # phrased in the past tense was being read as a sale.
+# Future intent, which is NOT a payment.
+#
+# "I will pay with upi" tells you how a SALE will be settled; reading it as
+# money already received would clear a debt nobody has paid, and the
+# shopkeeper would never chase it. Checked before the payment phrases, and it
+# wins, because the cost of the two mistakes is not symmetric: a missed
+# payment gets noticed the next time the khata is read, an invented one does
+# not.
+_FUTURE_PAYMENT_PHRASES = [
+    r"\b(?:i\s+)?will\s+pay\b", r"\bi'?ll\s+pay\b", r"\bgoing\s+to\s+pay\b",
+    r"\bpay\s+(?:you\s+)?(?:later|tomorrow|soon|next)\b",
+    r"\bpayment\s+(?:later|tomorrow|soon)\b",
+    r"\bwill\s+(?:make|send|do)\s+(?:the\s+)?payment\b",
+    r"\bpayment\s+will\b",
+    r"\bkal\s+(?:de|kar)\w*\b", r"\bbaad\s+m[ei]in?\b",
+]
+
 _PAYMENT_PHRASES = [
+    # English, PAST tense only -- see _FUTURE_PAYMENT_PHRASES above.
+    #
+    # These were missing entirely, so "i have completed the payment" left a
+    # settled bill sitting in the khata as outstanding. Every wording below
+    # came off a real chat.
+    r"\bi\s+(?:have\s+)?paid\b",
+    r"\bhave\s+paid\b",
+    r"\b(?:have\s+)?(?:completed|made|done)\s+the\s+payment\b",
+    r"\bpayment\s+(?:is\s+)?(?:done|complete|completed|received|sent|made)\b",
+    r"\bdone\s+(?:the\s+)?payment\b",
+    r"\b(?:transferred|sent)\s+(?:the\s+)?(?:money|amount|payment|cash)\b",
+    r"\bpaid\s+(?:you|it|already|for\s+it)\b",
+    r"\bpayment\s+ho\s+gay[ai]\b",
     # explicit payment nouns
     r"\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae])\b",
     r"\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b",
@@ -295,9 +325,15 @@ def detect_mode(text: str) -> tuple[PaymentMode, str | None]:
 def detect_direction(text: str, category: Category | str | None = None) -> Direction:
     """Is this goods going out, or money coming back?"""
     norm = normalise(text)
-    for pattern in _PAYMENT_PHRASES:
-        if re.search(pattern, norm):
-            return Direction.PAYMENT
+
+    # A promise to pay is not a payment. Checked first so no amount of
+    # past-tense-looking wording after it can flip the reading.
+    promised = any(re.search(p, norm) for p in _FUTURE_PAYMENT_PHRASES)
+
+    if not promised:
+        for pattern in _PAYMENT_PHRASES:
+            if re.search(pattern, norm):
+                return Direction.PAYMENT
     # Items present means goods moved.
     if extract_items(text, category):
         return Direction.SALE

@@ -97,7 +97,36 @@ object RulesEngine {
     // optional "e", so the trailing \b never lands on "diya" -- and "kar
     // diya", "de diya" and "bhej diya" are how people actually write it.
     // Every payment phrased in the past tense was being read as a sale.
+    /**
+     * Future intent, which is NOT a payment.
+     *
+     * "I will pay with upi" says how a SALE will be settled. Reading it as
+     * money already received clears a debt nobody has paid, and the
+     * shopkeeper never chases it. Checked first, and it wins: a missed
+     * payment is noticed the next time the khata is read, an invented one is
+     * not.
+     */
+    private val FUTURE_PAYMENT_PHRASES = listOf(
+        """\b(?:i\s+)?will\s+pay\b""", """\bi'?ll\s+pay\b""", """\bgoing\s+to\s+pay\b""",
+        """\bpay\s+(?:you\s+)?(?:later|tomorrow|soon|next)\b""",
+        """\bpayment\s+(?:later|tomorrow|soon)\b""",
+        """\bwill\s+(?:make|send|do)\s+(?:the\s+)?payment\b""",
+        """\bpayment\s+will\b""",
+        """\bkal\s+(?:de|kar)\w*\b""", """\bbaad\s+m[ei]in?\b""",
+    ).map { Regex(it) }
+
     private val PAYMENT_PHRASES = listOf(
+        // English, PAST tense only -- see FUTURE_PAYMENT_PHRASES above. These
+        // were missing entirely, so "i have completed the payment" left a
+        // settled bill sitting in the khata as outstanding.
+        """\bi\s+(?:have\s+)?paid\b""",
+        """\bhave\s+paid\b""",
+        """\b(?:have\s+)?(?:completed|made|done)\s+the\s+payment\b""",
+        """\bpayment\s+(?:is\s+)?(?:done|complete|completed|received|sent|made)\b""",
+        """\bdone\s+(?:the\s+)?payment\b""",
+        """\b(?:transferred|sent)\s+(?:the\s+)?(?:money|amount|payment|cash)\b""",
+        """\bpaid\s+(?:you|it|already|for\s+it)\b""",
+        """\bpayment\s+ho\s+gay[ai]\b""",
         """\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae])\b""",
         """\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b""",
         """\bmil\s+gaye?\b""",
@@ -248,7 +277,13 @@ object RulesEngine {
         category: ShopCategory = ShopCategory.GENERAL,
     ): Direction {
         val norm = NumberParser.normalise(text)
-        if (PAYMENT_PHRASES.any { it.containsMatchIn(norm) }) return Direction.PAYMENT
+
+        // A promise to pay is not a payment. Checked first so no amount of
+        // past-tense-looking wording after it can flip the reading.
+        val promised = FUTURE_PAYMENT_PHRASES.any { it.containsMatchIn(norm) }
+        if (!promised && PAYMENT_PHRASES.any { it.containsMatchIn(norm) }) {
+            return Direction.PAYMENT
+        }
         // Items present means goods moved.
         if (extractItems(text, category).isNotEmpty()) return Direction.SALE
         return Direction.UNKNOWN

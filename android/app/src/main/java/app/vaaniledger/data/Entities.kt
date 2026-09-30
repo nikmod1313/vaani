@@ -108,6 +108,7 @@ data class CustomerEntity(
         Index(value = ["shop_id", "occurred_at"]),
         Index(value = ["customer_id"]),
         Index(value = ["sync_state"]),
+        Index(value = ["dedupe_key"], unique = true),
     ],
 )
 data class TransactionEntity(
@@ -127,6 +128,22 @@ data class TransactionEntity(
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     val deleted: Boolean = false,
     @ColumnInfo(name = "sync_state") val syncState: String = SyncState.PENDING.name,
+    /**
+     * Content-derived identity, unique per shop.
+     *
+     * The watermark stops the same MESSAGES being offered twice; this stops
+     * the same ORDER being written twice, which is a different failure. Kill
+     * the app between saving a transaction and recording its hashes and the
+     * next import offers it again -- approving it then produced a second row
+     * with a fresh UUID and double the money.
+     *
+     * Derived from the source message hashes where there are any, so the same
+     * conversation always yields the same key however it was captured, and
+     * from the entry's own fields otherwise. Null for rows written before
+     * this column existed; SQLite treats NULLs as distinct in a unique index,
+     * so they neither collide with each other nor block the migration.
+     */
+    @ColumnInfo(name = "dedupe_key") val dedupeKey: String? = null,
 ) {
     val itemList: List<String>
         get() = if (items.isBlank()) emptyList() else items.split(",").map { it.trim() }

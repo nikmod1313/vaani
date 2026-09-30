@@ -1,5 +1,11 @@
 package app.vaaniledger
 
+import app.vaaniledger.ui.BottomNav
+import app.vaaniledger.ui.Nav
+import app.vaaniledger.ui.Scaffold.page
+
+import app.vaaniledger.ui.Theme
+
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
@@ -12,10 +18,14 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import app.vaaniledger.data.LedgerDatabase
+import app.vaaniledger.data.LineItems
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.data.Strings
 import app.vaaniledger.data.SyncState
 import app.vaaniledger.data.TransactionEntity
+import app.vaaniledger.net.Confidence
+import app.vaaniledger.net.Extraction
+import app.vaaniledger.overlay.EditSheetView
 import app.vaaniledger.ui.ChartPalette
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -45,7 +55,7 @@ class LedgerActivity : Activity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val paper = Color.rgb(0xF7, 0xF6, 0xF3)
+    private val paper = Theme.paper
     private val ink = ChartPalette.ink
     private val muted = ChartPalette.muted
     private val indigo = ChartPalette.indigo
@@ -80,7 +90,6 @@ class LedgerActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(paper)
             setPadding(dp(18), dp(32), dp(18), dp(28))
         }
 
@@ -108,7 +117,14 @@ class LedgerActivity : Activity() {
         root.addView(list)
 
         renderFilters()
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(
+            page(
+                current = BottomNav.Destination.LEDGER,
+                items = Nav.items(this),
+                onNavigate = { Nav.go(this, it) },
+                content = root,
+            )
+        )
         reload()
     }
 
@@ -186,7 +202,7 @@ class LedgerActivity : Activity() {
                 lastRenderedDay = lastDay
                 loaded += rows.size
 
-                countLabel.text = strings().showing(loaded, total)
+                countLabel.text = strings().showing(loaded, total) + " · " + strings().tapToEdit
                 if (loaded < total && rows.size == PAGE) {
                     loadMoreButton().also { loadMoreView = it; list.addView(it) }
                 }
@@ -215,12 +231,15 @@ class LedgerActivity : Activity() {
             background = GradientDrawable().apply {
                 setColor(Color.WHITE)
                 cornerRadius = dp(11).toFloat()
-                setStroke(dp(1), Color.rgb(0xDF, 0xDC, 0xD5))
+                setStroke(dp(1), Theme.border)
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             ).apply { bottomMargin = dp(8) }
+
+            isClickable = true
+            setOnClickListener { edit(tx) }
 
             addView(LinearLayout(this@LedgerActivity).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -269,6 +288,104 @@ class LedgerActivity : Activity() {
         }
     }
 
+    /**
+     * Correct or remove a saved entry.
+     *
+     * The engine gets things wrong, and until now a wrong entry was permanent
+     * -- the review queue could refuse one, but nothing could fix one already
+     * in the khata. A shopkeeper who cannot correct their own ledger stops
+     * trusting it.
+     *
+     * The transaction ID and its dedupe key are both preserved, so an edit
+     * updates the same row here AND the same row on the server, rather than
+     * arriving there as a second sale.
+     */
+    private fun edit(tx: TransactionEntity) {
+        val s = strings()
+        val asExtraction = Extraction(
+            text = tx.itemList.joinToString(", "),
+            customer = tx.customerName,
+            amount = tx.amount.takeIf { it > 0 },
+            mode = tx.mode,
+            direction = tx.direction,
+            items = tx.itemList,
+            confidence = Confidence(overall = 1.0, route = "manual"),
+        )
+
+        val dialog = android.app.AlertDialog.Builder(this).create()
+        val sheet = EditSheetView(
+            context = this,
+            extraction = asExtraction,
+            onSave = { corrected ->
+                dialog.dismiss()
+                applyEdit(tx, corrected)
+            },
+            onDismiss = { dialog.dismiss() },
+        )
+        dialog.setView(sheet)
+        dialog.setButton(
+            android.app.AlertDialog.BUTTON_NEUTRAL, s.deleteAction,
+        ) { _, _ -> confirmDelete(tx) }
+        dialog.show()
+    }
+
+    private fun applyEdit(tx: TransactionEntity, corrected: EditSheetView.Corrected) {
+        scope.launch {
+            val db = LedgerDatabase.get(this@LedgerActivity)
+            runCatching {
+                val customer = corrected.customer?.takeIf { it.isNotBlank() }
+                    ?.let { db.customers().resolve(ShopSettings.ID, it) }
+
+                val updated = tx.copy(
+                    customerId = customer?.id ?: tx.customerId,
+                    customerName = customer?.name ?: tx.customerName,
+                    amount = corrected.amount ?: tx.amount,
+                    mode = corrected.mode,
+                    items = corrected.items.joinToString(","),
+                    // Human-corrected, and it has to go up again.
+                    confidence = 1.0,
+                    syncState = SyncState.PENDING.name,
+                )
+                db.transactions().upsert(updated)
+
+                // The line items are derived from the labels the human just
+                // edited, so the analytics page agrees with the ledger.
+                db.analytics().clearItemsFor(updated.id)
+                db.analytics().insertItems(LineItems.fromLabels(updated))
+            }.onFailure { android.util.Log.e(TAG, "edit failed", it) }
+
+            withContext(Dispatchers.Main) {
+                toast(strings().updated)
+                reload()
+            }
+        }
+    }
+
+    private fun confirmDelete(tx: TransactionEntity) {
+        val s = strings()
+        android.app.AlertDialog.Builder(this)
+            .setMessage(s.deleteConfirm)
+            .setNegativeButton(s.cancel, null)
+            .setPositiveButton(s.deleteAction) { _, _ ->
+                scope.launch {
+                    // Soft delete: the row survives so the audit trail stays
+                    // intact and the reversal still syncs -- the server needs
+                    // to know it was reversed, not just stop hearing about it.
+                    runCatching {
+                        LedgerDatabase.get(this@LedgerActivity).transactions().softDelete(tx.id)
+                    }.onFailure { android.util.Log.e(TAG, "delete failed", it) }
+                    withContext(Dispatchers.Main) {
+                        toast(s.deleted)
+                        reload()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun toast(message: String) =
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+
     private fun modeLabel(mode: String): String {
         val s = strings()
         return when (mode) {
@@ -289,7 +406,7 @@ class LedgerActivity : Activity() {
         background = GradientDrawable().apply {
             setColor(Color.WHITE)
             cornerRadius = dp(11).toFloat()
-            setStroke(dp(1), Color.rgb(0xDF, 0xDC, 0xD5))
+            setStroke(dp(1), Theme.border)
         }
         isClickable = true
         setOnClickListener { loadMore() }
@@ -313,7 +430,7 @@ class LedgerActivity : Activity() {
             background = GradientDrawable().apply {
                 setColor(if (selected) indigo else Color.WHITE)
                 cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), if (selected) indigo else Color.rgb(0xDF, 0xDC, 0xD5))
+                setStroke(dp(1), if (selected) indigo else Theme.border)
             }
             isClickable = true
             setOnClickListener { onClick() }

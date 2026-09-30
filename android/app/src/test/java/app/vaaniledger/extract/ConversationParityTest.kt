@@ -101,6 +101,93 @@ class ConversationParityTest {
         assertEquals(2400.0, o.amount)
     }
 
+    // ---- more than one item ---------------------------------------------
+
+    @Test
+    fun `two items in one commitment both survive`() {
+        // From a real chat. Keeping only the last dropped Rs 4,000 of yellow
+        // kurtis off the bill, and it surfaced only because the customer
+        // happened to restate them two minutes later.
+        val o = order(
+            ShopCategory.APPAREL,
+            "hello bhaiya" to false,
+            "i need 8 yellow kurtis and 2 blue kurtis" to false,
+            "what is the price for each?" to false,
+            "Yellow kurtis are for 500 each and blue ones are for 500 each too" to true,
+            "pls confirm my order" to false,
+        )
+        assertNotNull(o)
+        val byKey = o!!.items.associateBy { "${it.name}/${it.modifier}" }
+        assertEquals(2, byKey.size)
+        assertEquals(8.0, byKey["kurti/yellow"]!!.quantity)
+        assertEquals(2.0, byKey["kurti/blue"]!!.quantity)
+        assertEquals(5000.0, o.amount)
+    }
+
+    @Test
+    fun `the same item mentioned twice merges rather than duplicating`() {
+        val o = order(
+            ShopCategory.KIRANA,
+            "2kg tamatar chaiye" to false,
+            "organic grown tamatar" to true,
+            "haan bhej do" to false,
+        )
+        assertNotNull(o)
+        assertEquals(1, o!!.items.size)
+        assertEquals(2.0, o.items[0].quantity)
+    }
+
+    // ---- payments --------------------------------------------------------
+
+    @Test
+    fun `a payment confirmation is booked as a payment`() {
+        val o = order(
+            ShopCategory.APPAREL,
+            "i have completed the payment" to false,
+            "Okay received." to true,
+        )
+        assertNotNull(o)
+        assertEquals("payment", o!!.direction)
+        assertTrue(o.items.isEmpty())
+    }
+
+    @Test
+    fun `english payment wordings are recognised`() {
+        for (wording in listOf(
+            "payment done", "i have paid", "paid for it",
+            "transferred the money", "payment is complete",
+        )) {
+            val o = order(ShopCategory.APPAREL, wording to false)
+            assertNotNull(wording, o)
+            assertEquals(wording, "payment", o!!.direction)
+        }
+    }
+
+    @Test
+    fun `a promise to pay is not a payment`() {
+        // A missed payment is noticed next time the khata is read; an
+        // invented one is not.
+        for (wording in listOf("i will pay with upi", "i will make the payment", "pay later")) {
+            val o = order(
+                ShopCategory.APPAREL,
+                "2 blue kurti chahiye" to false, "500 each" to true, wording to false,
+            )
+            assertNotNull(wording, o)
+            assertEquals(wording, "sale", o!!.direction)
+        }
+    }
+
+    @Test
+    fun `an unstated payment amount is not guessed`() {
+        val o = order(ShopCategory.APPAREL, "i have completed the payment" to false)
+        assertNull(o!!.amount)
+    }
+
+    @Test
+    fun `only the customer can settle their own balance`() {
+        assertNull(order(ShopCategory.APPAREL, "payment received" to true))
+    }
+
     // ---- nothing is invented -------------------------------------------
 
     @Test

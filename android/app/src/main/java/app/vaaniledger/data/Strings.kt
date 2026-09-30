@@ -28,6 +28,7 @@ object Strings {
         val capture: Capture,
         val analytics: Analytics,
         val ledger: Ledger,
+        val nav: Nav,
     )
 
     data class Onboarding(
@@ -112,6 +113,13 @@ object Strings {
         val modeOnline: String,
     )
 
+    data class Nav(
+        val home: String,
+        val report: String,
+        val ledger: String,
+        val settings: String,
+    )
+
     data class Analytics(
         val title: String,
         val subtitle: String,
@@ -158,6 +166,14 @@ object Strings {
         val loadMore: String,
         val noCustomer: String,
         val noItems: String,
+        val editTitle: String,
+        val updated: String,
+        val deleteAction: String,
+        val deleteConfirm: String,
+        val deleted: String,
+        val cancel: String,
+        val tapToEdit: String,
+        val payment: String,
     )
 
     data class Capture(
@@ -276,6 +292,12 @@ object Strings {
             importServerUnreachable = "Server nahi mila — dekhiye ki backend chalu hai",
             importFailed = "Import nahi ho paya",
         ),
+        nav = Nav(
+            home = "Ghar",
+            report = "Report",
+            ledger = "Khata",
+            settings = "Setting",
+        ),
         analytics = Analytics(
             title = "Dhandhe ki report",
             subtitle = "Aapki dukaan kaisi chal rahi hai",
@@ -321,6 +343,14 @@ object Strings {
             loadMore = "Aur dikhaiye",
             noCustomer = "Naam nahi",
             noItems = "Saaman nahi likha",
+            editTitle = "Entry badlein",
+            updated = "Entry badal di",
+            deleteAction = "Entry hataayein",
+            deleteConfirm = "Yeh entry hata dein? Khaate se nikal jaayegi.",
+            deleted = "Entry hata di",
+            cancel = "Rehne dein",
+            tapToEdit = "Badalne ke liye entry par dabaiye",
+            payment = "Bhugtan",
         ),
     )
 
@@ -423,6 +453,12 @@ object Strings {
             importServerUnreachable = "Could not reach the server — check that the backend is running",
             importFailed = "Import failed",
         ),
+        nav = Nav(
+            home = "Home",
+            report = "Report",
+            ledger = "Ledger",
+            settings = "Settings",
+        ),
         analytics = Analytics(
             title = "Business report",
             subtitle = "How your shop is doing",
@@ -468,6 +504,14 @@ object Strings {
             loadMore = "Show more",
             noCustomer = "No name",
             noItems = "No items recorded",
+            editTitle = "Edit entry",
+            updated = "Entry updated",
+            deleteAction = "Delete entry",
+            deleteConfirm = "Delete this entry? It will come out of the khata.",
+            deleted = "Entry deleted",
+            cancel = "Keep it",
+            tapToEdit = "Tap an entry to change it",
+            payment = "Payment",
         ),
     )
 }

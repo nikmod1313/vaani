@@ -1,5 +1,11 @@
 package app.vaaniledger
 
+import app.vaaniledger.ui.BottomNav
+import app.vaaniledger.ui.Nav
+import app.vaaniledger.ui.Scaffold.page
+
+import app.vaaniledger.ui.Theme
+
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
@@ -49,7 +55,7 @@ class AnalyticsActivity : Activity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val paper = Color.rgb(0xF7, 0xF6, 0xF3)
+    private val paper = Theme.paper
     private val ink = ChartPalette.ink
     private val muted = ChartPalette.muted
     private val indigo = ChartPalette.indigo
@@ -81,7 +87,6 @@ class AnalyticsActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(paper)
             setPadding(dp(18), dp(32), dp(18), dp(28))
         }
 
@@ -117,7 +122,14 @@ class AnalyticsActivity : Activity() {
         root.addView(content)
 
         renderChips()
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(
+            page(
+                current = BottomNav.Destination.REPORT,
+                items = Nav.items(this),
+                onNavigate = { Nav.go(this, it) },
+                content = root,
+            )
+        )
         load()
     }
 
@@ -359,7 +371,7 @@ class AnalyticsActivity : Activity() {
             background = GradientDrawable().apply {
                 setColor(Color.WHITE)
                 cornerRadius = dp(11).toFloat()
-                setStroke(dp(1), Color.rgb(0xDF, 0xDC, 0xD5))
+                setStroke(dp(1), Theme.border)
             }
             addView(TextView(this@AnalyticsActivity).apply {
                 text = label
@@ -383,7 +395,7 @@ class AnalyticsActivity : Activity() {
             background = GradientDrawable().apply {
                 setColor(Color.WHITE)
                 cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.rgb(0xDF, 0xDC, 0xD5))
+                setStroke(dp(1), Theme.border)
             }
             addView(TextView(this@AnalyticsActivity).apply {
                 text = title
@@ -424,7 +436,7 @@ class AnalyticsActivity : Activity() {
             background = GradientDrawable().apply {
                 setColor(if (selected) indigo else Color.WHITE)
                 cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), if (selected) indigo else Color.rgb(0xDF, 0xDC, 0xD5))
+                setStroke(dp(1), if (selected) indigo else Theme.border)
             }
             isClickable = true
             setOnClickListener { onClick() }

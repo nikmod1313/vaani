@@ -1,5 +1,11 @@
 package app.vaaniledger
 
+import app.vaaniledger.ui.BottomNav
+import app.vaaniledger.ui.Nav
+import app.vaaniledger.ui.Scaffold.page
+
+import app.vaaniledger.ui.Theme
+
 import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Color
@@ -38,11 +44,11 @@ class SettingsActivity : Activity() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val ink = Color.rgb(0x17, 0x19, 0x1E)
-    private val muted = Color.rgb(0x7A, 0x7E, 0x88)
-    private val indigo = Color.rgb(0x25, 0x3A, 0x6E)
-    private val paper = Color.rgb(0xF7, 0xF6, 0xF3)
-    private val line = Color.rgb(0xDF, 0xDC, 0xD5)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val indigo = Theme.primary
+    private val paper = Theme.paper
+    private val line = Theme.border
 
     private lateinit var root: LinearLayout
 
@@ -50,10 +56,16 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(paper)
             setPadding(dp(22), dp(36), dp(22), dp(28))
         }
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(
+            page(
+                current = BottomNav.Destination.SETTINGS,
+                items = Nav.items(this),
+                onNavigate = { Nav.go(this, it) },
+                content = root,
+            )
+        )
         render()
     }
 

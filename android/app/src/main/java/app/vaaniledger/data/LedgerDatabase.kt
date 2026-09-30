@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
         CorrectionEntity::class,
         TransactionItemEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class LedgerDatabase : RoomDatabase() {
@@ -102,6 +102,27 @@ abstract class LedgerDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3 -> v4: transactions gain a content-derived identity.
+         *
+         * Existing rows are left NULL rather than being back-filled. SQLite
+         * treats NULLs as distinct in a unique index, so history keeps
+         * working untouched while every new entry is protected. Back-filling
+         * would mean computing keys for rows whose source messages are long
+         * gone, and two old entries that happened to collide would be merged
+         * -- silently deleting a real sale to fix a duplicate that was never
+         * there.
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transactions ADD COLUMN dedupe_key TEXT")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_transactions_dedupe_key` " +
+                        "ON `transactions` (`dedupe_key`)"
+                )
+            }
+        }
+
         fun get(context: Context): LedgerDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -112,7 +133,7 @@ abstract class LedgerDatabase : RoomDatabase() {
                     // No fallbackToDestructiveMigration. This database is the
                     // shopkeeper's money; a schema change must migrate it, not
                     // drop it. Write the Migration before bumping version.
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

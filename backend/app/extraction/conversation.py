@@ -44,7 +44,7 @@ from datetime import datetime, timedelta
 
 from .categories import Category, units_for
 from .numbers import find_numbers, normalise
-from .rules import _UNITS, LineItem, PaymentMode, apply_rules, detect_mode
+from .rules import _UNITS, Direction, LineItem, PaymentMode, apply_rules, detect_mode
 
 # --------------------------------------------------------------------------
 # Commitment
@@ -198,6 +198,11 @@ class ResolvedOrder:
     occurred_at: datetime | None
     content_hashes: list[str] = field(default_factory=list)
     signals: list[str] = field(default_factory=list)
+    #: "sale" or "payment". A payment settles an existing balance and carries
+    #: no items; without this the lane could only ever book sales, so a
+    #: customer texting "i have completed the payment" left their bill
+    #: standing as outstanding for ever.
+    direction: str = "sale"
     #: True when the item came from an EARLIER turn than the commitment --
     #: the case segmentation alone cannot handle.
     carried_topic: bool = False
@@ -291,8 +296,12 @@ def resolve(
     if not thread.turns:
         return None
 
-    topic: LineItem | None = None
+    # Keyed by (modifier, name) and insertion-ordered, so "yellow kurti" and
+    # "blue kurti" are two lines while two mentions of either are one.
+    topics: dict[tuple[str, str], LineItem] = {}
     topic_turn: Turn | None = None
+    payment_turn: Turn | None = None
+    payment_rules = None
     quoted_rate: float | None = None
     quoted_total: float | None = None
     quoted_total_qty: float | None = None
@@ -305,36 +314,45 @@ def resolve(
     for turn in thread.turns:
         rules = apply_rules(turn.body, category)
 
+        # A customer saying the money has arrived settles a balance. Checked
+        # before anything else, because a payment turn has no items and the
+        # item machinery below would otherwise throw the whole thread away.
+        if turn.is_customer and rules.direction is Direction.PAYMENT:
+            payment_turn = turn
+            payment_rules = rules
+
         # Whoever names an item sets the topic -- the shopkeeper answering
         # "blue kurti hai, 500 ka" names it just as usefully as the customer
         # asking for it.
-        if rules.items:
-            named = rules.items[-1]
+        for named in rules.items:
             # A later mention of the SAME item must not erase what an earlier
             # one established. Real chat names a thing repeatedly, and the
             # barest mention is often the last:
             #
             #     "2kg tamatar chaiye" ... "organic grown tamatar"
             #
-            # Replacing outright dropped the quantity and left the order as
-            # a bare "tamatar", which is the exact detail the shopkeeper
-            # needed. Same item name means merge, keeping whichever mention
-            # actually stated each field.
-            if topic is not None and topic.name == named.name:
-                topic = LineItem(
+            # Same item name means merge, keeping whichever mention actually
+            # stated each field. DIFFERENT names accumulate rather than
+            # replace -- "8 yellow kurtis and 2 blue kurtis" is one order for
+            # two things, and keeping only the last of them silently dropped
+            # four thousand rupees of yellow kurtis off a real bill.
+            key = (named.modifier or "", named.name)
+            existing = topics.get(key)
+            if existing is not None:
+                topics[key] = LineItem(
                     name=named.name,
-                    quantity=named.quantity if named.quantity is not None else topic.quantity,
-                    unit=named.unit or topic.unit,
-                    modifier=named.modifier or topic.modifier,
+                    quantity=named.quantity if named.quantity is not None else existing.quantity,
+                    unit=named.unit or existing.unit,
+                    modifier=named.modifier or existing.modifier,
                     unit_price=named.unit_price
                     if named.unit_price is not None
-                    else topic.unit_price,
+                    else existing.unit_price,
                 )
             else:
-                topic = named
+                topics[key] = named
             topic_turn = turn
-            if topic.unit_price is not None:
-                quoted_rate = topic.unit_price
+            if named.unit_price is not None:
+                quoted_rate = named.unit_price
 
         # A price the shopkeeper states. Whether it is a RATE or a TOTAL is
         # genuinely ambiguous in chat, and getting it backwards multiplies or
@@ -377,9 +395,38 @@ def resolve(
             commit_turn = turn
             commit_rules = rules
 
+    # ---- a payment settles a balance ------------------------------------
+    #
+    # Emitted before the sale path and independently of it: a payment needs no
+    # item, no commitment and no topic, so every guard below would throw it
+    # away. The amount is whatever the message stated; when it stated none,
+    # None is returned rather than a guess, and the review card asks. Guessing
+    # here would clear a debt by an amount nobody agreed.
+    if payment_turn is not None and payment_rules is not None:
+        paid_mode = PaymentMode.UNKNOWN.value
+        for turn in thread.turns:
+            detected, _ = detect_mode(turn.body)
+            if detected is not PaymentMode.UNKNOWN:
+                paid_mode = detected.value
+
+        pay_signals = list(dict.fromkeys(signals + ["customer-paid"]))
+        return ResolvedOrder(
+            customer=thread.customer,
+            items=[],
+            amount=payment_rules.amount,
+            mode=paid_mode if paid_mode != PaymentMode.UNKNOWN.value else "cash",
+            direction="payment",
+            canonical_text=payment_turn.body,
+            evidence=f"{payment_turn.sender}: {payment_turn.body}",
+            occurred_at=payment_turn.timestamp,
+            content_hashes=thread.hashes,
+            signals=pay_signals,
+            carried_topic=False,
+        )
+
     if commit_turn is None or commit_rules is None:
         return None
-    if topic is None:
+    if not topics:
         # Committed to something we cannot name. Better to drop it than to
         # book a sale of "?" -- an unnamed line in a khata is not evidence of
         # anything and cannot be checked later.
@@ -388,48 +435,78 @@ def resolve(
     signals = list(dict.fromkeys(signals))
     signals.append("customer-commitment")
 
-    # ---- the item -------------------------------------------------------
-    # An item named in the commitment itself wins; otherwise carry the topic
+    # ---- the items ------------------------------------------------------
+    #
+    # Items named in the commitment itself win; otherwise carry the topic
     # forward. That carry is the whole reason this module exists.
+    #
+    # ALL of them, not the last. "8 yellow kurtis and 2 blue kurtis" is one
+    # order for two things, and keeping only the last dropped Rs 4,000 of
+    # yellow kurtis off a real bill -- which only surfaced because the
+    # customer happened to restate it two minutes later.
     if commit_rules.items:
-        item = commit_rules.items[-1]
+        items = [
+            LineItem(
+                name=i.name, quantity=i.quantity, unit=i.unit,
+                modifier=i.modifier, unit_price=i.unit_price,
+            )
+            for i in commit_rules.items
+        ]
         carried = False
     else:
-        item = LineItem(
-            name=topic.name,
-            modifier=topic.modifier,
-            unit=topic.unit,
-            unit_price=topic.unit_price,
-        )
+        # Deliberately WITHOUT the quantity. The commitment gets first claim
+        # on it below, and only what the commitment leaves unanswered falls
+        # back to the topic. Copying it here instead let a number the topic
+        # never really stated win: "do you have red saree" parses "do" as the
+        # Hindi two, so the topic carries a phantom quantity of 2 that
+        # "i want 3 pieces" must be able to overrule.
+        items = [
+            LineItem(
+                name=t.name, quantity=None, unit=t.unit,
+                modifier=t.modifier, unit_price=t.unit_price,
+            )
+            for t in topics.values()
+        ]
         carried = True
         signals.append("carried-topic")
 
     # ---- the quantity ---------------------------------------------------
     #
-    # Precedence: a number in the commitment itself, then whatever the topic
-    # already established. "2 chahiye" after asking about 3 kurtis means two,
-    # so the commitment wins -- but when the commitment carries no number at
-    # all ("haan bhej do"), the quantity named earlier in the same thread is
-    # the answer and must not be thrown away.
-    if item.quantity is None:
+    # A bare number in the commitment can only be attached when there is ONE
+    # thing it could belong to. "2 chahiye" against a single topic is two of
+    # that; against "yellow kurti and blue kurti" it is genuinely ambiguous,
+    # and splitting or duplicating it would invent a quantity.
+    if len(items) == 1 and items[0].quantity is None:
         quantity, unit = _bare_quantity(commit_turn.body, category)
         if quantity is not None:
-            item.quantity = quantity
-            item.unit = unit or item.unit
+            items[0].quantity = quantity
+            items[0].unit = unit or items[0].unit
             signals.append("quantity-from-commitment")
-        elif carried and topic.quantity is not None:
-            item.quantity = topic.quantity
-            item.unit = topic.unit or item.unit
-            signals.append("quantity-from-topic")
+        elif carried:
+            established = next(iter(topics.values()))
+            if established.quantity is not None:
+                items[0].quantity = established.quantity
+                items[0].unit = established.unit or items[0].unit
+                signals.append("quantity-from-topic")
+
+    # Anything the commitment named without a quantity, but which the thread
+    # established one for earlier, takes it back.
+    for item in items:
+        if item.quantity is None:
+            established = topics.get((item.modifier or "", item.name))
+            if established is not None and established.quantity is not None:
+                item.quantity = established.quantity
+                item.unit = established.unit or item.unit
+                signals.append("quantity-from-topic")
 
     # ---- the rate -------------------------------------------------------
-    if item.unit_price is None and quoted_rate is not None:
-        # Only apply a quoted rate as a PER-UNIT price when the quantity is
-        # known. Otherwise the rate is just the amount, and multiplying by a
-        # quantity we guessed is how a Rs 500 sale becomes Rs 1500.
-        if item.quantity is not None:
+    # Only as a PER-UNIT price where the quantity is known; multiplying by a
+    # quantity we guessed is how a Rs 500 sale becomes Rs 1500.
+    for item in items:
+        if item.unit_price is None and quoted_rate is not None and item.quantity is not None:
             item.unit_price = quoted_rate
-            signals.append("rate-from-quote")
+            if "rate-from-quote" not in signals:
+                signals.append("rate-from-quote")
 
     # ---- mode -----------------------------------------------------------
     mode = PaymentMode.UNKNOWN.value
@@ -444,22 +521,28 @@ def resolve(
     # modifier, noun -- rather than by pasting the turns together. Pasted raw,
     # "blue kurti" + "mujhe 3 kharidne hai" puts the 3 AFTER the noun with a
     # word between, where it reads as three rupees rather than three kurtis.
-    parts: list[str] = []
-    if item.quantity is not None:
-        qty = int(item.quantity) if item.quantity == int(item.quantity) else item.quantity
-        parts.append(str(qty))
-        if item.unit:
-            parts.append(item.unit)
-    if item.modifier:
-        parts.append(item.modifier)
-    parts.append(item.name)
-    if item.unit_price is not None:
-        rate = int(item.unit_price) if item.unit_price == int(item.unit_price) else item.unit_price
-        parts.extend([str(rate), "each"])
-    if mode != PaymentMode.UNKNOWN.value:
-        parts.append(mode)
+    def _phrase(item: LineItem) -> str:
+        parts: list[str] = []
+        if item.quantity is not None:
+            qty = int(item.quantity) if item.quantity == int(item.quantity) else item.quantity
+            parts.append(str(qty))
+            if item.unit:
+                parts.append(item.unit)
+        if item.modifier:
+            parts.append(item.modifier)
+        parts.append(item.name)
+        if item.unit_price is not None:
+            rate = (
+                int(item.unit_price)
+                if item.unit_price == int(item.unit_price)
+                else item.unit_price
+            )
+            parts.extend([str(rate), "each"])
+        return " ".join(parts)
 
-    canonical = " ".join(parts)
+    canonical = " aur ".join(_phrase(i) for i in items)
+    if mode != PaymentMode.UNKNOWN.value:
+        canonical = f"{canonical} {mode}"
 
     evidence = "\n".join(
         f"{t.sender}: {t.body}"
@@ -467,28 +550,30 @@ def resolve(
         if t in (topic_turn, commit_turn) or apply_rules(t.body, category).amount is not None
     )
 
-    # A quoted TOTAL is the amount outright -- multiplying it by the
-    # quantity it already covers is how a Rs 500 sale becomes Rs 1000.
-    amount = item.line_total
-    if quoted_total is not None:
+    # A quoted TOTAL is the amount outright -- multiplying it by the quantity
+    # it already covers is how a Rs 500 sale becomes Rs 1000.
+    line_totals = [i.line_total for i in items if i.line_total is not None]
+    amount = round(sum(line_totals), 2) if len(line_totals) == len(items) and items else None
+
+    if quoted_total is not None and amount is None:
         amount = quoted_total
-        # The total priced a specific bundle. Ordering a different amount is
-        # not something to solve by dividing -- that invents a per-unit rate
-        # nobody stated. Flag it instead and let the review card ask.
-        if (
-            item.quantity is not None
-            and quoted_total_qty is not None
-            and abs(item.quantity - quoted_total_qty) > 1e-9
-        ):
-            signals.append("bundle-quantity-mismatch")
-    elif amount is None and item.quantity is None:
+        if len(items) == 1:
+            only = items[0]
+            if (
+                only.quantity is not None
+                and quoted_total_qty is not None
+                and abs(only.quantity - quoted_total_qty) > 1e-9
+            ):
+                signals.append("bundle-quantity-mismatch")
+    elif amount is None and all(i.quantity is None for i in items):
         amount = quoted_rate
 
     return ResolvedOrder(
         customer=thread.customer,
-        items=[item],
+        items=items,
         amount=amount,
         mode=mode,
+        direction="sale",
         canonical_text=canonical,
         evidence=evidence or f"{commit_turn.sender}: {commit_turn.body}",
         occurred_at=commit_turn.timestamp,

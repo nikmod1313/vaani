@@ -1,5 +1,11 @@
 package app.vaaniledger
 
+import app.vaaniledger.ui.BottomNav
+import app.vaaniledger.ui.Nav
+import app.vaaniledger.ui.Scaffold.page
+
+import app.vaaniledger.ui.Theme
+
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -32,7 +38,7 @@ import app.vaaniledger.reminder.ReminderLinks
  * between "broken" and "not switched on yet") and the two ways to read an
  * order. What the shop sells no longer lives here as a card that looked
  * identical to an unfinished permission and asked again on every visit; it
- * is one line under the gear icon now, changed on purpose rather than by
+ * is one line in Settings now, changed on purpose rather than by
  * accident.
  */
 class MainActivity : Activity() {
@@ -41,12 +47,12 @@ class MainActivity : Activity() {
     private lateinit var accessibilityRow: StatusRow
     private lateinit var floaterButton: TextView
 
-    private val ink = Color.rgb(0x17, 0x19, 0x1E)
-    private val muted = Color.rgb(0x7A, 0x7E, 0x88)
-    private val indigo = Color.rgb(0x25, 0x3A, 0x6E)
-    private val good = Color.rgb(0x2C, 0x61, 0x49)
-    private val warn = Color.rgb(0x8A, 0x5D, 0x0B)
-    private val line = Color.rgb(0xDF, 0xDC, 0xD5)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val indigo = Theme.primary
+    private val good = Theme.good
+    private val warn = Theme.warn
+    private val line = Theme.border
 
     private val strings get() = Strings.of(ShopSettings.language(this)).main
 
@@ -78,7 +84,6 @@ class MainActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.rgb(0xF7, 0xF6, 0xF3))
             setPadding(dp(24), dp(36), dp(24), dp(32))
         }
 
@@ -102,15 +107,6 @@ class MainActivity : Activity() {
                 })
             }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-            addView(TextView(this@MainActivity).apply {
-                text = "⚙️"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-                setPadding(dp(10), dp(10), dp(10), dp(10))
-                isClickable = true
-                setOnClickListener {
-                    startActivity(Intent(this@MainActivity, SettingsActivity::class.java))
-                }
-            })
         })
 
         root.addView(View(this), LinearLayout.LayoutParams(0, dp(22)))
@@ -171,24 +167,14 @@ class MainActivity : Activity() {
         root.addView(actionCard("💬", t.openWhatsAppTitle, t.openWhatsAppDesc) { openWhatsApp() })
         root.addView(actionCard("📄", t.importTitle, t.importDesc) { pickExportFile() })
 
-        // Reading the business, as opposed to recording it. Separated under
-        // its own heading because these two are the shopkeeper's OWN pages --
-        // nothing here captures anything, and both work with no signal.
-        root.addView(TextView(this).apply {
-            text = t.businessHeading
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(18), 0, dp(10))
-        })
-        root.addView(actionCard("📊", t.analyticsTitle, t.analyticsDesc) {
-            startActivity(Intent(this, AnalyticsActivity::class.java))
-        })
-        root.addView(actionCard("📒", t.ledgerTitle, t.ledgerDesc) {
-            startActivity(Intent(this, LedgerActivity::class.java))
-        })
-
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(
+            page(
+                current = BottomNav.Destination.HOME,
+                items = Nav.items(this),
+                onNavigate = { Nav.go(this, it) },
+                content = root,
+            )
+        )
         refresh()
     }
 

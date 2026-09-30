@@ -1,5 +1,7 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.Theme
+
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
@@ -34,12 +36,12 @@ class KhataView(
     private val onRemind: (CustomerBalance) -> Unit = {},
 ) : LinearLayout(context) {
 
-    private val ink = Color.rgb(0x12, 0x15, 0x1A)
-    private val muted = Color.rgb(0x8B, 0x91, 0xA0)
-    private val rule = Color.rgb(0xE3, 0xE6, 0xEB)
-    private val saffron = Color.rgb(0xC9, 0x75, 0x2F)
-    private val good = Color.rgb(0x1F, 0x7A, 0x52)
-    private val cut = Color.rgb(0xB0, 0x3A, 0x2B)
+    private val ink = Theme.ink
+    private val muted = Theme.muted
+    private val rule = Theme.border
+    private val saffron = Theme.accent
+    private val good = Theme.good
+    private val cut = Theme.danger
 
     private val dayFormat = SimpleDateFormat("d MMM, h:mm a", Locale("en", "IN"))
 

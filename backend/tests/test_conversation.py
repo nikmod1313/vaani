@@ -130,6 +130,102 @@ class TestCarriedTopic(unittest.TestCase):
         self.assertFalse(order.carried_topic)
 
 
+class TestMultipleItems(unittest.TestCase):
+    """One order can name more than one thing."""
+
+    def _order(self, rows, category="apparel"):
+        return resolve_all(turns(*rows), "Rahul Verma", category)
+
+    def test_two_items_in_one_commitment_both_survive(self):
+        """
+        From a real chat. Keeping only the last item dropped Rs 4,000 of
+        yellow kurtis off the bill, and it surfaced only because the customer
+        happened to restate them two minutes later.
+        """
+        orders = self._order([
+            ("i need 8 yellow kurtis and 2 blue kurtis", False),
+            ("what is the price for each?", False),
+            ("Yellow kurtis are for 500 each and blue ones are for 500 each too", True),
+            ("pls confirm my order", False),
+        ])
+        self.assertEqual(len(orders), 1)
+        items = {i.name + "/" + (i.modifier or ""): i for i in orders[0].items}
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items["kurti/yellow"].quantity, 8)
+        self.assertEqual(items["kurti/blue"].quantity, 2)
+        self.assertEqual(orders[0].amount, 5000.0)
+
+    def test_the_same_item_twice_merges_rather_than_duplicating(self):
+        orders = self._order([
+            ("2kg tamatar chaiye", False),
+            ("organic grown tamatar", True),
+            ("haan bhej do", False),
+        ], "kirana")
+        self.assertEqual(len(orders[0].items), 1)
+        self.assertEqual(orders[0].items[0].quantity, 2)
+
+    def test_a_bare_quantity_is_not_split_across_two_items(self):
+        """"2 chahiye" against two topics is ambiguous and must not guess."""
+        orders = self._order([
+            ("yellow kurti aur blue kurti hai kya", False),
+            ("haan", True),
+            ("2 chahiye", False),
+        ])
+        if orders:
+            self.assertTrue(all(i.quantity is None for i in orders[0].items))
+
+
+class TestPayments(unittest.TestCase):
+    """Money coming back, which the lane could not book at all before."""
+
+    def _order(self, rows):
+        return resolve_all(turns(*rows), "Rahul Verma", "apparel")
+
+    def test_a_payment_confirmation_is_a_payment(self):
+        orders = self._order([
+            ("i have completed the payment", False), ("Okay received.", True),
+        ])
+        self.assertEqual(len(orders), 1)
+        self.assertEqual(orders[0].direction, "payment")
+        self.assertEqual(orders[0].items, [])
+
+    def test_english_wordings(self):
+        for wording in [
+            "payment done", "i have paid", "paid for it",
+            "transferred the money", "payment is complete",
+        ]:
+            orders = self._order([(wording, False)])
+            self.assertEqual(len(orders), 1, wording)
+            self.assertEqual(orders[0].direction, "payment", wording)
+
+    def test_a_promise_to_pay_is_not_a_payment(self):
+        """
+        The asymmetry that matters: a missed payment is noticed next time the
+        khata is read, an invented one is not.
+        """
+        for wording in [
+            "i will pay with upi", "i will make the payment", "pay later",
+        ]:
+            orders = self._order([
+                ("2 blue kurti chahiye", False), ("500 each", True), (wording, False),
+            ])
+            self.assertTrue(orders, wording)
+            self.assertEqual(orders[0].direction, "sale", wording)
+
+    def test_an_unstated_amount_is_not_guessed(self):
+        """Clearing a debt by an amount nobody agreed is worse than asking."""
+        orders = self._order([("i have completed the payment", False)])
+        self.assertIsNone(orders[0].amount)
+
+    def test_a_stated_amount_is_kept(self):
+        orders = self._order([("i have paid 2000", False)])
+        self.assertEqual(orders[0].amount, 2000.0)
+
+    def test_the_shopkeeper_saying_paid_books_nothing(self):
+        """Only the customer's own word settles their balance."""
+        self.assertEqual(self._order([("payment received", True)]), [])
+
+
 class TestNothingIsInvented(unittest.TestCase):
     def test_an_enquiry_alone_books_nothing(self):
         threads = build_threads(
