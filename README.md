@@ -6,6 +6,12 @@ the transaction, and asks for one tap to confirm.
 
 No WhatsApp Business API anywhere on the critical path.
 
+![Vaani on Android — splash, welcome, home, review, confirm, khata, search](docs/screenshots/app.webp)
+
+![The web dashboard](docs/screenshots/dashboard.webp)
+
+**See the dashboard:** `./run.sh dashboard`, then open <http://localhost:8000>.
+
 ---
 
 ## Status

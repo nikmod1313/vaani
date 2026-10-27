@@ -95,8 +95,9 @@ printf '\n%s  VaaniLedger%s  %s· %s%s\n' "$B" "$X" "$DIM" "$(pwd)" "$X"
 case "$MODE" in
   quick) run_demo ;;
   serve) run_tests; run_eval; run_demo; run_serve ;;
+  dashboard) run_serve ;;   # just the server: http://localhost:8000
   all)   run_tests; run_eval; run_demo ;;
-  *)     printf '%sUnknown mode: %s%s\n\nUsage: ./run.sh [all|quick|serve]\n' "$R" "$MODE" "$X"; exit 2 ;;
+  *)     printf '%sUnknown mode: %s%s\n\nUsage: ./run.sh [all|quick|serve|dashboard]\n' "$R" "$MODE" "$X"; exit 2 ;;
 esac
 
 if [ "$FAILED" -ne 0 ]; then
