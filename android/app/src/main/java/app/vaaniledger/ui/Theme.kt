@@ -184,7 +184,7 @@ object Views {
      */
     fun Context.eyebrow(text: String, colour: Int = Theme.accent): TextView =
         text(text.uppercase(), 11f, colour, Type.bold(this)).apply {
-            letterSpacing = 0.16f
+            letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.16f)
         }
 
     /** A section heading: eyebrow capitals followed by a gold hairline. */
@@ -303,7 +303,7 @@ object Views {
     /** A small status badge: a coloured word on its own soft tint. */
     fun Context.pill(label: String, colour: Int, fill: Int): TextView =
         text(label.uppercase(), 10.5f, colour, Type.bold(this)).apply {
-            letterSpacing = 0.08f
+            letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.08f)
             setPadding(dp(9), dp(2), dp(9), dp(2))
             background = GradientDrawable().apply {
                 setColor(fill)
@@ -373,6 +373,15 @@ object Views {
         }
         requestApplyInsets()
     }
+
+    /**
+     * Letter-spacing that respects the script. Tracked capitals suit Latin;
+     * spacing Devanagari pulls apart the shirorekha, the headline stroke that
+     * joins a word's letters, and the word falls to pieces. So a label with
+     * any Devanagari in it is set solid.
+     */
+    fun tracking(text: CharSequence?, amount: Float): Float =
+        if (text?.any { it in '\u0900'..'\u097F' } == true) 0f else amount
 
     fun Int.withAlpha(alpha: Int): Int =
         Color.argb(alpha, Color.red(this), Color.green(this), Color.blue(this))

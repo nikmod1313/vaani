@@ -327,6 +327,7 @@ interface AnalyticsDao {
         SELECT * FROM transactions
         WHERE shop_id = :shopId AND deleted = 0
           AND (:mode IS NULL OR mode = :mode)
+          AND (:customerId IS NULL OR customer_id = :customerId)
           AND (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR items LIKE '%' || :query || '%')
         ORDER BY occurred_at DESC
         LIMIT :limit OFFSET :offset
@@ -338,6 +339,7 @@ interface AnalyticsDao {
         query: String?,
         limit: Int,
         offset: Int,
+        customerId: String? = null,
     ): List<TransactionEntity>
 
     /** How many rows [ledgerSearch] would return in all -- the "of N" under a filter. */
@@ -346,8 +348,9 @@ interface AnalyticsDao {
         SELECT COUNT(*) FROM transactions
         WHERE shop_id = :shopId AND deleted = 0
           AND (:mode IS NULL OR mode = :mode)
+          AND (:customerId IS NULL OR customer_id = :customerId)
           AND (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR items LIKE '%' || :query || '%')
         """
     )
-    suspend fun ledgerSearchCount(shopId: String, mode: String?, query: String?): Int
+    suspend fun ledgerSearchCount(shopId: String, mode: String?, query: String?, customerId: String? = null): Int
 }

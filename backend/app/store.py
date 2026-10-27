@@ -340,8 +340,11 @@ class LedgerStore:
 
         Computed at read time, never stored. A stored value is wrong tomorrow.
 
-        Not modelled: overpayment. Paying more than is owed floors the balance
-        at zero rather than carrying an advance.
+        An advance is carried. Paying more than is owed -- or paying before a
+        purchase, which a regular does with a few hundred rupees "jama" --
+        leaves a credit that the next udhaar draws down. Dropping it, as this
+        used to, overstated what the customer owed by exactly what they had
+        already paid. The balance shown still floors at zero.
         """
         rows = self._conn.execute(
             f"""
@@ -362,6 +365,7 @@ class LedgerStore:
                 "id": row["id"],
                 "name": row["name"],
                 "debts": [],          # [[occurred_at, remaining], ...] oldest first
+                "advance": 0.0,       # paid and not yet spent against a debt
                 "last_activity": None,
             })
             if row["occurred_at"] is None:
@@ -371,7 +375,11 @@ class LedgerStore:
                 person["last_activity"] = row["occurred_at"]
 
             if row["direction"] == "sale" and row["mode"] == "udhaar":
-                person["debts"].append([row["occurred_at"], row["amount"]])
+                owed = row["amount"]
+                used = min(owed, person["advance"])
+                person["advance"] -= used
+                if owed - used > 0:
+                    person["debts"].append([row["occurred_at"], owed - used])
             elif row["direction"] == "payment":
                 credit = row["amount"]
                 while credit > 0 and person["debts"]:
@@ -382,6 +390,7 @@ class LedgerStore:
                     else:
                         oldest[1] -= credit
                         credit = 0
+                person["advance"] += credit
 
         today = date.today()
         result = []

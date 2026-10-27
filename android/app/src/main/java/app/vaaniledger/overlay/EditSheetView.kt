@@ -43,6 +43,14 @@ class EditSheetView(
     private val extraction: Extraction,
     private val onSave: (Corrected) -> Unit,
     private val onDismiss: () -> Unit,
+    /**
+     * Show the sale / payment-received choice. Off when correcting a capture
+     * -- the engine already decided which it was -- and on for an entry
+     * written by hand, where only the shopkeeper knows.
+     */
+    private val askDirection: Boolean = false,
+    /** Heading override, for "write a new entry" rather than "change". */
+    private val title: String? = null,
 ) : LinearLayout(context) {
 
     /** The human's version of the entry. This wins over the engine's. */
@@ -51,6 +59,7 @@ class EditSheetView(
         val customer: String?,
         val mode: String,
         val items: List<String>,
+        val direction: String = "sale",
     )
 
     private val t = Strings.of(ShopSettings.language(context)).sheets
@@ -65,6 +74,10 @@ class EditSheetView(
     private var selectedMode: String =
         extraction.mode.takeIf { it != "unknown" } ?: "udhaar"
     private val modeChips = mutableMapOf<String, TextView>()
+    // Declared before init, which builds the direction row and fills these.
+    private var selectedDirection: String =
+        extraction.direction.takeIf { it == "payment" } ?: "sale"
+    private val directionChips = mutableMapOf<String, TextView>()
 
     init {
         orientation = VERTICAL
@@ -73,7 +86,7 @@ class EditSheetView(
         elevation = dp(20).toFloat()
 
         addView(TextView(context).apply {
-            text = t.editTitle
+            text = title ?: t.editTitle
             setTextColor(ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
             typeface = Type.display(context)
@@ -85,6 +98,8 @@ class EditSheetView(
             typeface = Type.displayItalic(context)
             setPadding(0, dp(2), 0, dp(10))
         })
+
+        if (askDirection) addView(directionRow())
 
         amountField = field(
             t.amountLabel,
@@ -109,7 +124,7 @@ class EditSheetView(
             setTextColor(Theme.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
             typeface = Type.bold(context)
-            letterSpacing = 0.12f
+            letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.12f)
             setPadding(0, dp(8), 0, dp(3))
         })
         val edit = EditText(context).apply {
@@ -136,7 +151,7 @@ class EditSheetView(
             setTextColor(Theme.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
             typeface = Type.bold(context)
-            letterSpacing = 0.12f
+            letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.12f)
             setPadding(0, dp(8), 0, dp(3))
         })
         addView(LinearLayout(context).apply {
@@ -158,6 +173,49 @@ class EditSheetView(
                 }
         })
         select(selectedMode)
+    }
+
+    private fun directionRow(): View = LinearLayout(context).apply {
+        orientation = VERTICAL
+        addView(TextView(context).apply {
+            text = t.fieldDirection
+            setTextColor(Theme.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Type.bold(context)
+            letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.12f)
+            setPadding(0, dp(8), 0, dp(3))
+        })
+        addView(LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            listOf(t.dirSale to "sale", t.dirPayment to "payment").forEachIndexed { i, (label, value) ->
+                if (i > 0) addView(View(context), LayoutParams(dp(8), 1))
+                val chip = TextView(context).apply {
+                    text = label
+                    gravity = Gravity.CENTER
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                    typeface = Type.medium(context)
+                    setPadding(dp(8), dp(10), dp(8), dp(10))
+                    pressable()
+                    setOnClickListener { selectDirection(value) }
+                }
+                directionChips[value] = chip
+                addView(chip, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+            }
+        })
+        selectDirection(selectedDirection)
+    }
+
+    private fun selectDirection(direction: String) {
+        selectedDirection = direction
+        directionChips.forEach { (value, chip) ->
+            val on = value == direction
+            chip.setTextColor(if (on) Theme.onPrimary else ink)
+            chip.background = GradientDrawable().apply {
+                setColor(if (on) (if (value == "payment") good else Theme.primary) else Color.TRANSPARENT)
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), if (on) Color.TRANSPARENT else rule)
+            }
+        }
     }
 
     private fun select(mode: String) {
@@ -213,6 +271,7 @@ class EditSheetView(
                         mode = selectedMode,
                         items = itemsField.text.toString()
                             .split(",").map { it.trim() }.filter { it.isNotBlank() },
+                        direction = selectedDirection,
                     )
                 )
             }

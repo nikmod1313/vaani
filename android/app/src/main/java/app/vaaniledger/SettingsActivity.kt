@@ -37,6 +37,7 @@ import android.widget.Toast
 import app.vaaniledger.data.AppLanguage
 import app.vaaniledger.data.ShopCategory
 import app.vaaniledger.data.ShopSettings
+import app.vaaniledger.data.labelIn
 import app.vaaniledger.data.Strings
 import app.vaaniledger.net.ServerSettings
 import kotlinx.coroutines.CoroutineScope
@@ -96,40 +97,40 @@ class SettingsActivity : Activity() {
 
         root.addView(pageHeader(ShopSettings.name(this), t.settingsTitle))
 
-        root.addView(sectionHeading(if (en) "Your shop" else "Aapki dukaan"))
+        root.addView(sectionHeading(if (en) "Your shop" else "आपकी दुकान"))
         root.addView(group(
             settingRow(
-                LineIcon.Glyph.PENCIL, if (en) "Shop name" else "Dukaan ka naam",
+                LineIcon.Glyph.PENCIL, if (en) "Shop name" else "दुकान का नाम",
                 ShopSettings.name(this),
             ) { editShopName() },
             settingRow(
                 LineIcon.Glyph.QR, "UPI ID",
                 ShopSettings.upiId(this) ?: if (en) "Not set — reminders go without a pay link"
-                else "Nahi daala — reminder mein pay link nahi jayega",
+                else "नहीं डाला — याद-संदेश में पेमेंट लिंक नहीं जाएगा",
             ) { editUpiId() },
             settingRow(
-                LineIcon.Glyph.SHOP, if (en) "Shop category" else "Dukaan ki category",
-                ShopSettings.category(this).label,
+                LineIcon.Glyph.SHOP, if (en) "Shop category" else "दुकान की श्रेणी",
+                ShopSettings.category(this).labelIn(lang),
             ) { chooseCategory() },
             settingRow(
-                LineIcon.Glyph.GLOBE, if (en) "Language" else "Bhasha",
+                LineIcon.Glyph.GLOBE, if (en) "Language" else "भाषा",
                 lang.displayName,
             ) { chooseLanguage() },
         ))
 
-        root.addView(sectionHeading(if (en) "Backup" else "Khata ka backup"))
+        root.addView(sectionHeading(if (en) "Backup" else "खाते का बैकअप"))
         root.addView(group(
             settingRow(
-                LineIcon.Glyph.SHARE, if (en) "Export the khata" else "Khata export karein",
+                LineIcon.Glyph.SHARE, if (en) "Export the khata" else "खाता एक्सपोर्ट करें",
                 if (en) "Every entry in one spreadsheet — send it to WhatsApp, Drive or email"
-                else "Saari entries ek file mein — WhatsApp, Drive ya email par bhejein",
+                else "सारी एंट्री एक फ़ाइल में — WhatsApp, Drive या ईमेल पर भेजें",
             ) { exportKhata() },
         ))
 
-        root.addView(sectionHeading("Advanced"))
+        root.addView(sectionHeading(if (en) "Advanced" else "उन्नत"))
         root.addView(group(
             settingRow(
-                LineIcon.Glyph.SERVER, if (en) "Server address" else "Server ka address",
+                LineIcon.Glyph.SERVER, if (en) "Server address" else "सर्वर का पता",
                 ServerSettings.baseUrl(this) +
                     if (ServerSettings.isCustom(this)) "" else "  (default)",
             ) { editServerAddress() },
@@ -190,7 +191,7 @@ class SettingsActivity : Activity() {
 
     private fun chooseCategory() {
         val options = ShopCategory.entries
-        val labels = options.map { it.label }.toTypedArray()
+        val labels = options.map { it.labelIn(ShopSettings.language(this)) }.toTypedArray()
         val current = options.indexOf(ShopSettings.category(this))
         AlertDialog.Builder(this)
             .setTitle(Strings.of(ShopSettings.language(this)).onboarding.categoryTitle)
@@ -248,8 +249,8 @@ class SettingsActivity : Activity() {
             .setTitle(title)
             .apply { if (message != null) setMessage(message) }
             .setView(holder)
-            .setPositiveButton(if (en) "Save" else "Save karein", null)
-            .setNegativeButton(if (en) "Cancel" else "Rehne dein", null)
+            .setPositiveButton(if (en) "Save" else "सेव करें", null)
+            .setNegativeButton(if (en) "Cancel" else "रहने दें", null)
             .create()
         dialog.setOnShowListener {
             // Validated before closing, so a mistyped UPI ID gets a second
@@ -267,9 +268,9 @@ class SettingsActivity : Activity() {
     private fun editShopName() {
         val en = ShopSettings.language(this) == AppLanguage.EN
         textDialog(
-            if (en) "Shop name" else "Dukaan ka naam",
+            if (en) "Shop name" else "दुकान का नाम",
             if (en) "Shown on every page and in every reminder your customers read."
-            else "Har page par aur har reminder mein yahi naam dikhega.",
+            else "हर पेज पर और हर याद-संदेश में यही नाम दिखेगा।",
             ShopSettings.name(this),
             android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS,
         ) { value ->
@@ -286,7 +287,7 @@ class SettingsActivity : Activity() {
         textDialog(
             "UPI ID",
             if (en) "Example: sharmakirana@okaxis\nReminders will carry a link your customer taps to pay."
-            else "Udaharan: sharmakirana@okaxis\nReminder mein link jayega, grahak tap karke pay kar sakega.",
+            else "उदाहरण: sharmakirana@okaxis\nयाद-संदेश में लिंक जाएगा, ग्राहक टैप करके भुगतान कर सकेगा।",
             ShopSettings.upiId(this).orEmpty(),
             android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
         ) { value ->
@@ -296,7 +297,7 @@ class SettingsActivity : Activity() {
                 else -> {
                     Toast.makeText(
                         this,
-                        if (en) "That doesn't look like a UPI ID (name@bank)" else "Yeh UPI ID sahi nahi lag raha (naam@bank)",
+                        if (en) "That doesn't look like a UPI ID (name@bank)" else "यह UPI ID सही नहीं लग रही (नाम@बैंक)",
                         Toast.LENGTH_LONG,
                     ).show()
                     false
@@ -317,11 +318,11 @@ class SettingsActivity : Activity() {
                 if (intent == null) {
                     Toast.makeText(
                         this@SettingsActivity,
-                        if (en) "Couldn't create the file" else "File nahi ban payi",
+                        if (en) "Couldn't create the file" else "फ़ाइल नहीं बन पाई",
                         Toast.LENGTH_LONG,
                     ).show()
                 } else {
-                    startActivity(Intent.createChooser(intent, if (en) "Send the khata to…" else "Khata kahan bhejein?"))
+                    startActivity(Intent.createChooser(intent, if (en) "Send the khata to…" else "खाता कहाँ भेजें?"))
                 }
             }
         }
@@ -352,27 +353,27 @@ class SettingsActivity : Activity() {
             addView(input)
         }
         AlertDialog.Builder(this)
-            .setTitle(if (lang == AppLanguage.EN) "Server address" else "Server ka address")
+            .setTitle(if (lang == AppLanguage.EN) "Server address" else "सर्वर का पता")
             .setMessage(
                 if (lang == AppLanguage.EN)
                     "Example: http://192.168.1.42:8000/\nMust be on the same Wi-Fi as this phone."
                 else
-                    "Udaharan: http://192.168.1.42:8000/\nPhone aur server ek hi Wi-Fi par hone chahiye."
+                    "उदाहरण: http://192.168.1.42:8000/\nफ़ोन और सर्वर एक ही Wi-Fi पर होने चाहिए।"
             )
             .setView(holder)
-            .setPositiveButton(if (lang == AppLanguage.EN) "Save" else "Save") { _, _ ->
+            .setPositiveButton(if (lang == AppLanguage.EN) "Save" else "सेव करें") { _, _ ->
                 val value = input.text.toString().trim()
                 if (value.isNotBlank()) {
                     ServerSettings.setBaseUrl(this, value)
-                    Toast.makeText(this, if (lang == AppLanguage.EN) "Saved" else "Save ho gaya", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, if (lang == AppLanguage.EN) "Saved" else "सेव हो गया", Toast.LENGTH_SHORT).show()
                     render()
                 }
             }
-            .setNeutralButton(if (lang == AppLanguage.EN) "Use default" else "Default use karein") { _, _ ->
+            .setNeutralButton(if (lang == AppLanguage.EN) "Use default" else "पहले वाला पता") { _, _ ->
                 ServerSettings.reset(this)
                 render()
             }
-            .setNegativeButton(if (lang == AppLanguage.EN) "Cancel" else "Cancel", null)
+            .setNegativeButton(if (lang == AppLanguage.EN) "Cancel" else "रहने दें", null)
             .show()
     }
 

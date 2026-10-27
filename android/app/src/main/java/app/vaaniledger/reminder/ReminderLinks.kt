@@ -20,7 +20,8 @@ import java.util.Locale
  */
 object ReminderLinks {
 
-    private val dateFormat = SimpleDateFormat("d MMM", Locale("en", "IN"))
+    private fun dateFormat(language: String) =
+        SimpleDateFormat("d MMM", if (language == "en-IN") Locale("en", "IN") else Locale("hi", "IN"))
 
     /**
      * Normalise an Indian number to the E.164 digits wa.me expects.
@@ -72,16 +73,16 @@ object ReminderLinks {
         withLink: Boolean = false,
     ): String {
         val rupees = "₹%,.0f".format(amount)
-        val date = dateFormat.format(asOf)
+        val date = dateFormat(language).format(asOf)
 
         return when (language) {
             "en-IN" -> "Namaste $customerName 🙏 This is $shopName. Your balance " +
                 "of $rupees is pending as of $date. " +
                 (if (withLink) "You can pay using the link below. " else "") + "Thank you!"
 
-            else -> "Namaste $customerName ji 🙏 $shopName se — aapka $rupees " +
-                "baaki hai ($date tak). " +
-                (if (withLink) "Neeche tap karke pay kar sakte hain. " else "") + "Dhanyavaad!"
+            else -> "नमस्ते $customerName जी 🙏 $shopName की ओर से — आपके $rupees " +
+                "बाकी हैं ($date तक)। " +
+                (if (withLink) "नीचे टैप करके भुगतान कर सकते हैं। " else "") + "धन्यवाद!"
         }
     }
 

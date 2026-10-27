@@ -79,6 +79,11 @@ class LedgerActivity : Activity() {
     private lateinit var countLabel: TextView
 
     private var filter: String? = null
+    /** Set when this page is one customer's account rather than the whole khata. */
+    private var customerId: String? = null
+    private var customerName: String? = null
+    private var balanceCard: LinearLayout? = null
+    private var owesStrip: LinearLayout? = null
     /** The search text, trimmed; null when the box is empty. */
     private var query: String? = null
     /**
@@ -102,8 +107,8 @@ class LedgerActivity : Activity() {
      */
     private var loadMoreView: View? = null
 
-    private val dayFormat = SimpleDateFormat("d MMM yyyy", Locale("en", "IN"))
-    private val timeFormat = SimpleDateFormat("h:mm a", Locale("en", "IN"))
+    private val dayFormat by lazy { SimpleDateFormat("d MMM yyyy", ShopSettings.language(this).locale) }
+    private val timeFormat by lazy { SimpleDateFormat("h:mm a", ShopSettings.language(this).locale) }
 
     private fun strings() = Strings.of(ShopSettings.language(this)).ledger
 
@@ -116,14 +121,34 @@ class LedgerActivity : Activity() {
             setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        root.addView(pageHeader(ShopSettings.name(this), s.title))
+        customerId = intent.getStringExtra(EXTRA_CUSTOMER_ID)
+        customerName = intent.getStringExtra(EXTRA_CUSTOMER_NAME)
+
+        // The title row: the page's name, and the pen for writing an entry
+        // by hand. On a customer's page the title is the customer.
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+            addView(pageHeader(ShopSettings.name(this@LedgerActivity), customerName ?: s.title),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(chip("+  ${s.newEntry}", selected = true) { newEntry() }.apply {
+                (layoutParams as LinearLayout.LayoutParams).bottomMargin = dp(4)
+            })
+        })
 
         countLabel = text("", 13f, muted).apply {
             setPadding(0, dp(4), 0, dp(16))
         }
         root.addView(countLabel)
 
-        root.addView(searchBox(), matchWrap(dp(12)))
+        if (customerId != null) {
+            balanceCard = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            root.addView(balanceCard, matchWrap(dp(14)))
+        } else {
+            root.addView(searchBox(), matchWrap(dp(12)))
+            owesStrip = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            root.addView(owesStrip)
+        }
 
         filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         root.addView(filterRow)
@@ -185,6 +210,7 @@ class LedgerActivity : Activity() {
     }
 
     private fun reload() {
+        loadBalances()
         generation++
         loaded = 0
         // Without this the first row of a newly filtered list keeps the
@@ -204,13 +230,14 @@ class LedgerActivity : Activity() {
             val shop = ShopSettings.ID
             val offset = loaded
 
+            val cust = customerId
             val rows = runCatching {
-                dao.ledgerSearch(shop, mode, q, PAGE, offset)
+                dao.ledgerSearch(shop, mode, q, PAGE, offset, cust)
             }.onFailure { android.util.Log.e(TAG, "ledger load failed", it) }
                 .getOrDefault(emptyList())
 
             // Counted under the same filter, so "showing 3 of 3" means three.
-            val count = runCatching { dao.ledgerSearchCount(shop, mode, q) }.getOrDefault(0)
+            val count = runCatching { dao.ledgerSearchCount(shop, mode, q, cust) }.getOrDefault(0)
 
             withContext(Dispatchers.Main) {
                 if (gen != generation) return@withContext
@@ -293,6 +320,13 @@ class LedgerActivity : Activity() {
 
             addView(text(name.take(1).uppercase(), 18f, tone, Type.display(this@LedgerActivity)).apply {
                 gravity = Gravity.CENTER
+                // The initial opens the customer's own page; the rest of the
+                // row still opens the entry for correction.
+                val id = tx.customerId
+                if (id != null && customerId == null) {
+                    pressable()
+                    setOnClickListener { openCustomer(id, name) }
+                }
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(Color.TRANSPARENT)
@@ -311,7 +345,7 @@ class LedgerActivity : Activity() {
                     listOf(
                         timeFormat.format(Date(tx.occurredAt)),
                         modeLabel(tx.mode),
-                        tx.source,
+                        sourceLabel(tx.source),
                         if (tx.syncState == SyncState.SYNCED.name) s.synced else s.pending,
                     ).joinToString("  ·  "),
                     11.5f, muted,
@@ -428,6 +462,19 @@ class LedgerActivity : Activity() {
     private fun toast(message: String) =
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
 
+    /** Where an entry came from, in the interface language: the audit trail, readable. */
+    private fun sourceLabel(source: String): String {
+        val en = ShopSettings.language(this) == app.vaaniledger.data.AppLanguage.EN
+        return when (source) {
+            "chat", "conversation" -> if (en) "chat" else "चैट"
+            "voice" -> if (en) "voice" else "आवाज़"
+            "manual" -> if (en) "by hand" else "हाथ से"
+            "export" -> if (en) "export" else "एक्सपोर्ट"
+            "ocr" -> if (en) "screenshot" else "स्क्रीनशॉट"
+            else -> source
+        }
+    }
+
     private fun modeLabel(mode: String): String {
         val s = strings()
         return when (mode) {
@@ -436,6 +483,161 @@ class LedgerActivity : Activity() {
             "udhaar" -> s.filterUdhaar
             else -> mode
         }
+    }
+
+    // ---- customers ----------------------------------------------------------
+
+    private fun openCustomer(id: String, name: String) {
+        startActivity(
+            android.content.Intent(this, LedgerActivity::class.java)
+                .putExtra(EXTRA_CUSTOMER_ID, id)
+                .putExtra(EXTRA_CUSTOMER_NAME, name)
+        )
+    }
+
+    /**
+     * Balances, computed the same way the bubble's khata does (FIFO aging
+     * over every live entry), so the page and the bubble never disagree.
+     * On the whole-khata page: a strip of who owes what, largest first. On a
+     * customer's page: their balance, and the two things a shopkeeper does
+     * about it.
+     */
+    private fun loadBalances() {
+        scope.launch {
+            val db = LedgerDatabase.get(this@LedgerActivity)
+            val all = runCatching { db.transactions().allOnce(ShopSettings.ID) }.getOrDefault(emptyList())
+            val customers = runCatching { db.transactions().customersOnce(ShopSettings.ID) }.getOrDefault(emptyList())
+            val balances = app.vaaniledger.data.Aging.balances(all, customers.associate { it.id to it.name })
+            val phones = customers.associate { it.id to it.phone }
+            withContext(Dispatchers.Main) {
+                owesStrip?.let { renderOwes(it, balances.filter { b -> b.outstanding > 0.5 }) }
+                balanceCard?.let { card ->
+                    val mine = balances.firstOrNull { it.id == customerId }
+                    renderBalance(card, mine, phones[customerId])
+                }
+            }
+        }
+    }
+
+    private fun renderOwes(strip: LinearLayout, owing: List<app.vaaniledger.data.CustomerBalance>) {
+        strip.removeAllViews()
+        if (owing.isEmpty()) return
+        val s = strings()
+        strip.addView(eyebrow(s.whoOwes).apply { setPadding(0, dp(2), 0, dp(8)) })
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        owing.take(12).forEach { b ->
+            row.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                background = app.vaaniledger.ui.ManuscriptFrame(this@LedgerActivity)
+                pressable()
+                setOnClickListener { openCustomer(b.id, b.name) }
+                addView(text(b.name, 14f, ink, Type.medium(this@LedgerActivity)).apply { maxLines = 1 })
+                addView(text("₹%,.0f".format(b.outstanding), 18f, ChartPalette.warn, Type.display(this@LedgerActivity)))
+                if (b.daysOverdue > 30) addView(text(s.balanceDays(b.daysOverdue), 11f, Theme.danger))
+            }, LinearLayout.LayoutParams(dp(150), LinearLayout.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(10) })
+        }
+        strip.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipToPadding = false
+            addView(row)
+        }, matchWrap(dp(14)))
+    }
+
+    private fun renderBalance(
+        card: LinearLayout,
+        balance: app.vaaniledger.data.CustomerBalance?,
+        phone: String?,
+    ) {
+        val s = strings()
+        card.removeAllViews()
+        val due = balance?.outstanding ?: 0.0
+        card.addView(app.vaaniledger.ui.ArchWindow(
+            this, R.drawable.art_palace, arched = false, focusY = 0.9f, shade = 0.9f,
+        ).apply {
+            addView(LinearLayout(this@LedgerActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(16), dp(20), dp(18))
+                addView(eyebrow(if (due > 0.5) s.owes("") .trim() else s.settled, Theme.gold))
+                addView(text("₹%,.0f".format(due), 38f, Theme.onPrimary, Type.display(this@LedgerActivity)))
+                if (balance != null && due > 0.5) {
+                    addView(text(s.balanceDays(balance.daysOverdue), 13f, Theme.onPrimaryMuted))
+                }
+            })
+        }, matchWrap(dp(12)))
+        card.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(button(s.paymentReceived, primary = true) { newEntry(payment = true) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            if (due > 0.5) {
+                addView(View(this@LedgerActivity), LinearLayout.LayoutParams(dp(10), 1))
+                addView(button(s.remind, primary = false) { remind(due, phone) },
+                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+        })
+    }
+
+    /** The same reminder the bubble sends: drafted here, sent by the shopkeeper's own tap in WhatsApp. */
+    private fun remind(due: Double, phone: String?) {
+        val name = customerName ?: return
+        val intent = app.vaaniledger.reminder.ReminderLinks.reminderIntent(
+            phone = phone,
+            customerName = name,
+            shopName = ShopSettings.name(this),
+            amount = due,
+            payeeVpa = ShopSettings.upiId(this),
+            language = ShopSettings.language(this).wire,
+        )
+        if (phone == null) toast(strings().noPhone)
+        runCatching { startActivity(intent) }.recoverCatching {
+            startActivity(android.content.Intent.createChooser(
+                app.vaaniledger.reminder.ReminderLinks.untargetedFallback(intent), strings().remind,
+            ))
+        }
+    }
+
+    /**
+     * Write an entry by hand: the edit sheet, with the sale / payment
+     * choice shown, prefilled with this customer on a customer's page.
+     */
+    private fun newEntry(payment: Boolean = false) {
+        val s = strings()
+        val blank = Extraction(
+            text = "",
+            customer = customerName,
+            amount = null,
+            mode = if (payment) "cash" else "udhaar",
+            direction = if (payment) "payment" else "sale",
+            items = emptyList(),
+            confidence = Confidence(overall = 1.0, route = "manual"),
+        )
+        val dialog = android.app.AlertDialog.Builder(this).create()
+        val sheet = EditSheetView(
+            context = this,
+            extraction = blank,
+            onSave = { entry ->
+                if (entry.amount == null || entry.amount <= 0) {
+                    toast(s.needAmount)
+                    return@EditSheetView
+                }
+                dialog.dismiss()
+                scope.launch {
+                    runCatching { app.vaaniledger.data.ManualEntry.save(this@LedgerActivity, entry) }
+                        .onFailure { android.util.Log.e(TAG, "manual entry failed", it) }
+                    app.vaaniledger.sync.SyncWorker.syncNow(this@LedgerActivity, ShopSettings.ID, ShopSettings.name(this@LedgerActivity))
+                    withContext(Dispatchers.Main) {
+                        toast(s.entrySaved("₹%,.0f".format(entry.amount)))
+                        reload()
+                    }
+                }
+            },
+            onDismiss = { dialog.dismiss() },
+            askDirection = true,
+            title = s.newEntryTitle,
+        )
+        dialog.setView(sheet)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.show()
     }
 
     /**
@@ -533,6 +735,8 @@ class LedgerActivity : Activity() {
 
     private companion object {
         const val PAGE = 25
+        const val EXTRA_CUSTOMER_ID = "customer_id"
+        const val EXTRA_CUSTOMER_NAME = "customer_name"
         const val TAG = "VaaniLedgerPage"
     }
 }

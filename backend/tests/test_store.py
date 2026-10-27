@@ -209,8 +209,19 @@ class TestBalances(StoreCase):
         balance = next(
             c for c in self.store.outstanding(SHOP) if c["name"] == "Mohan Lal"
         )
-        # Advances are not modelled; the balance does not go negative.
+        # The balance shown never goes negative...
         self.assertEqual(balance["outstanding"], 0)
+
+    def test_an_advance_is_spent_by_the_next_udhaar(self):
+        """...but the Rs 300 over is credit, not lost: dropping it overstated the next bill."""
+        early = (datetime.now() - timedelta(days=2)).isoformat(timespec="seconds")
+        self.store.save(_tx(customer_name="Mohan Lal", amount=500, mode="cash",
+                            direction="payment", occurred_at=early))
+        self.store.save(_tx(customer_name="Mohan Lal", amount=800, mode="udhaar"))
+        balance = next(
+            c for c in self.store.outstanding(SHOP) if c["name"] == "Mohan Lal"
+        )
+        self.assertEqual(balance["outstanding"], 300)
 
     def test_seed_produces_a_believable_overdue_spread(self):
         """Every customer at ~87 days means the flag is broken, not the shop."""

@@ -52,7 +52,7 @@ class KhataView(
     private val good = Theme.good
     private val cut = Theme.danger
 
-    private val dayFormat = SimpleDateFormat("d MMM, h:mm a", Locale("en", "IN"))
+    private val dayFormat = SimpleDateFormat("d MMM, h:mm a", ShopSettings.language(context).locale)
 
     init {
         orientation = VERTICAL
@@ -134,7 +134,7 @@ class KhataView(
         setTextColor(Theme.accent)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
         typeface = Type.bold(context)
-        letterSpacing = 0.14f
+        letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.14f)
         setPadding(0, dp(18), 0, dp(6))
     }
 

@@ -11,6 +11,7 @@ import app.vaaniledger.data.AppLanguage
 import app.vaaniledger.data.ShopCategory
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.data.Strings
+import app.vaaniledger.data.labelIn
 import app.vaaniledger.ui.ArchDrawable
 import app.vaaniledger.ui.ArchWindow
 import app.vaaniledger.ui.ArtView
@@ -194,7 +195,7 @@ class OnboardingActivity : Activity() {
                 })
         }, matchWrap(dp(26)).apply { height = dp(heroHeight + 24) })
 
-        root.addView(eyebrow(if (chosenLanguage == AppLanguage.EN) "Namaste" else "Namaste · नमस्ते"))
+        root.addView(eyebrow(if (chosenLanguage == AppLanguage.EN) "Namaste" else "नमस्ते"))
         root.addView(title(o.welcomeTitle, 32f).apply { setPadding(0, dp(6), 0, dp(10)) })
         root.addView(body(o.welcomeSubtitle, 15f))
         root.addView(OrnamentRule(this), LinearLayout.LayoutParams(-1, dp(14)).apply {
@@ -245,7 +246,7 @@ class OnboardingActivity : Activity() {
             pressable()
             setOnClickListener { onPick(this) }
 
-            val (english, local) = category.label.split(" / ").let {
+            val (english, local) = category.labelIn(chosenLanguage).split(" / ").let {
                 (it.getOrNull(1) ?: it[0]) to it[0]
             }
             addView(View(this@OnboardingActivity).apply {

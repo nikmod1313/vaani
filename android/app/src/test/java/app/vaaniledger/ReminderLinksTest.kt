@@ -69,9 +69,9 @@ class ReminderLinksTest {
     @Test
     fun `the pay line appears only with a link`() {
         val bare = ReminderLinks.composeMessage("Rahul", "Sharma Kirana", 250.0)
-        assertTrue(!bare.contains("Neeche tap"))
+        assertTrue(!bare.contains("नीचे टैप"))
         val linked = ReminderLinks.composeMessage("Rahul", "Sharma Kirana", 250.0, withLink = true)
-        assertTrue(linked.contains("Neeche tap"))
+        assertTrue(linked.contains("नीचे टैप"))
         val english = ReminderLinks.composeMessage("Rahul", "Sharma Kirana", 250.0, language = "en-IN", withLink = true)
         assertTrue(english.contains("link below"))
     }

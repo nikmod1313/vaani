@@ -503,7 +503,7 @@ class OverlayService : Service() {
                     if (ShopSettings.language(this@OverlayService) == app.vaaniledger.data.AppLanguage.EN)
                         "$customer's chat"
                     else
-                        "$customer ki chat se",
+                        "$customer की चैट से",
                 )
                 startActivity(
                     android.content.Intent(

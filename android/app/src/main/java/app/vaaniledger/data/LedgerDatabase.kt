@@ -168,14 +168,21 @@ object Aging {
     fun settle(chronological: List<TransactionEntity>, now: Long = System.currentTimeMillis()): Balance {
         // Each entry is [occurredAt, remaining], oldest first.
         val debts = ArrayDeque<Pair<Long, Double>>()
+        // Paid and not yet spent against a debt: an advance, or a payment
+        // recorded before the purchase it was for. The next udhaar draws it
+        // down. Mirrors store.py.
+        var advance = 0.0
         var lastActivity: Long? = null
 
         for (tx in chronological) {
             lastActivity = maxOf(lastActivity ?: 0L, tx.occurredAt)
 
             when {
-                tx.direction == Direction.SALE.wire && tx.mode == PaymentMode.UDHAAR.wire ->
-                    debts.addLast(tx.occurredAt to tx.amount)
+                tx.direction == Direction.SALE.wire && tx.mode == PaymentMode.UDHAAR.wire -> {
+                    val used = minOf(tx.amount, advance)
+                    advance -= used
+                    if (tx.amount - used > 0) debts.addLast(tx.occurredAt to (tx.amount - used))
+                }
 
                 tx.direction == Direction.PAYMENT.wire -> {
                     var credit = tx.amount
@@ -190,8 +197,7 @@ object Aging {
                             credit = 0.0
                         }
                     }
-                    // Overpayment is not modelled: the balance floors at zero
-                    // rather than carrying an advance. Same as the server.
+                    advance += credit
                 }
             }
         }

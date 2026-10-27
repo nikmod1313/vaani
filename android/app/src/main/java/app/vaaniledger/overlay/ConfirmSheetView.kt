@@ -90,7 +90,7 @@ class ConfirmSheetView(
             setTextColor(Theme.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
             typeface = Type.bold(context)
-            letterSpacing = 0.12f
+            letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.12f)
             setPadding(0, dp(3), 0, 0)
         })
     }
@@ -152,7 +152,7 @@ class ConfirmSheetView(
                 setTextColor(muted)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
                 typeface = Type.bold(context)
-                letterSpacing = 0.12f
+                letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.12f)
                 setPadding(0, dp(4), 0, 0)
             }, LayoutParams(dp(70), LayoutParams.WRAP_CONTENT))
 

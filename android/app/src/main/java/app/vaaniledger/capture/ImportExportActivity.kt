@@ -186,7 +186,7 @@ class ImportExportActivity : Activity() {
                     if (ShopSettings.language(this@ImportExportActivity) == app.vaaniledger.data.AppLanguage.EN)
                         "From export · ${fresh.size} new messages"
                     else
-                        "Export se · ${fresh.size} naye message",
+                        "एक्सपोर्ट से · ${fresh.size} नए संदेश",
                 )
                 startActivity(Intent(this@ImportExportActivity, ReviewActivity::class.java))
                 finish()

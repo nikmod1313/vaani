@@ -216,9 +216,8 @@ class MainActivity : Activity() {
     }
 
     private fun dateLine(): String {
-        // Roman script in both languages: "HI" here is Hinglish, and a
-        // Devanagari date would be the one line of literary Hindi in the app.
-        return SimpleDateFormat("EEE, d MMM", Locale("en", "IN")).format(Date())
+        // In the interface language: "मंगल, 27 अक्तू॰" or "Tue, 27 Oct".
+        return SimpleDateFormat("EEE, d MMM", ShopSettings.language(this).locale).format(Date())
     }
 
     // ---- today ------------------------------------------------------------
@@ -270,7 +269,7 @@ class MainActivity : Activity() {
 
     private fun miniStat(label: String, value: TextView): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        addView(text(label, 10.5f, Theme.onPrimaryMuted, Type.bold(this@MainActivity)).apply { letterSpacing = 0.14f })
+        addView(text(label, 10.5f, Theme.onPrimaryMuted, Type.bold(this@MainActivity)).apply { letterSpacing = app.vaaniledger.ui.Views.tracking(text, 0.14f) })
         addView(value)
     }
 
