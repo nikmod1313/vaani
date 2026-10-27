@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .extraction.categories import LABELS, Category
-from .extraction.conversation import ResolvedOrder, Turn, build_threads, resolve
+from .extraction.conversation import ResolvedOrder, Turn, build_threads, resolve_thread
 from .extraction.numbers import normalise
 from .extraction.corrections import CorrectionStore
 from .extraction.llm import ClaudeLayer
@@ -443,7 +443,7 @@ def ingest_screen(req: ScreenRequest) -> dict:
         )
 
     threads = build_threads(turns, req.customer_name)
-    orders = [o for t in threads if (o := resolve(t, category)) is not None]
+    orders = [o for t in threads for o in resolve_thread(t, category)]
 
     return {
         "lane": "screen",

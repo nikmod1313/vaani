@@ -63,15 +63,25 @@ object ConversationResolver {
         """\bbhej\s*(?:do|dena|dijiye|de)\b""", """\bbhejo\b""", """\bbhejna\b""",
         """\bde\s*(?:do|dena|dijiye)\b""", """\bdedo\b""",
         """\bpack\s+kar\b""", """\bnikal\s*(?:do|dena)\b""",
+        """\bbhijwa\s*(?:do|dena|dijiye|de)\b""", """\bbhejiye\b""", """\bbhej\s+dijie\b""",
+        """\bdijiye\b""", """\brakh\s*(?:do|dena|dijiye|lena)\b""", """\bmangwa\w*\s+(?:do|dena|hai)\b""",
+        """\b(?:le|lena)\s+(?:aana|ana|aao|jaunga|jayenge)\b""",
+        // Writing it down IS the order for a regular customer.
+        """\blikh\s*(?:lo|lena|do|dena|dijiye|lijiye)\b""", """\bjod\s*(?:do|dena|dijiye)\b""",
+        """\badd\s+kar\w*\b""",
         // English
         """\bi\s+(?:want|need|will\s+take|'ll\s+take|ll\s+take)\b""",
         """\bwant\s+to\s+(?:buy|order|take)\b""",
         """\b(?:send|give|deliver)\s+me\b""",
+        """\b(?:please|pls|plz|kindly)\s+(?:send|deliver|give|bhej\w*|de\s*do)\b""",
+        """^\s*send\b""", """\bi\s+(?:would\s+like|require)\b""",
         """\bplace\s+an?\s+order\b""", """\bi\s+am\s+ordering\b""",
         """\bbook\s+(?:it|them|me)\b""",
         // Devanagari -- \b is unusable against matras, so whitespace bounds
         """(?<!\S)चाहिए""", """(?<!\S)खरीद\w*""", """(?<!\S)भेज\s*(?:दो|दीजिए|देना)""",
         """(?<!\S)दे\s*दो""", """(?<!\S)लूंगा""", """(?<!\S)लेना\s+है""",
+        """(?<!\S)भेजना""", """(?<!\S)भेजिए""", """(?<!\S)भिजवा""", """(?<!\S)दीजिए""",
+        """(?<!\S)लिख\s*(?:लो|लेना|दो|देना)""", """(?<!\S)रख\s*(?:दो|देना)""",
     ).map { Regex(it) }
 
     // Questions. These set the topic and must never book anything on their own.
@@ -81,18 +91,73 @@ object ConversationResolver {
         """\bkitne?\s+ka\b""", """\bkitna\b""", """\bprice\b""", """\brate\s+kya\b""",
         """\bhow\s+much\b""", """\bdo\s+you\s+have\b""", """\bis\s+there\b""",
         """(?<!\S)है\s*क्या""", """(?<!\S)कितने?\s+का""", """(?<!\S)मिलेगा""",
+        """\bkya\s+(?:aapke|apke|tumhare)\s+paas\b""", """\bkaun\s*s[aei]\b""", """\bkaunse\b""",
+        """\bkitne?\s+k[ie]\b""", """\bkya\s+rate\b""", """\bkab\s+tak\b""",
     ).map { Regex(it) }
+
+    /** "Nahi chahiye" contains "chahiye". A cancellation is never the order it cancels. */
+    private val NEGATION = listOf(
+        """\bnah?i+n?\s+chah?iye\b""", """\bmat\s+(?:bhej|de|la|bana)\w*""", """\bcancel\w*\b""",
+        """\bno\s+need\b""", """\bdon'?t\s+(?:send|need|want)\b""", """\bnot\s+(?:needed|required)\b""",
+        """\bzarurat\s+nahi\b""", """(?<!\S)नहीं\s+चाहिए""", """(?<!\S)मत\s+भेज""",
+    ).map { Regex(it) }
+
+    /**
+     * A message about goods that ALREADY moved -- a complaint, a return, a
+     * chase. "kal 3 kg aata bheja tha wo kharab tha" names an item and a
+     * quantity, and is the opposite of an order.
+     */
+    private val PAST = listOf(
+        """\b(?:tha|thi|thaa)\b""", """\bkharaa?b\b""", """\bwapa?s\b""", """\breturn\w*\b""",
+        """\bexchange\b""", """\bbadal\w*\b""", """\bnah?i\s+(?:aay?[ai]|mila|mili|pahunch\w*)\b""",
+        """\bgalat\b""", """\bdamage\w*\b""", """\bexpire\w*\b""", """\bkam\s+(?:tha|thi|aaya|aayi|nikla)\b""",
+        """\bmangwa(?:ya|yi|ye)\b""", """\bliya\s+tha\b""",
+        """(?<!\S)थ[ाीे](?!\S)""", """(?<!\S)खराब""", """(?<!\S)वापस""",
+    ).map { Regex(it) }
+
+    /** What a shopkeeper says to announce a TOTAL: "250 hua", "4300 hoga", "done, 150". */
+    private val TOTAL = listOf(
+        """\btotal\b""", """\bhu[ae]\b""", """\bhui\b""", """\bho\s+gay[aei]\b""", """\bbill\b""", """\bkul\b""",
+        """\bhog[ae]\b""", """\bbant[ae]\b""", """\bbanega\b""", """\blagenge?\b""", """\blagega\b""",
+        """\bdone\b""", """\bsab\s+mila\s*ke\b""", """\bmilakar\b""",
+        """(?<!\S)हुआ""", """(?<!\S)हुए""", """(?<!\S)कुल""", """(?<!\S)टोटल""", """(?<!\S)होगा""",
+    ).map { Regex(it) }
+
+    /** ...and a price for ONE: "450 ki ek", "10 ka ek", "500 each". */
+    private val RATE = listOf(
+        """\beach\b""", """\bper\b""", """\bprati\b""", """\b(?:ka|ki|ke)\s+(?:ek|1)\b""",
+        """\b(?:ek|1)\s+(?:ka|ki|ke)\b""", """\bpiece\b""", """\bonwards\b""", """\bse\s+shuru\b""",
+        """(?<!\S)प्रति""", """(?<!\S)(?:का|की)\s+एक""",
+    ).map { Regex(it) }
+
+    /** "write it down" on an amount with nothing named is still a khata entry. */
+    private val CREDIT_ENTRY = Regex("""\blikh\w*|\budhaa?r\w*|\bkhaate?\b|(?<!\S)उधार|(?<!\S)लिख""")
 
     /** Did this turn actually order something? */
     fun isCommitment(text: String): Boolean {
         val norm = NumberParser.normalise(text)
+        if (NEGATION.any { it.containsMatchIn(norm) }) return false
         return COMMIT.any { it.containsMatchIn(norm) }
     }
 
     /** Is this a question about availability or price? */
     fun isEnquiry(text: String): Boolean {
+        if ('?' in text) return true
         val norm = NumberParser.normalise(text)
         return ENQUIRY.any { it.containsMatchIn(norm) }
+    }
+
+    /**
+     * An order with no ordering verb: a list of things with quantities. Most
+     * WhatsApp orders to a kirana arrive this way. Refused: a question, a
+     * cancellation, a complaint about goods already delivered, a payment.
+     */
+    fun isImplicitOrder(text: String, rules: RulesEngine.RuleResult): Boolean {
+        if (rules.items.none { it.quantity != null }) return false
+        if (rules.direction == RulesEngine.Direction.PAYMENT || isEnquiry(text)) return false
+        val norm = NumberParser.normalise(text)
+        if (NEGATION.any { it.containsMatchIn(norm) }) return false
+        return PAST.none { it.containsMatchIn(norm) }
     }
 
     // ----------------------------------------------------------------------
@@ -225,147 +290,258 @@ object ConversationResolver {
         return null
     }
 
-    /**
-     * Turn one thread into at most one order.
-     *
-     * Returns null when the thread never committed to anything, which is the
-     * common case and the point -- most chat is not an order.
-     */
-    fun resolve(thread: Thread, category: ShopCategory): ResolvedOrder? {
-        if (thread.turns.isEmpty()) return null
+    private fun merged(existing: LineItem, named: LineItem) = LineItem(
+        name = named.name,
+        quantity = named.quantity ?: existing.quantity,
+        unit = named.unit ?: existing.unit,
+        modifier = named.modifier ?: existing.modifier,
+        unitPrice = named.unitPrice ?: existing.unitPrice,
+    )
 
-        // Keyed by (modifier, name) and insertion-ordered, so "yellow kurti"
-        // and "blue kurti" are two lines while two mentions of either are one.
+    /**
+     * Add a mention to a running set of items. The same name merges,
+     * DIFFERENT names accumulate, and a mention without a modifier merges
+     * into the single one that has one -- "2kg tamatar" then "organic grown
+     * tamatar" is one line. Mirrors `_merge_item`.
+     */
+    private fun mergeItem(store: LinkedHashMap<Pair<String, String>, LineItem>, named: LineItem) {
+        val key = (named.modifier ?: "") to named.name
+        val existing = store[key]
+        if (existing != null) {
+            store[key] = merged(existing, named)
+            return
+        }
+        val same = store.keys.filter { it.second == named.name && (it.first.isEmpty() || key.first.isEmpty()) }
+        if (same.size == 1) {
+            val old = same[0]
+            val prior = store.remove(old)!!
+            store[if (key.first.isNotEmpty()) key else old] = merged(prior, named)
+            return
+        }
+        store[key] = named
+    }
+
+    /** "400 kilo" -- a shopkeeper's price PER UNIT, said the short way. */
+    private fun shopUnitRate(text: String, category: ShopCategory): Double? {
+        val numbers = NumberParser.findNumbers(text)
+        if (numbers.size != 1) return null
+        val (value, matched) = numbers[0]
+        val units = RulesEngine.unitTable(category)
+        val tokens = NumberParser.normalise(text).split(" ").filter { it.isNotEmpty() }
+        val tail = matched.split(" ").lastOrNull { it.isNotEmpty() } ?: matched
+        for ((k, tok) in tokens.withIndex()) {
+            if (tok.trim('.') == tail && k + 1 < tokens.size) {
+                return if (tokens[k + 1].trim('.') in units && value >= 20) value else null
+            }
+        }
+        return null
+    }
+
+    /**
+     * Turn one thread into its orders: at most one sale and one payment.
+     *
+     * A port of `resolve_thread`. What a shopkeeper's number means depends
+     * on what they SAY ("hua", "total", "each"), then on the size of any
+     * quantity in the quote, then on WHEN it was said: before the customer
+     * ordered it answers "what does it cost", after it "what do I owe".
+     * Reading the second as a rate multiplied a real Rs 60 bill for two
+     * strips of tablets to Rs 4,22,500.
+     */
+    fun resolveThread(thread: Thread, category: ShopCategory): List<ResolvedOrder> {
+        if (thread.turns.isEmpty()) return emptyList()
+
         val topics = LinkedHashMap<Pair<String, String>, LineItem>()
+        val ordered = LinkedHashMap<Pair<String, String>, LineItem>()
         var topicTurn: Turn? = null
         var paymentTurn: Turn? = null
         var paymentRules: RulesEngine.RuleResult? = null
+        var paymentIndex = -1
         var quotedRate: Double? = null
         var quotedTotal: Double? = null
         var quotedTotalQty: Double? = null
+        var shopTotal: Double? = null
+        var shopTotalIndex = -1
+        var customerAmount: Double? = null
         var shopRunQty: Double? = null
         var previousSpeakerWasShop: Boolean? = null
         var commitTurn: Turn? = null
         var commitRules: RulesEngine.RuleResult? = null
+        var commitIndex = -1
+        var lastItemCommitIndex = -1
+        var creditEntry: Pair<Turn, Double>? = null
         val signals = mutableListOf<String>()
 
-        for (turn in thread.turns) {
+        for ((index, turn) in thread.turns.withIndex()) {
             val rules = RulesEngine.applyRules(turn.body, category)
 
-            // A customer saying the money has arrived settles a balance.
-            // Checked before anything else, because a payment turn has no
-            // items and the machinery below would throw the thread away.
             if (turn.isCustomer && rules.direction == RulesEngine.Direction.PAYMENT) {
-                paymentTurn = turn
-                paymentRules = rules
+                paymentTurn = turn; paymentRules = rules; paymentIndex = index
             }
 
-            // Whoever names an item sets the topic. The same name merges,
-            // keeping whichever mention stated each field; DIFFERENT names
-            // accumulate. "8 yellow kurtis and 2 blue kurtis" is one order for
-            // two things, and keeping only the last silently dropped four
-            // thousand rupees of yellow kurtis off a real bill.
             for (named in rules.items) {
-                val key = (named.modifier ?: "") to named.name
-                val existing = topics[key]
-                topics[key] = if (existing != null) {
-                    LineItem(
-                        name = named.name,
-                        quantity = named.quantity ?: existing.quantity,
-                        unit = named.unit ?: existing.unit,
-                        modifier = named.modifier ?: existing.modifier,
-                        unitPrice = named.unitPrice ?: existing.unitPrice,
-                    )
-                } else named
+                mergeItem(topics, named)
                 topicTurn = turn
                 named.unitPrice?.let { quotedRate = it }
             }
 
-            // A price the shopkeeper states. RATE or TOTAL is decided by the
-            // SIZE of the quantity in the quote:
-            //
-            //     "500 ka"        no quantity  -> what one costs     x qty
-            //     "500 for 1kg"   quantity 1   -> a per-unit rate    x qty
-            //     "2kg for 500"   quantity 2   -> a total for that bundle
-            //
-            // Runs rather than single messages, because a quote routinely
-            // arrives split: "2kg for" then "500 only".
             if (turn.isShopkeeper) {
                 if (previousSpeakerWasShop == false) shopRunQty = null
-                var stated = measureQuantity(turn.body, category)
-                if (stated == null) stated = rules.items.lastOrNull()?.quantity
-                if (stated != null) shopRunQty = stated
+                val unitRate = shopUnitRate(turn.body, category)
+                if (unitRate != null) {
+                    quotedRate = unitRate
+                    signals.add("shop-quoted-rate")
+                } else {
+                    var stated = measureQuantity(turn.body, category)
+                    if (stated == null) stated = rules.items.lastOrNull()?.quantity
+                    if (stated != null) shopRunQty = stated
 
-                rules.amount?.let { amount ->
-                    val runQty = shopRunQty
-                    if (runQty != null && runQty > 1) {
-                        quotedTotal = amount
-                        quotedTotalQty = runQty
-                        signals.add("shop-quoted-total")
-                    } else {
-                        quotedRate = amount
-                        signals.add("shop-quoted-rate")
+                    val amount = rules.amount
+                    if (amount != null) {
+                        val norm = NumberParser.normalise(turn.body)
+                        val saysTotal = TOTAL.any { it.containsMatchIn(norm) }
+                        val saysRate = RATE.any { it.containsMatchIn(norm) } ||
+                            rules.items.any { it.unitPrice != null }
+                        val runQty = shopRunQty
+                        when {
+                            saysTotal && !saysRate -> {
+                                shopTotal = amount; shopTotalIndex = index
+                                signals.add("shop-stated-total")
+                            }
+                            saysRate -> { quotedRate = amount; signals.add("shop-quoted-rate") }
+                            runQty != null && runQty > 1 -> {
+                                quotedTotal = amount; quotedTotalQty = runQty
+                                signals.add("shop-quoted-total")
+                            }
+                            runQty != null -> { quotedRate = amount; signals.add("shop-quoted-rate") }
+                            commitIndex >= 0 || topics.size > 1 -> {
+                                shopTotal = amount; shopTotalIndex = index
+                                signals.add("shop-stated-total")
+                            }
+                            else -> { quotedRate = amount; signals.add("shop-quoted-rate") }
+                        }
                     }
                 }
             }
             previousSpeakerWasShop = turn.isShopkeeper
 
-            if (turn.isCustomer && isCommitment(turn.body)) {
-                commitTurn = turn
-                commitRules = rules
+            if (turn.isCustomer && (isCommitment(turn.body) || isImplicitOrder(turn.body, rules))) {
+                commitTurn = turn; commitRules = rules; commitIndex = index
+                if (rules.items.isNotEmpty()) {
+                    rules.items.forEach { mergeItem(ordered, it) }
+                    lastItemCommitIndex = index
+                }
+                if (rules.amount != null &&
+                    rules.amountSource in setOf("currency-adjacent", "mode-adjacent", "line-totals") &&
+                    rules.direction != RulesEngine.Direction.PAYMENT
+                ) customerAmount = rules.amount
             }
+
+            if (turn.isCustomer && rules.items.isEmpty() && rules.amount != null &&
+                rules.amountSource in setOf("currency-adjacent", "mode-adjacent") &&
+                rules.direction != RulesEngine.Direction.PAYMENT &&
+                CREDIT_ENTRY.containsMatchIn(NumberParser.normalise(turn.body))
+            ) creditEntry = turn to rules.amount
         }
 
-        // ---- a payment settles a balance --------------------------------
-        //
-        // Emitted before the sale path and independently of it: a payment
-        // needs no item, no commitment and no topic, so every guard below
-        // would throw it away. The amount is whatever the message stated;
-        // stating none returns null rather than a guess, and the review card
-        // asks. Guessing would clear a debt by an amount nobody agreed.
-        val paid = paymentTurn
-        val paidRules = paymentRules
-        if (paid != null && paidRules != null) {
-            var paidMode = PaymentMode.UNKNOWN.wire
-            for (turn in thread.turns) {
-                val (detected, _) = RulesEngine.detectMode(turn.body)
-                if (detected != PaymentMode.UNKNOWN) paidMode = detected.wire
-            }
-            return ResolvedOrder(
-                customer = thread.customer,
-                items = emptyList(),
-                amount = paidRules.amount,
-                mode = if (paidMode != PaymentMode.UNKNOWN.wire) paidMode else "cash",
-                canonicalText = paid.body,
-                evidence = "${paid.sender}: ${paid.body}",
-                occurredAt = paid.timestamp,
-                contentHashes = thread.hashes,
-                signals = (signals + "customer-paid").distinct(),
-                carriedTopic = false,
-                direction = "payment",
+        var sale = resolveSale(
+            thread, category, topics, ordered, topicTurn, commitTurn, commitRules,
+            quotedRate, quotedTotal, quotedTotalQty,
+            if (shopTotalIndex > lastItemCommitIndex) shopTotal else null,
+            customerAmount, signals, excludeModeFrom = paymentIndex,
+        )
+
+        val entry = creditEntry
+        if (sale == null && entry != null) {
+            val (turn, amount) = entry
+            sale = ResolvedOrder(
+                customer = thread.customer, items = emptyList(), amount = amount,
+                mode = PaymentMode.UDHAAR.wire, canonicalText = turn.body,
+                evidence = "${turn.sender}: ${turn.body}", occurredAt = turn.timestamp,
+                contentHashes = thread.hashes, signals = listOf("credit-entry"),
+                carriedTopic = false, direction = "sale",
             )
         }
 
-        val commit = commitTurn ?: return null
-        val commitResult = commitRules ?: return null
-        // Committed to something we cannot name. An unnamed line in a khata
-        // is not evidence of anything and cannot be checked later.
+        val paid = paymentTurn
+        val paidRules = paymentRules
+        var paidSeparately = paid != null && paidRules != null
+        val current = sale
+        if (current != null && paid != null && paidRules != null && paymentIndex > commitIndex && commitIndex >= 0) {
+            // Money sent right after an order, for that order or with no
+            // figure of its own, is how the order was PAID -- not a separate
+            // debt being cleared.
+            val paidAmount = paidRules.amount
+            if (paidAmount == null || current.amount == null || Math.abs(paidAmount - current.amount) < 0.01) {
+                val (detected, _) = RulesEngine.detectMode(paid.body)
+                val mode = when {
+                    detected != PaymentMode.UNKNOWN -> detected.wire
+                    current.mode == PaymentMode.UNKNOWN.wire || current.mode == PaymentMode.UDHAAR.wire ->
+                        PaymentMode.CASH.wire
+                    else -> current.mode
+                }
+                sale = current.copy(
+                    mode = mode,
+                    amount = current.amount ?: paidAmount,
+                    signals = current.signals + "paid-on-order",
+                )
+                paidSeparately = false
+            }
+        }
+
+        val out = mutableListOf<ResolvedOrder>()
+        sale?.let { out.add(it) }
+
+        if (paidSeparately && paid != null && paidRules != null) {
+            // A payment naming no instrument keeps "unknown": calling it cash
+            // would be a guess the khata then reports as fact.
+            val (detected, _) = RulesEngine.detectMode(paid.body)
+            out.add(
+                ResolvedOrder(
+                    customer = thread.customer,
+                    items = emptyList(),
+                    amount = paidRules.amount,
+                    mode = detected.wire,
+                    canonicalText = paid.body,
+                    evidence = "${paid.sender}: ${paid.body}",
+                    occurredAt = paid.timestamp,
+                    contentHashes = thread.hashes,
+                    signals = (signals + "customer-paid").distinct(),
+                    carriedTopic = false,
+                    direction = "payment",
+                )
+            )
+        }
+        return out
+    }
+
+    private fun resolveSale(
+        thread: Thread,
+        category: ShopCategory,
+        topics: LinkedHashMap<Pair<String, String>, LineItem>,
+        ordered: LinkedHashMap<Pair<String, String>, LineItem>,
+        topicTurn: Turn?,
+        commit: Turn?,
+        commitResult: RulesEngine.RuleResult?,
+        quotedRate: Double?,
+        quotedTotal: Double?,
+        quotedTotalQty: Double?,
+        shopTotal: Double?,
+        customerAmount: Double?,
+        signals: List<String>,
+        excludeModeFrom: Int,
+    ): ResolvedOrder? {
+        if (commit == null || commitResult == null) return null
+        // Committed to something we cannot name.
         if (topics.isEmpty()) return null
 
         val uniqueSignals = signals.distinct().toMutableList()
         uniqueSignals.add("customer-commitment")
 
-        // ---- the items --------------------------------------------------
-        //
-        // ALL of them, not the last. The carried copies deliberately drop the
-        // quantity: the commitment gets first claim on it below, and copying
-        // it here let a number the topic never really stated win -- "do you
-        // have red saree" parses the English "do" as the Hindi two, which
-        // "i want 3 pieces" must be able to overrule.
+        // ---- the items: everything committed to, else the carried topic --
         val items: MutableList<LineItem>
         val carried: Boolean
-        if (commitResult.items.isNotEmpty()) {
-            items = commitResult.items.toMutableList()
+        if (ordered.isNotEmpty()) {
+            items = ordered.values.toMutableList()
             carried = false
         } else {
             items = topics.values.map {
@@ -378,12 +554,7 @@ object ConversationResolver {
             uniqueSignals.add("carried-topic")
         }
 
-        // ---- the quantity -----------------------------------------------
-        //
-        // A bare number in the commitment can only attach when there is ONE
-        // thing it could belong to. "2 chahiye" against a single topic is two
-        // of that; against "yellow kurti and blue kurti" it is genuinely
-        // ambiguous, and splitting or duplicating it would invent a quantity.
+        // ---- the quantity -------------------------------------------------
         if (items.size == 1 && items[0].quantity == null) {
             val (quantity, unit) = bareQuantity(commit.body, category)
             if (quantity != null) {
@@ -391,9 +562,6 @@ object ConversationResolver {
                 uniqueSignals.add("quantity-from-commitment")
             }
         }
-
-        // Anything still without a quantity takes the one its own topic
-        // established earlier in the thread.
         for (i in items.indices) {
             if (items[i].quantity != null) continue
             val established = topics[(items[i].modifier ?: "") to items[i].name] ?: continue
@@ -402,34 +570,29 @@ object ConversationResolver {
                     quantity = established.quantity,
                     unit = established.unit ?: items[i].unit,
                 )
-                if (!uniqueSignals.contains("quantity-from-topic")) {
-                    uniqueSignals.add("quantity-from-topic")
+                if (!uniqueSignals.contains("quantity-from-topic")) uniqueSignals.add("quantity-from-topic")
+            }
+        }
+
+        // ---- the rate: never on top of a total the shop already stated ----
+        if (shopTotal == null) {
+            for (i in items.indices) {
+                if (items[i].unitPrice == null && quotedRate != null && items[i].quantity != null) {
+                    items[i] = items[i].copy(unitPrice = quotedRate)
+                    if (!uniqueSignals.contains("rate-from-quote")) uniqueSignals.add("rate-from-quote")
                 }
             }
         }
 
-        // ---- the rate ---------------------------------------------------
-        // Only as a PER-UNIT price where the quantity is known; multiplying by
-        // a guessed quantity is how a Rs 500 sale becomes Rs 1500.
-        for (i in items.indices) {
-            if (items[i].unitPrice == null && quotedRate != null && items[i].quantity != null) {
-                items[i] = items[i].copy(unitPrice = quotedRate)
-                if (!uniqueSignals.contains("rate-from-quote")) {
-                    uniqueSignals.add("rate-from-quote")
-                }
-            }
-        }
-
-        // ---- mode -------------------------------------------------------
+        // ---- mode ---------------------------------------------------------
         var mode = PaymentMode.UNKNOWN.wire
-        for (turn in thread.turns) {
+        for ((index, turn) in thread.turns.withIndex()) {
+            if (index == excludeModeFrom) continue
             val (detected, _) = RulesEngine.detectMode(turn.body)
             if (detected != PaymentMode.UNKNOWN) mode = detected.wire
         }
 
-        // ---- canonical form ---------------------------------------------
-        // Rebuilt in the order the parser expects -- quantity, unit, modifier,
-        // noun -- rather than by pasting turns together.
+        // ---- canonical form -----------------------------------------------
         fun phrase(item: LineItem): String {
             val parts = mutableListOf<String>()
             item.quantity?.let { q ->
@@ -455,27 +618,32 @@ object ConversationResolver {
             }
             .joinToString("\n") { "${it.sender}: ${it.body}" }
 
-        // A quoted TOTAL is the amount outright. Ordering a DIFFERENT quantity
-        // off a bundle quote is flagged, never scaled by division.
+        // ---- the amount ---------------------------------------------------
+        // The shop's stated total for THIS order, then rate x quantity, then
+        // a quoted bundle total, then the customer's own figure. Nothing is
+        // ever divided.
         val lineTotals = items.mapNotNull { it.lineTotal }
         var amount: Double? =
             if (items.isNotEmpty() && lineTotals.size == items.size) {
                 Math.round(lineTotals.sum() * 100.0) / 100.0
             } else null
 
-        val total = quotedTotal
-        if (total != null && amount == null) {
-            amount = total
+        if (shopTotal != null) {
+            amount = shopTotal
+        } else if (quotedTotal != null && amount == null) {
+            amount = quotedTotal
             if (items.size == 1) {
                 val q = items[0].quantity
-                val bq = quotedTotalQty
-                if (q != null && bq != null && Math.abs(q - bq) > 1e-9) {
+                if (q != null && quotedTotalQty != null && Math.abs(q - quotedTotalQty) > 1e-9) {
                     uniqueSignals.add("bundle-quantity-mismatch")
                 }
             }
-        } else if (amount == null && items.all { it.quantity == null }) {
-            amount = quotedRate
         }
+        if (amount == null && customerAmount != null) {
+            amount = customerAmount
+            uniqueSignals.add("customer-stated-amount")
+        }
+        if (amount == null && items.all { it.quantity == null }) amount = quotedRate
 
         return ResolvedOrder(
             customer = thread.customer,
@@ -492,6 +660,10 @@ object ConversationResolver {
         )
     }
 
+    /** The thread's main order: its sale if it has one, else its payment. */
+    fun resolve(thread: Thread, category: ShopCategory): ResolvedOrder? =
+        resolveThread(thread, category).firstOrNull()
+
     /** Thread a whole chat and resolve every order in it. */
     fun resolveAll(
         turns: List<Turn>,
@@ -499,7 +671,7 @@ object ConversationResolver {
         category: ShopCategory,
         gapMinutes: Long = 45,
     ): List<ResolvedOrder> =
-        buildThreads(turns, customer, gapMinutes).mapNotNull { resolve(it, category) }
+        buildThreads(turns, customer, gapMinutes).flatMap { resolveThread(it, category) }
 
     // ----------------------------------------------------------------------
     // Into the shape the review queue renders

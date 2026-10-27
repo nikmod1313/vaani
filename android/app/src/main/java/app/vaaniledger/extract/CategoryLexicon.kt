@@ -33,6 +33,31 @@ object CategoryLexicon {
         "bread", "ब्रेड", "paneer", "पनीर", "ghee", "घी",
         "shampoo", "शैम्पू", "colgate", "toothpaste", "manjan",
         "agarbatti", "अगरबत्ती", "matchbox", "mombatti",
+        // Ported from categories.py with the vocabulary expansion -- see that
+        // file for why each group is here.
+        "aam", "achar", "adrak", "ajwain", "akhrot", "allout", "amrood", "anaar", "angoor",
+        "ariel", "badam", "baingan", "besan", "bhindi", "bhujia", "bisleri", "blade", "boost",
+        "bournvita", "britannia", "bun", "butter", "cake", "chaach", "chana", "cheese",
+        "chhole", "chicken", "chiku", "chips", "chole", "coffee", "coke", "colddrink",
+        "coldrink", "colin", "complan", "cornflakes", "dalchini", "daliya", "dettol",
+        "dhaniya", "elaichi", "fanta", "foil", "frooti", "gajar", "gobhi", "gobi", "goodday",
+        "goodknight", "gud", "handwash", "harpic", "hing", "honey", "horlicks", "ilaichi",
+        "imli", "jam", "jeera", "juice", "kaddu", "kaju", "kalimirch", "karela", "kela",
+        "ketchup", "khari", "kheera", "kishmish", "kurkure", "lahsun", "lassi", "lauki",
+        "laung", "lays", "lifebuoy", "lizol", "lobia", "lux", "maaza", "machli", "maida",
+        "makhan", "makhana", "malai", "marie", "matar", "methi", "mishri", "mixture", "mooli",
+        "moongfali", "mortein", "mungfali", "mutton", "namkeen", "nimbu", "nirma", "oats",
+        "odonil", "oreo", "palak", "pani", "papad", "papita", "parachute", "parle", "peanut",
+        "pepsi", "phenyl", "pickle", "poha", "powder", "pudina", "pyaaz", "rai", "rajma",
+        "rava", "rawa", "razor", "rin", "rusk", "sabudana", "sabzi", "santra", "sauce",
+        "saunf", "seb", "shahad", "shakkar", "shimla", "slice", "soda", "sooji", "sprite",
+        "suji", "tarbooz", "thumsup", "tide", "tinda", "tissue", "toast", "toothbrush",
+        "vaseline", "vim", "water", "zeera", "अंगूर", "अचार", "अजवाइन", "अदरक", "अनार", "आम",
+        "इमली", "इलायची", "करेला", "काजू", "किशमिश", "केला", "कॉफी", "खीरा", "गाजर", "गुड़",
+        "गोभी", "चना", "जीरा", "दलिया", "दालचीनी", "धनिया", "नमकीन", "नींबू", "पाउडर", "पानी",
+        "पापड़", "पालक", "पुदीना", "पोहा", "बादाम", "बेसन", "बैंगन", "भिंडी", "भुजिया",
+        "मक्खन", "मटर", "मलाई", "मूंगफली", "मूली", "मेथी", "मैदा", "राई", "राजमा", "लहसुन",
+        "लौंग", "लौकी", "शक्कर", "संतरा", "सब्जी", "साबूदाना", "सूजी", "सेब", "सौंफ", "हींग",
     )
 
     private val APPAREL = setOf(
@@ -59,6 +84,10 @@ object CategoryLexicon {
         "dawai", "dava", "दवाई", "दवा", "medicine", "paracetamol", "crocin",
         "dolo", "combiflam", "disprin", "eno", "digene", "syringe",
         "thermometer", "glucose", "ors", "inhaler", "sanitary", "napkin",
+        // Ported from categories.py with the vocabulary expansion -- see that
+        // file for why each group is here.
+        "allegra", "azithral", "benadryl", "betadine", "cetirizine", "dettol", "gelusil",
+        "iodex", "moov", "pan", "pantop", "savlon", "vicks", "volini",
     )
 
     private val HARDWARE = setOf(
@@ -71,6 +100,10 @@ object CategoryLexicon {
         "plywood", "hinge", "kabza", "कब्ज़ा", "lock", "tala", "ताला",
         "chain", "rassi", "रस्सी", "rope", "balti", "बाल्टी", "bucket",
         "mug", "मग", "tile", "tiles", "टाइल",
+        // Ported from categories.py with the vocabulary expansion -- see that
+        // file for why each group is here.
+        "bolt", "distemper", "elbow", "fevicol", "nut", "primer", "putty", "sealant", "socket",
+        "thinner", "valve", "washer", "पुट्टी",
     )
 
     private val STATIONERY = setOf(
@@ -81,6 +114,9 @@ object CategoryLexicon {
         "colour", "color", "crayon", "scale", "ruler", "sharpener",
         "stapler", "pin", "clip", "tape", "gum", "glue", "fevicol",
         "envelope", "lifafa", "लिफाफा", "card", "calculator", "bastaa",
+        // Ported from categories.py with the vocabulary expansion -- see that
+        // file for why each group is here.
+        "bag", "compass", "diary", "refill",
     )
 
     private val ELECTRONICS = setOf(
@@ -92,6 +128,9 @@ object CategoryLexicon {
         "fan", "पंखा", "pankha", "iron", "istri", "इस्त्री", "heater",
         "extension", "plug", "socket", "remote", "रिमोट",
         "watch", "घड़ी", "ghadi", "torch", "टॉर्च",
+        // Ported from categories.py with the vocabulary expansion -- see that
+        // file for why each group is here.
+        "board", "card",
     )
 
     /** Sold by every kind of shop. Always in scope. */
@@ -132,12 +171,32 @@ object CategoryLexicon {
         "xl", "xxl", "xs", "s", "m", "l", "free", "size",
     )
 
+    /**
+     * Grocery varieties and brands. "toor dal" and "moong dal" are two
+     * different lines; without these they both became "dal" and the threader
+     * merged them into one. Some are nouns as well ("chana", "dettol") --
+     * RulesEngine reads those as a modifier only when an item follows.
+     */
+    private val GROCERY = setOf(
+        "aashirvaad", "amul", "arhar", "ariel", "basmati", "bikaji", "britannia", "brown",
+        "chana", "colgate", "dabur", "desi", "dettol", "double", "everest", "fortune", "fresh",
+        "full", "garam", "groundnut", "haldiram", "hari", "harpic", "kali", "kolam", "lal",
+        "lifebuoy", "lizol", "lux", "masoor", "mdh", "moong", "mother", "mung", "mustard",
+        "nestle", "nirma", "organic", "parle", "patanjali", "refined", "rin", "sarso",
+        "sarson", "sona", "surf", "tata", "tide", "toned", "toor", "tuar", "urad", "vim",
+        "white",
+    )
+
+    private val STATIONERY_MODIFIERS = setOf(
+        "double", "drawing", "geometry", "long", "practical", "single",
+    )
+
     private val MODIFIERS: Map<ShopCategory, Set<String>> = mapOf(
         ShopCategory.APPAREL to (COLOURS + SIZES),
         ShopCategory.HARDWARE to (COLOURS + SIZES),
         ShopCategory.ELECTRONICS to (COLOURS + SIZES),
-        ShopCategory.STATIONERY to COLOURS,
-        ShopCategory.KIRANA to emptySet(),
+        ShopCategory.STATIONERY to (COLOURS + STATIONERY_MODIFIERS),
+        ShopCategory.KIRANA to GROCERY,
         ShopCategory.PHARMACY to emptySet(),
         ShopCategory.GENERAL to emptySet(),
     )
@@ -158,7 +217,8 @@ object CategoryLexicon {
         ShopCategory.PHARMACY to mapOf(
             "strip" to "strip", "स्ट्रिप" to "strip", "tab" to "tab",
             "tabs" to "tab", "vial" to "vial", "tube" to "tube",
-            "sachet" to "sachet",
+            "sachet" to "sachet", "patta" to "strip", "patte" to "strip",
+            "पत्ता" to "strip", "strips" to "strip",
         ),
         ShopCategory.HARDWARE to mapOf(
             "bag" to "bag", "boro" to "sack", "feet" to "ft", "ft" to "ft",
@@ -178,6 +238,9 @@ object CategoryLexicon {
     // ----------------------------------------------------------------------
     // Public accessors
     // ----------------------------------------------------------------------
+
+    /** The chemist's nouns -- the ones whose trailing number is a strength. */
+    fun pharmacyItems(): Set<String> = PHARMACY
 
     /** Every item noun any category knows. */
     fun allKnownItems(): Set<String> =

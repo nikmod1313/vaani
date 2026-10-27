@@ -526,7 +526,7 @@ object Scaffold {
         content: View,
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = PaperBackground(this@page)
+        background = PaperBackground(this@page, pattern = true)
 
         addView(
             ScrollView(this@page).apply {

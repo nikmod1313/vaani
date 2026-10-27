@@ -67,15 +67,25 @@ _COMMIT_PATTERNS = [
     r"\bbhej\s*(?:do|dena|dijiye|de)\b", r"\bbhejo\b", r"\bbhejna\b",
     r"\bde\s*(?:do|dena|dijiye)\b", r"\bdedo\b",
     r"\bpack\s+kar\b", r"\bnikal\s*(?:do|dena)\b",
+    r"\bbhijwa\s*(?:do|dena|dijiye|de)\b", r"\bbhejiye\b", r"\bbhej\s+dijie\b",
+    r"\bdijiye\b", r"\brakh\s*(?:do|dena|dijiye|lena)\b", r"\bmangwa\w*\s+(?:do|dena|hai)\b",
+    r"\b(?:le|lena)\s+(?:aana|ana|aao|jaunga|jayenge)\b",
+    # Writing it down IS the order for a regular customer.
+    r"\blikh\s*(?:lo|lena|do|dena|dijiye|lijiye)\b", r"\bjod\s*(?:do|dena|dijiye)\b",
+    r"\badd\s+kar\w*\b",
     # English
     r"\bi\s+(?:want|need|will\s+take|'ll\s+take|ll\s+take)\b",
     r"\bwant\s+to\s+(?:buy|order|take)\b",
     r"\b(?:send|give|deliver)\s+me\b",
+    r"\b(?:please|pls|plz|kindly)\s+(?:send|deliver|give|bhej\w*|de\s*do)\b",
+    r"^\s*send\b", r"\bi\s+(?:would\s+like|require)\b",
     r"\bplace\s+an?\s+order\b", r"\bi\s+am\s+ordering\b",
     r"\bbook\s+(?:it|them|me)\b",
     # Devanagari -- \b is unusable here, see rules.DEVA_START
     r"(?<!\S)चाहिए", r"(?<!\S)खरीद\w*", r"(?<!\S)भेज\s*(?:दो|दीजिए|देना)",
     r"(?<!\S)दे\s*दो", r"(?<!\S)लूंगा", r"(?<!\S)लेना\s+है",
+    r"(?<!\S)भेजना", r"(?<!\S)भेजिए", r"(?<!\S)भिजवा", r"(?<!\S)दीजिए",
+    r"(?<!\S)लिख\s*(?:लो|लेना|दो|देना)", r"(?<!\S)रख\s*(?:दो|देना)",
 ]
 
 # Questions. These set the topic and must never book anything on their own.
@@ -85,22 +95,93 @@ _ENQUIRY_PATTERNS = [
     r"\bkitne?\s+ka\b", r"\bkitna\b", r"\bprice\b", r"\brate\s+kya\b",
     r"\bhow\s+much\b", r"\bdo\s+you\s+have\b", r"\bis\s+there\b",
     r"(?<!\S)है\s*क्या", r"(?<!\S)कितने?\s+का", r"(?<!\S)मिलेगा",
+    r"\bkya\s+(?:aapke|apke|tumhare)\s+paas\b", r"\bkaun\s*s[aei]\b", r"\bkaunse\b",
+    r"\bkitne?\s+k[ie]\b", r"\bkya\s+rate\b", r"\bkab\s+tak\b",
 ]
+
+# "Nahi chahiye" contains "chahiye". A cancellation must never read as the
+# order it cancels.
+_NEGATION_PATTERNS = [
+    r"\bnah?i+n?\s+chah?iye\b", r"\bmat\s+(?:bhej|de|la|bana)\w*", r"\bcancel\w*\b",
+    r"\bno\s+need\b", r"\bdon'?t\s+(?:send|need|want)\b", r"\bnot\s+(?:needed|required)\b",
+    r"\bzarurat\s+nahi\b", r"(?<!\S)नहीं\s+चाहिए", r"(?<!\S)मत\s+भेज",
+]
+
+# A message about goods that ALREADY moved -- a complaint, a return, a
+# chase. "kal 3 kg aata bheja tha wo kharab tha" names an item and a
+# quantity, and is the opposite of an order.
+_PAST_PATTERNS = [
+    r"\b(?:tha|thi|thaa)\b", r"\bkharaa?b\b", r"\bwapa?s\b", r"\breturn\w*\b",
+    r"\bexchange\b", r"\bbadal\w*\b", r"\bnah?i\s+(?:aay?[ai]|mila|mili|pahunch\w*)\b",
+    r"\bgalat\b", r"\bdamage\w*\b", r"\bexpire\w*\b", r"\bkam\s+(?:tha|thi|aaya|aayi|nikla)\b",
+    r"\bmangwa(?:ya|yi|ye)\b", r"\bliya\s+tha\b",
+    r"(?<!\S)थ[ाीे](?!\S)", r"(?<!\S)खराब", r"(?<!\S)वापस",
+]
+
+# What a shopkeeper says to announce a TOTAL rather than a price for one:
+# "250 hua", "130 hua total", "4300 hoga", "done, 150".
+_TOTAL_PATTERNS = [
+    r"\btotal\b", r"\bhu[ae]\b", r"\bhui\b", r"\bho\s+gay[aei]\b", r"\bbill\b", r"\bkul\b",
+    r"\bhog[ae]\b", r"\bbant[ae]\b", r"\bbanega\b", r"\blagenge?\b", r"\blagega\b",
+    r"\bdone\b", r"\bsab\s+mila\s*ke\b", r"\bmilakar\b",
+    r"(?<!\S)हुआ", r"(?<!\S)हुए", r"(?<!\S)कुल", r"(?<!\S)टोटल", r"(?<!\S)होगा",
+]
+# ...and a price for ONE: "450 ki ek", "10 ka ek", "500 each".
+_RATE_PATTERNS = [
+    r"\beach\b", r"\bper\b", r"\bprati\b", r"\b(?:ka|ki|ke)\s+(?:ek|1)\b",
+    r"\b(?:ek|1)\s+(?:ka|ki|ke)\b", r"\bpiece\b", r"\bonwards\b", r"\bse\s+shuru\b",
+    r"(?<!\S)प्रति", r"(?<!\S)(?:का|की)\s+एक",
+]
+
+# Saying "write it down" on an amount with nothing named is still a khata
+# entry: "Rs.250/- ka saman likh lo".
+_CREDIT_ENTRY = re.compile(r"\blikh\w*|\budhaa?r\w*|\bkhaate?\b|(?<!\S)उधार|(?<!\S)लिख")
 
 _COMMIT_RE = [re.compile(p) for p in _COMMIT_PATTERNS]
 _ENQUIRY_RE = [re.compile(p) for p in _ENQUIRY_PATTERNS]
+_NEGATION_RE = [re.compile(p) for p in _NEGATION_PATTERNS]
+_PAST_RE = [re.compile(p) for p in _PAST_PATTERNS]
+_TOTAL_RE = [re.compile(p) for p in _TOTAL_PATTERNS]
+_RATE_RE = [re.compile(p) for p in _RATE_PATTERNS]
 
 
 def is_commitment(text: str) -> bool:
     """Did this turn actually order something?"""
     norm = normalise(text)
+    if any(r.search(norm) for r in _NEGATION_RE):
+        return False
     return any(r.search(norm) for r in _COMMIT_RE)
 
 
 def is_enquiry(text: str) -> bool:
     """Is this a question about availability or price?"""
+    if "?" in text:
+        return True
     norm = normalise(text)
     return any(r.search(norm) for r in _ENQUIRY_RE)
+
+
+def is_implicit_order(text: str, rules) -> bool:
+    """
+    An order with no ordering verb: a list of things with quantities.
+
+    "2 packet parle g, 1 kurkure" and "5 kg aata aur 1 litre tel" are how
+    most WhatsApp orders to a kirana actually arrive -- no chahiye, no bhej
+    do, because sending a list to a shop already means "send this". Requiring
+    a verb dropped them all.
+
+    Precision is kept by what this refuses: a question, a cancellation, a
+    complaint about goods already delivered, and a payment. Those are the
+    messages that also name items with quantities and are not orders.
+    """
+    if not any(i.quantity is not None for i in rules.items):
+        return False
+    if rules.direction is Direction.PAYMENT or is_enquiry(text):
+        return False
+    norm = normalise(text)
+    if any(r.search(norm) for r in _NEGATION_RE):
+        return False
+    return not any(r.search(norm) for r in _PAST_RE)
 
 
 # --------------------------------------------------------------------------
@@ -279,77 +360,124 @@ def _measure_quantity(
     return None
 
 
-def resolve(
+def _merge_item(store: dict[tuple[str, str], LineItem], named: LineItem) -> tuple[str, str]:
+    """
+    Add a mention to a running set of items, merging repeats.
+
+    The same name merges, keeping whichever mention stated each field.
+    DIFFERENT names accumulate rather than replace -- "8 yellow kurtis and 2
+    blue kurtis" is one order for two things, and keeping only the last of
+    them silently dropped four thousand rupees of yellow kurtis off a real
+    bill. A mention WITHOUT a modifier merges into the single one that has
+    one, and the other way round: "2kg tamatar chaiye" then "organic grown
+    tamatar" is one line of organic tomatoes, not two.
+    """
+    key = (named.modifier or "", named.name)
+    if key not in store:
+        same = [k for k in store if k[1] == named.name and (not k[0] or not key[0])]
+        if len(same) == 1:
+            old = same[0]
+            existing = store.pop(old)
+            key = key if key[0] else old
+            store[key] = _merged(existing, named)
+            return key
+        store[key] = LineItem(
+            name=named.name, quantity=named.quantity, unit=named.unit,
+            modifier=named.modifier, unit_price=named.unit_price,
+        )
+        return key
+    store[key] = _merged(store[key], named)
+    return key
+
+
+def _merged(existing: LineItem, named: LineItem) -> LineItem:
+    return LineItem(
+        name=named.name,
+        quantity=named.quantity if named.quantity is not None else existing.quantity,
+        unit=named.unit or existing.unit,
+        modifier=named.modifier or existing.modifier,
+        unit_price=named.unit_price if named.unit_price is not None else existing.unit_price,
+    )
+
+
+def _shop_unit_rate(text: str, category: Category | str | None) -> float | None:
+    """
+    "400 kilo", "120 kilo" -- a shopkeeper's price PER UNIT, said the short way.
+
+    Read as a measure it is four hundred kilos of paneer. One number, followed
+    by a unit, large enough that nobody is quoting that much stock: that is
+    a rate, and the khata multiplies it by what the customer takes.
+    """
+    numbers = find_numbers(text)
+    if len(numbers) != 1:
+        return None
+    value, matched = numbers[0]
+    units = {**_UNITS, **units_for(category)}
+    tokens = normalise(text).split()
+    tail = matched.split()[-1]
+    for k, tok in enumerate(tokens):
+        if tok.strip(".") == tail and k + 1 < len(tokens):
+            if tokens[k + 1].strip(".") in units and value >= 20:
+                return value
+            return None
+    return None
+
+
+def resolve_thread(
     thread: Thread,
     category: Category | str | None = None,
-) -> ResolvedOrder | None:
+) -> list[ResolvedOrder]:
     """
-    Turn one thread into at most one order.
+    Turn one thread into its orders: at most one sale and one payment.
 
-    Walks the turns in time order keeping two pieces of state: the item most
-    recently named by EITHER side, and the rate the shopkeeper last quoted.
-    A customer commitment then binds them together.
+    Walks the turns in time order keeping the items named so far, the items
+    the customer has committed to, and what the shopkeeper quoted -- and
+    WHEN they quoted it, because that decides what the number means. A
+    customer commitment then binds them together.
 
-    Returns None when the thread never committed to anything, which is the
-    common case and the point -- most chat is not an order.
+    Returns an empty list when the thread never committed to anything, which
+    is the common case and the point -- most chat is not an order.
     """
     if not thread.turns:
-        return None
+        return []
 
     # Keyed by (modifier, name) and insertion-ordered, so "yellow kurti" and
     # "blue kurti" are two lines while two mentions of either are one.
     topics: dict[tuple[str, str], LineItem] = {}
+    ordered: dict[tuple[str, str], LineItem] = {}
     topic_turn: Turn | None = None
     payment_turn: Turn | None = None
     payment_rules = None
+    payment_index = -1
     quoted_rate: float | None = None
     quoted_total: float | None = None
     quoted_total_qty: float | None = None
+    shop_total: float | None = None
+    shop_total_index = -1
+    customer_amount: float | None = None
     shop_run_qty: float | None = None
     previous_speaker_was_shop: bool | None = None
     commit_turn: Turn | None = None
     commit_rules = None
+    commit_index = -1
+    last_item_commit_index = -1
+    credit_entry: tuple[Turn, float] | None = None
     signals: list[str] = []
 
-    for turn in thread.turns:
+    for index, turn in enumerate(thread.turns):
         rules = apply_rules(turn.body, category)
 
-        # A customer saying the money has arrived settles a balance. Checked
-        # before anything else, because a payment turn has no items and the
-        # item machinery below would otherwise throw the whole thread away.
+        # A customer saying the money has arrived settles a balance -- or, if
+        # it follows an order, says how that order was paid. Which one is
+        # decided after the walk, once the order is known.
         if turn.is_customer and rules.direction is Direction.PAYMENT:
-            payment_turn = turn
-            payment_rules = rules
+            payment_turn, payment_rules, payment_index = turn, rules, index
 
         # Whoever names an item sets the topic -- the shopkeeper answering
         # "blue kurti hai, 500 ka" names it just as usefully as the customer
         # asking for it.
         for named in rules.items:
-            # A later mention of the SAME item must not erase what an earlier
-            # one established. Real chat names a thing repeatedly, and the
-            # barest mention is often the last:
-            #
-            #     "2kg tamatar chaiye" ... "organic grown tamatar"
-            #
-            # Same item name means merge, keeping whichever mention actually
-            # stated each field. DIFFERENT names accumulate rather than
-            # replace -- "8 yellow kurtis and 2 blue kurtis" is one order for
-            # two things, and keeping only the last of them silently dropped
-            # four thousand rupees of yellow kurtis off a real bill.
-            key = (named.modifier or "", named.name)
-            existing = topics.get(key)
-            if existing is not None:
-                topics[key] = LineItem(
-                    name=named.name,
-                    quantity=named.quantity if named.quantity is not None else existing.quantity,
-                    unit=named.unit or existing.unit,
-                    modifier=named.modifier or existing.modifier,
-                    unit_price=named.unit_price
-                    if named.unit_price is not None
-                    else existing.unit_price,
-                )
-            else:
-                topics[key] = named
+            _merge_item(topics, named)
             topic_turn = turn
             if named.unit_price is not None:
                 quoted_rate = named.unit_price
@@ -361,69 +489,157 @@ def resolve(
         #     "blue kurti?"  "500 ka"        -> 500 EACH,  x3 = 1500
         #     "500 for 1kg"                  -> 500 PER KG, x2 = 1000
         #     "2kg for"      "500 only"      -> 500 TOTAL for the 2kg
+        #     "2 kilo chawal aur chai" "250 hua" -> 250 TOTAL for the order
         #
-        # What separates them is the SIZE of the quantity in the quote, not
-        # merely whether one is present. Quoting a price against ONE of
-        # something states a unit rate; quoting it against several prices
-        # that bundle; quoting it against nothing answers "what does one
-        # cost". An earlier version only asked whether a measure existed, so
-        # "500 for 1kg" was read as a bundle and two kilos of aloo were
-        # booked at Rs 500 instead of Rs 1000.
-        #
-        # Runs rather than single messages, because a quote routinely arrives
-        # split: "2kg for" then "500 only".
+        # In that order of strength: what the shop SAYS ("hua", "total",
+        # "each", "ki ek"), then the size of any quantity in the quote, then
+        # WHEN it was said. A price stated before the customer has ordered
+        # answers "what does it cost"; a bare number stated after an order
+        # answers "what do I owe". Reading the second as a rate multiplied
+        # one real bill of Rs 60 for two strips of tablets to Rs 4,22,500.
         if turn.is_shopkeeper:
             if previous_speaker_was_shop is False:
                 shop_run_qty = None
-            stated = _measure_quantity(turn.body, category)
-            if stated is None and rules.items and rules.items[-1].quantity is not None:
-                stated = rules.items[-1].quantity
-            if stated is not None:
-                shop_run_qty = stated
+            unit_rate = _shop_unit_rate(turn.body, category)
+            if unit_rate is not None:
+                quoted_rate = unit_rate
+                signals.append("shop-quoted-rate")
+            else:
+                stated = _measure_quantity(turn.body, category)
+                if stated is None and rules.items and rules.items[-1].quantity is not None:
+                    stated = rules.items[-1].quantity
+                if stated is not None:
+                    shop_run_qty = stated
 
-            if rules.amount is not None:
-                if shop_run_qty is not None and shop_run_qty > 1:
-                    quoted_total = rules.amount
-                    quoted_total_qty = shop_run_qty
-                    signals.append("shop-quoted-total")
-                else:
-                    quoted_rate = rules.amount
-                    signals.append("shop-quoted-rate")
+                if rules.amount is not None:
+                    norm = normalise(turn.body)
+                    says_total = any(r.search(norm) for r in _TOTAL_RE)
+                    says_rate = any(r.search(norm) for r in _RATE_RE) or any(
+                        i.unit_price is not None for i in rules.items
+                    )
+                    if says_total and not says_rate:
+                        shop_total, shop_total_index = rules.amount, index
+                        signals.append("shop-stated-total")
+                    elif says_rate:
+                        quoted_rate = rules.amount
+                        signals.append("shop-quoted-rate")
+                    elif shop_run_qty is not None and shop_run_qty > 1:
+                        quoted_total = rules.amount
+                        quoted_total_qty = shop_run_qty
+                        signals.append("shop-quoted-total")
+                    elif shop_run_qty is not None:
+                        quoted_rate = rules.amount
+                        signals.append("shop-quoted-rate")
+                    elif commit_index >= 0 or len(topics) > 1:
+                        # After an order, or across several different
+                        # things, one bare number can only be the bill.
+                        shop_total, shop_total_index = rules.amount, index
+                        signals.append("shop-stated-total")
+                    else:
+                        quoted_rate = rules.amount
+                        signals.append("shop-quoted-rate")
         previous_speaker_was_shop = turn.is_shopkeeper
 
-        if turn.is_customer and is_commitment(turn.body):
-            commit_turn = turn
-            commit_rules = rules
+        if turn.is_customer and (
+            is_commitment(turn.body) or is_implicit_order(turn.body, rules)
+        ):
+            commit_turn, commit_rules, commit_index = turn, rules, index
+            if rules.items:
+                for named in rules.items:
+                    _merge_item(ordered, named)
+                last_item_commit_index = index
+            if rules.amount is not None and rules.amount_source in (
+                "currency-adjacent", "mode-adjacent", "line-totals",
+            ) and rules.direction is not Direction.PAYMENT:
+                customer_amount = rules.amount
 
-    # ---- a payment settles a balance ------------------------------------
-    #
-    # Emitted before the sale path and independently of it: a payment needs no
-    # item, no commitment and no topic, so every guard below would throw it
-    # away. The amount is whatever the message stated; when it stated none,
-    # None is returned rather than a guess, and the review card asks. Guessing
-    # here would clear a debt by an amount nobody agreed.
-    if payment_turn is not None and payment_rules is not None:
-        paid_mode = PaymentMode.UNKNOWN.value
-        for turn in thread.turns:
-            detected, _ = detect_mode(turn.body)
+        if (
+            turn.is_customer and not rules.items and rules.amount is not None
+            and rules.amount_source in ("currency-adjacent", "mode-adjacent")
+            and rules.direction is not Direction.PAYMENT
+            and _CREDIT_ENTRY.search(normalise(turn.body))
+        ):
+            credit_entry = (turn, rules.amount)
+
+    out: list[ResolvedOrder] = []
+    sale = _resolve_sale(
+        thread, category, topics, ordered, topic_turn, commit_turn, commit_rules,
+        quoted_rate, quoted_total, quoted_total_qty,
+        shop_total if shop_total_index > last_item_commit_index else None,
+        customer_amount, signals,
+        exclude_mode_from=payment_index,
+    )
+
+    if sale is None and credit_entry is not None:
+        turn, amount = credit_entry
+        sale = ResolvedOrder(
+            customer=thread.customer, items=[], amount=amount, mode=PaymentMode.UDHAAR.value,
+            direction="sale", canonical_text=turn.body,
+            evidence=f"{turn.sender}: {turn.body}", occurred_at=turn.timestamp,
+            content_hashes=thread.hashes, signals=["credit-entry"], carried_topic=False,
+        )
+
+    paid_separately = payment_turn is not None and payment_rules is not None
+    if sale is not None and paid_separately and payment_index > commit_index >= 0:
+        # Money sent right after an order, for that order or with no figure
+        # of its own, is how the order was PAID -- not a separate debt being
+        # cleared. "130 hua total" "paytm kar diya" is one Rs 130 UPI sale;
+        # booking it as a sale AND a payment wipes the sale off the khata.
+        paid = payment_rules.amount
+        if paid is None or sale.amount is None or abs(paid - sale.amount) < 0.01:
+            detected, _ = detect_mode(payment_turn.body)
             if detected is not PaymentMode.UNKNOWN:
-                paid_mode = detected.value
+                sale.mode = detected.value
+            elif sale.mode in (PaymentMode.UNKNOWN.value, PaymentMode.UDHAAR.value):
+                sale.mode = PaymentMode.CASH.value
+            if sale.amount is None and paid is not None:
+                sale.amount = paid
+            sale.signals.append("paid-on-order")
+            paid_separately = False
 
-        pay_signals = list(dict.fromkeys(signals + ["customer-paid"]))
-        return ResolvedOrder(
+    if sale is not None:
+        out.append(sale)
+
+    if paid_separately:
+        # Emitted independently of the sale path: a payment needs no item,
+        # no commitment and no topic. The amount is whatever the message
+        # stated; when it stated none, None is returned rather than a guess
+        # and the review card asks. So is the mode: "paise bhej diye" names
+        # no instrument, and calling it cash would be a guess the khata then
+        # reports as fact.
+        detected, _ = detect_mode(payment_turn.body)
+        out.append(ResolvedOrder(
             customer=thread.customer,
             items=[],
             amount=payment_rules.amount,
-            mode=paid_mode if paid_mode != PaymentMode.UNKNOWN.value else "cash",
+            mode=detected.value,
             direction="payment",
             canonical_text=payment_turn.body,
             evidence=f"{payment_turn.sender}: {payment_turn.body}",
             occurred_at=payment_turn.timestamp,
             content_hashes=thread.hashes,
-            signals=pay_signals,
+            signals=list(dict.fromkeys(signals + ["customer-paid"])),
             carried_topic=False,
-        )
+        ))
+    return out
 
+
+def _resolve_sale(
+    thread: Thread,
+    category: Category | str | None,
+    topics: dict[tuple[str, str], LineItem],
+    ordered: dict[tuple[str, str], LineItem],
+    topic_turn: Turn | None,
+    commit_turn: Turn | None,
+    commit_rules,
+    quoted_rate: float | None,
+    quoted_total: float | None,
+    quoted_total_qty: float | None,
+    shop_total: float | None,
+    customer_amount: float | None,
+    signals: list[str],
+    exclude_mode_from: int = -1,
+) -> ResolvedOrder | None:
     if commit_turn is None or commit_rules is None:
         return None
     if not topics:
@@ -437,20 +653,17 @@ def resolve(
 
     # ---- the items ------------------------------------------------------
     #
-    # Items named in the commitment itself win; otherwise carry the topic
-    # forward. That carry is the whole reason this module exists.
-    #
-    # ALL of them, not the last. "8 yellow kurtis and 2 blue kurtis" is one
-    # order for two things, and keeping only the last dropped Rs 4,000 of
-    # yellow kurtis off a real bill -- which only surfaced because the
-    # customer happened to restate it two minutes later.
-    if commit_rules.items:
+    # Everything the customer committed to, across every turn that did --
+    # "2 kg chawal bhej do" ... "aur haan 1 packet namak bhi" is one order
+    # for two things. Only when no commitment named anything does the topic
+    # carry forward, which is the whole reason this module exists.
+    if ordered:
         items = [
             LineItem(
                 name=i.name, quantity=i.quantity, unit=i.unit,
                 modifier=i.modifier, unit_price=i.unit_price,
             )
-            for i in commit_rules.items
+            for i in ordered.values()
         ]
         carried = False
     else:
@@ -482,12 +695,6 @@ def resolve(
             items[0].quantity = quantity
             items[0].unit = unit or items[0].unit
             signals.append("quantity-from-commitment")
-        elif carried:
-            established = next(iter(topics.values()))
-            if established.quantity is not None:
-                items[0].quantity = established.quantity
-                items[0].unit = established.unit or items[0].unit
-                signals.append("quantity-from-topic")
 
     # Anything the commitment named without a quantity, but which the thread
     # established one for earlier, takes it back.
@@ -497,20 +704,25 @@ def resolve(
             if established is not None and established.quantity is not None:
                 item.quantity = established.quantity
                 item.unit = established.unit or item.unit
-                signals.append("quantity-from-topic")
+                if "quantity-from-topic" not in signals:
+                    signals.append("quantity-from-topic")
 
     # ---- the rate -------------------------------------------------------
     # Only as a PER-UNIT price where the quantity is known; multiplying by a
-    # quantity we guessed is how a Rs 500 sale becomes Rs 1500.
-    for item in items:
-        if item.unit_price is None and quoted_rate is not None and item.quantity is not None:
-            item.unit_price = quoted_rate
-            if "rate-from-quote" not in signals:
-                signals.append("rate-from-quote")
+    # quantity we guessed is how a Rs 500 sale becomes Rs 1500. And never on
+    # top of a total the shop has already stated for the order.
+    if shop_total is None:
+        for item in items:
+            if item.unit_price is None and quoted_rate is not None and item.quantity is not None:
+                item.unit_price = quoted_rate
+                if "rate-from-quote" not in signals:
+                    signals.append("rate-from-quote")
 
     # ---- mode -----------------------------------------------------------
     mode = PaymentMode.UNKNOWN.value
-    for turn in thread.turns:
+    for index, turn in enumerate(thread.turns):
+        if index == exclude_mode_from:
+            continue
         detected, _ = detect_mode(turn.body)
         if detected is not PaymentMode.UNKNOWN:
             mode = detected.value
@@ -550,12 +762,18 @@ def resolve(
         if t in (topic_turn, commit_turn) or apply_rules(t.body, category).amount is not None
     )
 
-    # A quoted TOTAL is the amount outright -- multiplying it by the quantity
-    # it already covers is how a Rs 500 sale becomes Rs 1000.
+    # ---- the amount -----------------------------------------------------
+    #
+    # A total the shopkeeper stated for THIS order outranks every
+    # calculation: it is what was actually charged. Then the arithmetic of a
+    # stated rate times a stated quantity; then a quoted bundle total; then
+    # what the customer said they would pay. Nothing is ever divided.
     line_totals = [i.line_total for i in items if i.line_total is not None]
     amount = round(sum(line_totals), 2) if len(line_totals) == len(items) and items else None
 
-    if quoted_total is not None and amount is None:
+    if shop_total is not None:
+        amount = shop_total
+    elif quoted_total is not None and amount is None:
         amount = quoted_total
         if len(items) == 1:
             only = items[0]
@@ -565,7 +783,10 @@ def resolve(
                 and abs(only.quantity - quoted_total_qty) > 1e-9
             ):
                 signals.append("bundle-quantity-mismatch")
-    elif amount is None and all(i.quantity is None for i in items):
+    if amount is None and customer_amount is not None:
+        amount = customer_amount
+        signals.append("customer-stated-amount")
+    if amount is None and all(i.quantity is None for i in items):
         amount = quoted_rate
 
     return ResolvedOrder(
@@ -583,6 +804,20 @@ def resolve(
     )
 
 
+def resolve(
+    thread: Thread,
+    category: Category | str | None = None,
+) -> ResolvedOrder | None:
+    """
+    The thread's main order: its sale if it has one, else its payment.
+
+    Kept for callers that want one answer per thread. `resolve_thread`
+    returns both when a thread holds a new order and an old debt settled.
+    """
+    orders = resolve_thread(thread, category)
+    return orders[0] if orders else None
+
+
 def resolve_all(
     turns: list[Turn],
     customer: str,
@@ -593,5 +828,5 @@ def resolve_all(
     return [
         order
         for thread in build_threads(turns, customer, gap_minutes)
-        if (order := resolve(thread, category)) is not None
+        for order in resolve_thread(thread, category)
     ]

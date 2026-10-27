@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .categories import Category, items_for, modifiers_for, units_for
+from .categories import Category, items_for, modifiers_for, pharmacy_items, units_for
 from .numbers import BOUNDARY, find_numbers, normalise, tokenize
 
 
@@ -56,6 +56,8 @@ _MODE_WORDS: dict[str, PaymentMode] = {
     "baki": PaymentMode.UDHAAR, "credit": PaymentMode.UDHAAR,
     "khaate": PaymentMode.UDHAAR, "khate": PaymentMode.UDHAAR,
     "उधार": PaymentMode.UDHAAR, "बाकी": PaymentMode.UDHAAR,
+    # Cash on delivery is how an online-style order says "cash".
+    "cod": PaymentMode.CASH,
 }
 
 # Devanagari-safe word boundaries.
@@ -72,8 +74,11 @@ DEVA_END = r"(?!\S)"
 
 # Phrases meaning "write it down" -> credit, even without the word udhaar.
 _CREDIT_PHRASES = [
-    r"\blikh\s+(?:lena|lo|dena|do|dijiye)\b",
-    r"\bkhaate?\s+mein\b",
+    r"\blikh\s+(?:lena|lo|dena|do|dijiye|lijiye|lijie)\b",
+    # "khate me" is written at least as often as "khate mein".
+    r"\bkhaate?\s+m(?:ein|e|ai|ain)\b",
+    r"\b(?:hisaa?b|account|khaate?)\s+m(?:ein|e)\s+(?:jod|likh|daal|dal|add)\w*",
+    r"\bjod\s+(?:do|dena|dijiye|lena)\b",
     DEVA_START + r"लिख\s+(?:लेना|लो|देना|दो)" + DEVA_END,
     DEVA_START + r"खाते\s+में" + DEVA_END,
 ]
@@ -139,13 +144,13 @@ _PAYMENT_PHRASES = [
     r"\bjama\s+kar\w*\b", r"\bchukta\b", r"\bsettle\w*\b",
     r"\b(?:account|khata|hisab|hisaab)\b.{0,15}?\bclear\b",
     r"\bclear\s+kar\s+diy[ae]\b",
-    # past-tense giving/sending, the most common form by far
-    r"\b(?:de|bhej|kar|jama)\s+diy[ae]\b",
-    r"\bbheja\b", r"\bbheje\b",
     r"\b(?:nakad|nagad|cash|rokad|upi|online)\s+diy[ae]\b",
-    # a payment app plus any completed action
+    # a payment app plus any completed action, in either order -- "gpay kar
+    # diya" and "250 bheje hai phonepe se" are the same sentence
     r"\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online|scan|transfer)\b"
-    r".{0,25}?\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|diy[ae]|kiya|bheja|bheje|mila|mile)\b",
+    r".{0,25}?\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|diy[ae]|kiya|kia|bheja|bheje|mila|mile|done|ho\s+gaya)\b",
+    r"\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|bheja|bheje|kiya|kia|sent|paid|transferred)\b"
+    r".{0,25}?\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online)\b",
     # Devanagari -- whitespace boundaries, see DEVA_START above
     DEVA_START + r"पैसे?\s*(?:मिल|आ|दे)\w*",
     DEVA_START + r"जमा" + DEVA_END,
@@ -154,12 +159,40 @@ _PAYMENT_PHRASES = [
     DEVA_START + r"भेजे" + DEVA_END,
 ]
 
+# Generic past-tense giving and sending. "bhej diya" is how most payments are
+# written -- and also how a complaint about goods is: "kal 3 kg aata bheja
+# tha, kharab tha" invented a payment out of a bad bag of flour. So these
+# count only when the message is ABOUT money: a money word, a currency mark,
+# or a number that is not a measure or a count of something.
+_MONEY_GATED_PAYMENT_PHRASES = [
+    r"\b(?:de|bhej|kar|jama)\s+diy[ae]\b",
+    r"\bbheja\b", r"\bbheje\b",
+]
+_MONEY_WORDS = re.compile(
+    r"\b(?:paise?|paisa|pese|payment|amount|rupaye|rupay|rupees|rs|cash|nakad|nagad|"
+    r"upi|online|gpay|phonepe|paytm)\b|₹|रुपये|रुपए|पैसे?"
+)
+
+# A payment that SETTLES something names the debt: "kal ke dahi ke paise",
+# "pichla hisaab", "mere 500 baaki the". Without one of these, a message that
+# lists goods with quantities AND says it was paid is a sale paid on the
+# spot -- "3 sabun 120 ka UPI kar diya" -- not a balance being cleared.
+_SETTLEMENT_WORDS = re.compile(
+    r"\b(?:paise?|paisa|pese|baaki|baki|udhaa?r|hisaa?b|pichl\w*|purana|purane|"
+    r"due|balance|khaate?|bakaya)\b|पैसे?|बाकी|उधार|हिसाब"
+)
+
 _UNITS: dict[str, str] = {
-    "kilo": "kg", "kg": "kg", "kilos": "kg", "किलो": "kg",
-    "gram": "g", "gm": "g", "g": "g", "ग्राम": "g",
-    "litre": "l", "liter": "l", "ltr": "l", "l": "l", "लीटर": "l",
+    "kilo": "kg", "kg": "kg", "kilos": "kg", "kgs": "kg", "kilogram": "kg", "किलो": "kg",
+    "gram": "g", "grams": "g", "gm": "g", "gms": "g", "g": "g", "ग्राम": "g",
+    "litre": "l", "liter": "l", "litres": "l", "liters": "l", "ltr": "l", "ltrs": "l",
+    "lt": "l", "l": "l", "लीटर": "l",
     "ml": "ml",
-    "packet": "packet", "pkt": "packet", "पैकेट": "packet",
+    "packet": "packet", "pkt": "packet", "pkts": "packet", "pack": "packet",
+    "packs": "packet", "packets": "packet", "पैकेट": "packet", "pouch": "packet",
+    "tray": "tray", "trays": "tray", "ट्रे": "tray",
+    "box": "box", "dabba": "box", "dabbe": "box", "डिब्बा": "box", "डिब्बे": "box",
+    "jar": "jar", "tin": "tin", "roll": "roll", "bundle": "bundle",
     "dozen": "dozen", "darjan": "dozen", "दर्जन": "dozen",
     "piece": "pc", "pieces": "pc", "pcs": "pc", "pc": "pc", "nag": "pc", "अदद": "pc",
     "bottle": "bottle", "botal": "bottle", "बोतल": "bottle",
@@ -195,7 +228,10 @@ _WEAK_ITEMS: set[str] = {"dal", "daal", "दाल", "aata"}
 # verb "gave" -- de diya, kar diya, bhej diya). Not worth the false positives
 # on every payment message.
 
-_CURRENCY = re.compile(r"(?:₹|rs\.?|rupaye|rupees|रु\.?|रुपये)", re.IGNORECASE)
+_CURRENCY = re.compile(
+    r"(?:₹|rs\.?|rupaye|rupees|rupay|rupye|rupya|rupiya|रु\.?|रुपये|रुपए|रूपये)",
+    re.IGNORECASE,
+)
 
 # Tokens that mark the number before them as MONEY rather than a count.
 #
@@ -204,8 +240,20 @@ _CURRENCY = re.compile(r"(?:₹|rs\.?|rupaye|rupees|रु\.?|रुपये)",
 # swallowed as a quantity and the entry saves with no amount at all.
 _PRICE_MARKERS = {
     "ka", "ki", "ke", "का", "की", "के",
-    "rupaye", "rupees", "rupay", "rs", "₹", "रुपये", "रुपए",
+    "rupaye", "rupees", "rupay", "rupye", "rupya", "rupiya", "rs", "₹", "रुपये", "रुपए",
 }
+
+# Joining words. An unattached measure does not survive one: in "2 coke 2
+# litre wali aur 1 lays" the "2 litre" describes the coke, and carrying it
+# across "aur" put two litres of chips in the khata.
+_CONJUNCTIONS = {"aur", "and", "&", "+", "और", "n"}
+
+_POSSESSIVES = {"ka", "ki", "ke", "का", "की", "के"}
+
+# Containers sold as things in their own right, as well as used as measures.
+# Deliberately not "packet": "2 packet bhej do" is always a measure of
+# whatever was being discussed, never an order for empty packets.
+_CONTAINERS = {"box", "dabba", "bottle", "botal", "bag", "बोतल", "डिब्बा"}
 
 # Words meaning the number beside them is a PER-UNIT rate rather than a
 # total. "3 kurti 500 each" is fifteen hundred rupees, not five.
@@ -330,14 +378,36 @@ def detect_direction(text: str, category: Category | str | None = None) -> Direc
     # past-tense-looking wording after it can flip the reading.
     promised = any(re.search(p, norm) for p in _FUTURE_PAYMENT_PHRASES)
 
+    items = extract_items(text, category)
+
+    paid = False
     if not promised:
-        for pattern in _PAYMENT_PHRASES:
-            if re.search(pattern, norm):
-                return Direction.PAYMENT
+        paid = any(re.search(p, norm) for p in _PAYMENT_PHRASES)
+        if not paid and _about_money(text, norm, items, category):
+            paid = any(re.search(p, norm) for p in _MONEY_GATED_PAYMENT_PHRASES)
+
+    if paid:
+        # Goods with quantities, paid for in the same breath, are a SALE
+        # settled on the spot. Only a message that names a debt is a payment.
+        counted = any(it.quantity is not None for it in items)
+        if counted and not _SETTLEMENT_WORDS.search(norm):
+            return Direction.SALE
+        return Direction.PAYMENT
     # Items present means goods moved.
-    if extract_items(text, category):
+    if items:
         return Direction.SALE
     return Direction.UNKNOWN
+
+
+def _about_money(
+    text: str, norm: str, items: list["LineItem"], category: Category | str | None,
+) -> bool:
+    """Does this message talk about money, rather than about goods?"""
+    if _MONEY_WORDS.search(norm) or _CURRENCY.search(norm):
+        return True
+    counts = {it.quantity for it in items if it.quantity is not None}
+    counts |= _measure_values(text, category)
+    return any(value not in counts for value, _ in find_numbers(text))
 
 
 def _match_item(token: str, lexicon: set[str]) -> str | None:
@@ -358,6 +428,12 @@ def _match_item(token: str, lexicon: set[str]) -> str | None:
         return token[:-2]
     if token.endswith("s") and token[:-1] in lexicon:
         return token[:-1]
+    # The Hindi oblique / plural: ande, kele, dabbe, kabze -- and in
+    # Devanagari अंडे for अंडा. "ek darjan ande" named no item at all.
+    if token.endswith("e") and token[:-1] + "a" in lexicon:
+        return token[:-1] + "a"
+    if token.endswith("े") and token[:-1] + "ा" in lexicon:
+        return token[:-1] + "ा"
     return None
 
 
@@ -446,11 +522,36 @@ def extract_items(
     thing it sells out of a kirana word list, so the shop's own category is
     asked for once at setup and threaded through from there.
     """
+    from .numbers import is_number_token, parse_number_phrase
+
     lexicon = items_for(category)
     modifiers = modifiers_for(category)
     units = {**_UNITS, **units_for(category)}
+    drugs = _strength_items(category)
 
     tokens = tokenize(text)
+
+    def tok_at(k: int) -> str:
+        return tokens[k].strip(".") if 0 <= k < len(tokens) else ""
+
+    def item_follows(k: int) -> bool:
+        """An item noun at k, allowing modifiers in front of it."""
+        while k < len(tokens) and tok_at(k) in modifiers and _match_item(tok_at(k), lexicon) is None:
+            k += 1
+        return _match_item(tok_at(k), lexicon) is not None
+
+    def number_run(k: int) -> tuple[float | None, int]:
+        j = k
+        while j < len(tokens) and is_number_token(tok_at(j)):
+            j += 1
+        return (parse_number_phrase(tokens[k:j]) if j > k else None), j
+
+    # In a LIST -- two or more things named -- a small bare number after an
+    # item is its count: "maggi 4 packet, doodh 2 packet, bread 1". Outside a
+    # list the same shape is usually the price ("chawal 300"), so the rule is
+    # confined to where it is unambiguous.
+    is_list = sum(1 for k in range(len(tokens)) if _match_item(tok_at(k), lexicon)) >= 2
+
     items: list[LineItem] = []
     pending_qty: float | None = None
     pending_unit: str | None = None
@@ -459,13 +560,11 @@ def extract_items(
     #: a measure that a later bare number must not overwrite.
     pending_measured = False
 
-    from .numbers import is_number_token, parse_number_phrase
-
     i = 0
     while i < len(tokens):
-        tok = tokens[i].strip(".")
+        tok = tok_at(i)
 
-        if tok == BOUNDARY:
+        if tok == BOUNDARY or tok in _CONJUNCTIONS:
             pending_qty, pending_unit, pending_modifier = None, None, None
             pending_measured = False
             i += 1
@@ -473,11 +572,8 @@ def extract_items(
 
         # Collect a number run.
         if is_number_token(tok):
-            j = i
-            while j < len(tokens) and is_number_token(tokens[j].strip(".")):
-                j += 1
-            value = parse_number_phrase(tokens[i:j])
-            nxt = tokens[j].strip(".") if j < len(tokens) else ""
+            value, j = number_run(i)
+            nxt = tok_at(j)
 
             # A number followed by a unit is a MEASURE -- "2kg" is two kilos,
             # and nothing later in the sentence can turn it into something
@@ -508,25 +604,33 @@ def extract_items(
                         # A bare number carries no unit of its own; a unit
                         # left over from an earlier number is not its.
                         pending_unit = None
+            # A number between an adjective and a noun breaks them apart: in
+            # "3 shirts size L and 2 jeans" the "size" is not the jeans'.
+            pending_modifier = None
             i = j
             continue
 
-        if tok in units:
+        # A unit word that is also a thing sold -- box, bottle, dabba -- is
+        # a unit only when it measures an item after it: "1 box pen" is a box
+        # of pens, "1 geometry box" is a geometry box.
+        if tok in units and not (tok in _CONTAINERS and _match_item(tok, lexicon) and not item_follows(i + 1)):
             pending_unit = units[tok]
             i += 1
             continue
 
         # An adjective in front of a noun belongs to it: "blue kurti" is one
         # item. Held rather than emitted, because a modifier with no noun
-        # after it ("blue hai kya") is not an order for anything.
-        if tok in modifiers:
+        # after it ("blue hai kya") is not an order for anything. Words that
+        # are nouns as well -- "chana", "amul", "dettol" -- only qualify the
+        # noun that follows them; on their own they are the item.
+        if tok in modifiers and (_match_item(tok, lexicon) is None or item_follows(i + 1)):
             pending_modifier = tok
             i += 1
             continue
 
         matched_item = _match_item(tok, lexicon)
         if matched_item is not None:
-            nxt = tokens[i + 1].strip(".") if i + 1 < len(tokens) else ""
+            nxt = tok_at(i + 1)
             # A digit or a unit counts as corroboration; a weak number word
             # does not -- "daal do" is "put it in", not two kilos of lentils.
             corroborated = nxt in units or (
@@ -543,6 +647,19 @@ def extract_items(
             pending_qty, pending_unit, pending_modifier = None, None, None
             pending_measured = False
             i += 1
+            name = matched_item
+
+            # A medicine's strength is part of its name: "dolo 650" is a
+            # product, not six hundred and fifty of anything, and not Rs 650.
+            if matched_item in drugs and _is_numeric_token(tok_at(i)):
+                strength, j = number_run(i)
+                after = tok_at(j)
+                if strength is not None and strength >= 50 and (
+                    after in ("mg", "ml", "mcg") or after in _POSSESSIVES
+                    or is_number_token(after) or after in (BOUNDARY, "")
+                ):
+                    name = f"{matched_item} {int(strength) if strength == int(strength) else strength}"
+                    i = j + 1 if after in ("mg", "ml", "mcg") else j
 
             # Trailing quantity: shopkeepers write both "2 kilo chawal" and
             # "chawal 2 kilo". Without this the trailing quantity drifts onto
@@ -551,24 +668,29 @@ def extract_items(
             # A trailing number counts as a quantity ONLY when a unit follows
             # it. "chawal 2 kilo" is two kilos; "chawal 300" is three hundred
             # rupees of rice, and swallowing that as a quantity loses the
-            # amount entirely.
+            # amount entirely. One possessive may sit in between: "biscuit ke
+            # 4 packet", "dolo 650 ki 2 strip".
             if quantity is None and i < len(tokens):
-                lookahead = tokens[i].strip(".")
+                k = i + 1 if tok_at(i) in _POSSESSIVES and is_number_token(tok_at(i + 1)) else i
+                lookahead = tok_at(k)
                 if is_number_token(lookahead) and lookahead not in ("do", "de"):
-                    j = i
-                    while j < len(tokens) and is_number_token(tokens[j].strip(".")):
-                        j += 1
-                    followed_by_unit = j < len(tokens) and tokens[j].strip(".") in units
-                    value = parse_number_phrase(tokens[i:j]) if followed_by_unit else None
-                    if value is not None:
-                        quantity = value
-                        unit = units[tokens[j].strip(".")]
+                    value, j = number_run(k)
+                    if value is not None and tok_at(j) in units:
+                        quantity, unit = value, units[tok_at(j)]
                         i = j + 1
+                    elif (
+                        value is not None and k == i and is_list
+                        and value == int(value) and 0 < value <= 12
+                        and (tok_at(j) in (BOUNDARY, "") or tok_at(j) in _CONJUNCTIONS
+                             or item_follows(j))
+                    ):
+                        quantity = value
+                        i = j
 
             rate = _trailing_rate(tokens, i, lexicon)
             items.append(
                 LineItem(
-                    name=matched_item,
+                    name=name,
                     quantity=quantity,
                     unit=unit,
                     modifier=modifier,
@@ -580,6 +702,18 @@ def extract_items(
         i += 1
 
     return items
+
+
+def _is_numeric_token(tok: str) -> bool:
+    return bool(re.fullmatch(r"\d+(?:\.\d+)?", tok))
+
+
+def _strength_items(category: Category | str | None) -> set[str]:
+    """Medicines, whose trailing number is a strength rather than a count."""
+    cat = category if isinstance(category, Category) else Category.parse(category)
+    if cat not in (Category.PHARMACY, Category.GENERAL):
+        return set()
+    return pharmacy_items()
 
 
 def _measure_values(text: str, category: Category | str | None = None) -> set[float]:
@@ -649,7 +783,13 @@ def _pick_amount(
     used = {it.quantity for it in items if it.quantity is not None}
     used |= {it.unit_price for it in items if it.unit_price is not None}
     used |= _measure_values(text, category)
-    spare = [(v, m) for v, m in numbers if v not in used]
+    used |= _count_values(text, category)
+    # A rupee or two is not a bill. Below ten, an unattached number is a
+    # count the parser could not place -- "2 packet parle g, 1 kurkure"
+    # booked Rs 1 -- and a missing amount is recoverable where a wrong one
+    # is not. A real small price still arrives through the currency and mode
+    # checks above, which do not pass through here.
+    spare = [(v, m) for v, m in numbers if v not in used and v >= 10]
     if spare:
         value, matched = max(spare, key=lambda p: p[0])
         return value, "largest-unused"
@@ -662,8 +802,40 @@ def _pick_amount(
     if items:
         return None, None
 
-    value, matched = max(numbers, key=lambda p: p[0])
+    # The same holds with no item recognised: a measure is never money.
+    # "aadha kilo jeera" -- before jeera was known -- booked Rs 0.50.
+    candidates = [(v, m) for v, m in numbers if v not in used and v >= 10]
+    if not candidates:
+        return None, None
+    value, matched = max(candidates, key=lambda p: p[0])
     return value, "largest-overall"
+
+
+def _count_values(text: str, category: Category | str | None = None) -> set[float]:
+    """Every number immediately followed by an item noun -- a count, never money."""
+    from .numbers import is_number_token, parse_number_phrase
+
+    lexicon = items_for(category)
+    modifiers = modifiers_for(category)
+    tokens = tokenize(text)
+    found: set[float] = set()
+    i = 0
+    while i < len(tokens):
+        if not is_number_token(tokens[i].strip(".")):
+            i += 1
+            continue
+        j = i
+        while j < len(tokens) and is_number_token(tokens[j].strip(".")):
+            j += 1
+        k = j
+        while k < len(tokens) and tokens[k].strip(".") in modifiers:
+            k += 1
+        if k < len(tokens) and _match_item(tokens[k].strip("."), lexicon):
+            value = parse_number_phrase(tokens[i:j])
+            if value is not None:
+                found.add(value)
+        i = max(j, i + 1)
+    return found
 
 
 def apply_rules(text: str, category: Category | str | None = None) -> RuleResult:

@@ -240,13 +240,13 @@ class AnalyticsActivity : Activity() {
         content.addView(heroKpi(s.kpiSale, h.sale, s.paymentMix))
         content.addView(kpiGrid(
             listOf(
-                Triple(s.kpiCashIn, shortMoney(h.cashIn), ChartPalette.good),
-                Triple(s.kpiUdhaar, shortMoney(h.udhaar), ChartPalette.warn),
+                Triple(s.kpiCashIn, rupees(h.cashIn), ChartPalette.good),
+                Triple(s.kpiUdhaar, rupees(h.udhaar), ChartPalette.warn),
                 Triple(s.kpiEntries, h.entries.toString(), ink),
                 Triple(s.kpiCustomers, h.customers.toString(), ink),
                 Triple(
                     s.kpiAvgOrder,
-                    if (h.entries > 0) shortMoney(h.sale / h.entries) else "—",
+                    if (h.entries > 0) rupees(h.sale / h.entries) else "—",
                     ink,
                 ),
             )
@@ -355,6 +355,13 @@ class AnalyticsActivity : Activity() {
         panel.layoutParams = matchWrap(dp(12))
         return panel
     }
+
+    /**
+     * The full figure, to the rupee. A tile has room for it, and "₹1k" for a
+     * Rs 1,240 udhaar is a rounding the shopkeeper has to undo in their head;
+     * the short form is for chart axes, which do not.
+     */
+    private fun rupees(v: Double) = "₹%,.0f".format(v)
 
     private fun rangeLabel(): String {
         val s = strings()

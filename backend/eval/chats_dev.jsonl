@@ -1,0 +1,46 @@
+{"id": "d01", "cat": "kirana", "turns": [["c", "bhaiya 1 kg besan aur 500 gram sooji bhej dena"]], "expect": [{"dir": "sale", "items": {"besan": [1, "kg"], "sooji": [500, "g"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d02", "cat": "kirana", "turns": [["c", "2 packet parle g, 1 kurkure"]], "expect": [{"dir": "sale", "items": {"parle": [2, "packet"], "kurkure": [1, null]}, "amount": null, "mode": "unknown"}]}
+{"id": "d03", "cat": "kirana", "turns": [["c", "5 kg aata aur 1 litre tel, 480 rupaye cash de dunga"]], "expect": [{"dir": "sale", "items": {"aata": [5, "kg"], "tel": [1, "l"]}, "amount": 480, "mode": "cash"}]}
+{"id": "d04", "cat": "kirana", "turns": [["c", "bhaiya 2 kilo chawal aur 1 packet chai bhej do"], ["s", "theek hai, 250 hua"], ["c", "udhaar likh lena"]], "expect": [{"dir": "sale", "items": {"chawal": [2, "kg"], "chai": [1, "packet"]}, "amount": 250, "mode": "udhaar"}]}
+{"id": "d05", "cat": "kirana", "turns": [["c", "3 sabun 120 ka UPI kar diya"]], "expect": [{"dir": "sale", "items": {"sabun": [3, null]}, "amount": 120, "mode": "upi"}]}
+{"id": "d06", "cat": "kirana", "turns": [["c", "gpay kar diya 500"]], "expect": [{"dir": "payment", "items": {}, "amount": 500, "mode": "upi"}]}
+{"id": "d07", "cat": "kirana", "turns": [["s", "total 1,250 hua"], ["c", "ok bhaiya, phonepe kar diya 1250"]], "expect": [{"dir": "payment", "items": {}, "amount": 1250, "mode": "upi"}]}
+{"id": "d08", "cat": "kirana", "turns": [["c", "aadha kilo jeera aur 250 gm haldi chahiye"]], "expect": [{"dir": "sale", "items": {"jeera": [0.5, "kg"], "haldi": [250, "g"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d09", "cat": "kirana", "turns": [["c", "ek darjan ande aur 2 bread bhej do"]], "expect": [{"dir": "sale", "items": {"anda": [1, "dozen"], "bread": [2, null]}, "amount": null, "mode": "unknown"}]}
+{"id": "d10", "cat": "kirana", "turns": [["c", "please send 2 dettol soap and 1 vim bar"]], "expect": [{"dir": "sale", "items": {"dettol": [2, null], "vim": [1, null]}, "amount": null, "mode": "unknown"}]}
+{"id": "d11", "cat": "kirana", "turns": [["c", "toor dal 2 kg moong dal 1 kg"]], "expect": [{"dir": "sale", "items": {"toor dal": [2, "kg"], "moong dal": [1, "kg"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d12", "cat": "kirana", "turns": [["c", "do kele aur ek kilo seb"]], "expect": [{"dir": "sale", "items": {"kela": [2, null], "seb": [1, "kg"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d13", "cat": "kirana", "turns": [["c", "kal wala hisaab kitna hua?"]], "expect": []}
+{"id": "d14", "cat": "kirana", "turns": [["c", "ok bhaiya thanks"]], "expect": []}
+{"id": "d15", "cat": "kirana", "turns": [["c", "namaste bhaiya"], ["s", "namaste ji"], ["c", "paneer hai kya aaj?"], ["s", "haan hai, 400 kilo"], ["c", "theek hai aadha kilo de dena"]], "expect": [{"dir": "sale", "items": {"paneer": [0.5, "kg"]}, "amount": 200, "mode": "unknown"}]}
+{"id": "d16", "cat": "kirana", "turns": [["c", "2 coke 2 litre wali aur 1 lays"]], "expect": [{"dir": "sale", "items": {"coke": [2, null], "lays": [1, null]}, "amount": null, "mode": "unknown"}]}
+{"id": "d17", "cat": "kirana", "turns": [["c", "maggi 4 packet, doodh 2 packet, bread 1"], ["s", "180 rupaye"], ["c", "khate me likh do"]], "expect": [{"dir": "sale", "items": {"maggi": [4, "packet"], "doodh": [2, "packet"], "bread": [1, null]}, "amount": 180, "mode": "udhaar"}]}
+{"id": "d18", "cat": "kirana", "turns": [["c", "bhaiya mere 500 baaki the na, aaj cash de diye aapke ladke ko"]], "expect": [{"dir": "payment", "items": {}, "amount": 500, "mode": "cash"}]}
+{"id": "d19", "cat": "kirana", "turns": [["c", "Rs.250/- ka saman likh lo"]], "expect": [{"dir": "sale", "items": {}, "amount": 250, "mode": "udhaar"}]}
+{"id": "d20", "cat": "kirana", "turns": [["c", "aaj dukaan kitne baje khulegi?"], ["s", "9 baje"]], "expect": []}
+{"id": "d21", "cat": "kirana", "turns": [["c", "1 kg cheeni, 1 kg chawal, 500 gm dal, 1 surf excel"], ["c", "jaldi bhejna"]], "expect": [{"dir": "sale", "items": {"cheeni": [1, "kg"], "chawal": [1, "kg"], "dal": [500, "g"], "surf": [1, null]}, "amount": null, "mode": "unknown"}]}
+{"id": "d22", "cat": "kirana", "turns": [["c", "sarson tel 1 litre kitne ka hai?"], ["s", "180"], ["c", "ok 2 bhej do"]], "expect": [{"dir": "sale", "items": {"sarson tel": [2, null]}, "amount": 360, "mode": "unknown"}]}
+{"id": "d23", "cat": "kirana", "turns": [["c", "kal ke 2 dabbe dahi ke paise bhej diye 80"]], "expect": [{"dir": "payment", "items": {}, "amount": 80, "mode": "unknown"}]}
+{"id": "d24", "cat": "kirana", "turns": [["c", "bhaiya 2 kg pyaaz 1 kg tamatar aur dhaniya bhej do"], ["s", "130 hua total"], ["c", "paytm kar diya"]], "expect": [{"dir": "sale", "items": {"pyaz": [2, "kg"], "tamatar": [1, "kg"], "dhaniya": [null, null]}, "amount": 130, "mode": "upi"}]}
+{"id": "d25", "cat": "kirana", "turns": [["c", "आटा 10 किलो और चावल 5 किलो भेज दो"]], "expect": [{"dir": "sale", "items": {"aata": [10, "kg"], "chawal": [5, "kg"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d26", "cat": "kirana", "turns": [["c", "भैया 2 पैकेट दूध और 1 ब्रेड"], ["s", "86 रुपये"], ["c", "उधार लिख लेना"]], "expect": [{"dir": "sale", "items": {"doodh": [2, "packet"], "bread": [1, null]}, "amount": 86, "mode": "udhaar"}]}
+{"id": "d27", "cat": "kirana", "turns": [["c", "rate kya hai ghee ka?"], ["s", "amul 1 litre 620"]], "expect": []}
+{"id": "d28", "cat": "kirana", "turns": [["c", "mujhe 3 packet poha aur 2 packet namkeen"], ["s", "done, 150"]], "expect": [{"dir": "sale", "items": {"poha": [3, "packet"], "namkeen": [2, "packet"]}, "amount": 150, "mode": "unknown"}]}
+{"id": "d29", "cat": "apparel", "turns": [["c", "hello, blue kurti available hai?"], ["s", "haan ji, 450 ki ek"], ["c", "2 pack kar dijiye, cash dungi"]], "expect": [{"dir": "sale", "items": {"blue kurti": [2, null]}, "amount": 900, "mode": "cash"}]}
+{"id": "d30", "cat": "apparel", "turns": [["c", "do you have cotton sarees?"], ["s", "yes mam, 1200 onwards"], ["c", "ok will come and see tomorrow"]], "expect": []}
+{"id": "d31", "cat": "apparel", "turns": [["c", "i need 3 shirts size L and 2 jeans 32"], ["s", "total 3400"], ["c", "sent 3400 on gpay"]], "expect": [{"dir": "sale", "items": {"shirt": [3, null], "jeans": [2, null]}, "amount": 3400, "mode": "upi"}]}
+{"id": "d32", "cat": "pharmacy", "turns": [["c", "dolo 650 ki 2 strip bhej dijiye"], ["s", "60 rupaye"]], "expect": [{"dir": "sale", "items": {"dolo": [2, "strip"]}, "amount": 60, "mode": "unknown"}]}
+{"id": "d33", "cat": "pharmacy", "turns": [["c", "crocin hai kya?"]], "expect": []}
+{"id": "d34", "cat": "hardware", "turns": [["c", "10 bori cement aur 2 kg keel chahiye site pe"], ["s", "4300 hoga"], ["c", "theek hai hisaab mein jod dena"]], "expect": [{"dir": "sale", "items": {"cement": [10, "sack"], "keel": [2, "kg"]}, "amount": 4300, "mode": "udhaar"}]}
+{"id": "d35", "cat": "stationery", "turns": [["c", "5 copy 2 pen 1 geometry box bhejna beta ke liye"]], "expect": [{"dir": "sale", "items": {"copy": [5, null], "pen": [2, null], "box": [1, null]}, "amount": null, "mode": "unknown"}]}
+{"id": "d36", "cat": "kirana", "turns": [["c", "kya aapke paas basmati chawal hai"], ["s", "haan 120 kilo"], ["c", "achha"]], "expect": []}
+{"id": "d37", "cat": "kirana", "turns": [["c", "pichle hafte ka 750 bhej diya hai gpay pe, check kar lena"]], "expect": [{"dir": "payment", "items": {}, "amount": 750, "mode": "upi"}]}
+{"id": "d38", "cat": "kirana", "turns": [["c", "paav kilo adrak aur 250 gm lahsun"]], "expect": [{"dir": "sale", "items": {"adrak": [0.25, "kg"], "lahsun": [250, "g"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d39", "cat": "kirana", "turns": [["c", "bhaiya order cancel kar do, aaj nahi chahiye"]], "expect": []}
+{"id": "d40", "cat": "kirana", "turns": [["c", "2 kg chawal bhej do", 0], ["s", "ok", 1], ["c", "aur haan 1 packet namak bhi", 2]], "expect": [{"dir": "sale", "items": {"chawal": [2, "kg"], "namak": [1, "packet"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d41", "cat": "kirana", "turns": [["c", "Sharma ji 1 tray anda bhej dijiye, 210 ka udhaar"]], "expect": [{"dir": "sale", "items": {"anda": [1, "tray"]}, "amount": 210, "mode": "udhaar"}]}
+{"id": "d42", "cat": "kirana", "turns": [["c", "bhaiya biscuit ke 4 packet aur 2 bournvita"], ["s", "₹520"], ["c", "online karta hu"]], "expect": [{"dir": "sale", "items": {"biscuit": [4, "packet"], "bournvita": [2, null]}, "amount": 520, "mode": "upi"}]}
+{"id": "d43", "cat": "kirana", "turns": [["c", "good morning ji 🙏"]], "expect": []}
+{"id": "d44", "cat": "kirana", "turns": [["c", "kal 3 kg aata bheja tha wo kharab tha"], ["s", "sorry ji badal denge"]], "expect": []}
+{"id": "d45", "cat": "kirana", "turns": [["c", "1 kg chini bhejo", 0], ["s", "45", 1], ["c", "2 packet milk bhi chahiye", 120], ["s", "56", 1]], "expect": [{"dir": "sale", "items": {"cheeni": [1, "kg"]}, "amount": 45, "mode": "unknown"}, {"dir": "sale", "items": {"doodh": [2, "packet"]}, "amount": 56, "mode": "unknown"}]}
+{"id": "d46", "cat": "kirana", "turns": [["s", "aapka is mahine ka total 1,25,000 ho gaya"], ["c", "theek hai, 1,25,000 cash de diye kal raat"]], "expect": [{"dir": "payment", "items": {}, "amount": 125000, "mode": "cash"}]}

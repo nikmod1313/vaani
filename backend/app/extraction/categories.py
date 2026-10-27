@@ -73,6 +73,44 @@ _KIRANA = {
     "bread", "ब्रेड", "paneer", "पनीर", "ghee", "घी",
     "shampoo", "शैम्पू", "colgate", "toothpaste", "manjan",
     "agarbatti", "अगरबत्ती", "matchbox", "mombatti",
+    # Flours, grains and breakfast. The original list stopped at atta and
+    # chawal, so "1 kg besan aur 500 gram sooji" -- an ordinary kirana order
+    # -- named nothing the engine knew and was dropped whole.
+    "besan", "बेसन", "sooji", "suji", "सूजी", "rava", "rawa", "maida", "मैदा",
+    "poha", "पोहा", "daliya", "दलिया", "sabudana", "साबूदाना", "oats", "cornflakes",
+    # Pulses by name -- "toor dal" is one item, "toor" its variety (see the
+    # kirana modifiers below), but a bare "2 kg rajma" is a pulse on its own.
+    "rajma", "राजमा", "chana", "चना", "chhole", "chole", "lobia", "matar", "मटर",
+    "moongfali", "mungfali", "मूंगफली", "peanut",
+    # Spices
+    "jeera", "zeera", "जीरा", "dhaniya", "धनिया", "rai", "राई", "ajwain", "अजवाइन",
+    "saunf", "सौंफ", "methi", "मेथी", "elaichi", "ilaichi", "इलायची", "laung", "लौंग",
+    "dalchini", "दालचीनी", "kalimirch", "hing", "हींग", "imli", "इमली",
+    # Sweeteners, dairy, bakery
+    "gud", "गुड़", "shakkar", "शक्कर", "mishri",
+    "makhan", "मक्खन", "butter", "cheese", "malai", "मलाई", "lassi", "chaach",
+    "rusk", "toast", "bun", "cake", "khari",
+    # Packaged food, snacks and drinks -- ordered by brand as often as not
+    "namkeen", "नमकीन", "bhujia", "भुजिया", "chips", "lays", "kurkure", "mixture",
+    "papad", "पापड़", "achar", "अचार", "pickle", "ketchup", "sauce", "jam",
+    "shahad", "honey", "parle", "britannia", "goodday", "oreo", "marie",
+    "coke", "pepsi", "sprite", "fanta", "thumsup", "frooti", "maaza", "slice",
+    "coldrink", "colddrink", "juice", "soda", "pani", "पानी", "water", "bisleri",
+    "coffee", "कॉफी", "horlicks", "bournvita", "complan", "boost",
+    "kaju", "काजू", "badam", "बादाम", "kishmish", "किशमिश", "akhrot", "makhana",
+    # Household and personal care, again mostly by brand
+    "vim", "rin", "lux", "lifebuoy", "dettol", "harpic", "colin", "lizol",
+    "phenyl", "nirma", "tide", "ariel", "handwash", "odonil", "goodknight",
+    "mortein", "allout", "toothbrush", "razor", "blade", "parachute",
+    "vaseline", "powder", "पाउडर", "tissue", "foil",
+    # Vegetables and fruit -- the daily order, and none of it was known
+    "bhindi", "भिंडी", "lauki", "लौकी", "gobhi", "gobi", "गोभी", "palak", "पालक",
+    "adrak", "अदरक", "lahsun", "लहसुन", "nimbu", "नींबू", "kheera", "खीरा",
+    "gajar", "गाजर", "baingan", "बैंगन", "karela", "करेला", "tinda", "kaddu",
+    "mooli", "मूली", "pudina", "पुदीना", "shimla", "sabzi", "सब्जी", "pyaaz",
+    "kela", "केला", "seb", "सेब", "aam", "आम", "angoor", "अंगूर", "santra",
+    "संतरा", "papita", "anaar", "अनार", "chiku", "amrood", "tarbooz",
+    "chicken", "mutton", "machli",
 }
 
 _APPAREL = {
@@ -99,6 +137,8 @@ _PHARMACY = {
     "dawai", "dava", "दवाई", "दवा", "medicine", "paracetamol", "crocin",
     "dolo", "combiflam", "disprin", "eno", "digene", "syringe",
     "thermometer", "glucose", "ors", "inhaler", "sanitary", "napkin",
+    "pantop", "pan", "azithral", "allegra", "cetirizine", "vicks", "betadine",
+    "volini", "moov", "iodex", "savlon", "dettol", "gelusil", "benadryl",
 }
 
 _HARDWARE = {
@@ -111,6 +151,8 @@ _HARDWARE = {
     "plywood", "board", "hinge", "kabza", "कब्ज़ा", "lock", "tala", "ताला",
     "chain", "rassi", "रस्सी", "rope", "balti", "बाल्टी", "bucket",
     "mug", "मग", "tile", "tiles", "टाइल",
+    "putty", "पुट्टी", "primer", "distemper", "thinner", "fevicol", "sealant",
+    "nut", "bolt", "washer", "valve", "elbow", "socket",
 }
 
 _STATIONERY = {
@@ -121,6 +163,7 @@ _STATIONERY = {
     "colour", "color", "crayon", "scale", "ruler", "sharpener",
     "stapler", "pin", "clip", "tape", "gum", "glue", "fevicol",
     "envelope", "lifafa", "लिफाफा", "card", "calculator", "bag", "bastaa",
+    "refill", "compass", "diary",
 }
 
 _ELECTRONICS = {
@@ -174,12 +217,30 @@ _SIZES = {
     "xl", "xxl", "xs", "s", "m", "l", "free", "size",
 }
 
+# Grocery varieties and brands. "toor dal" and "moong dal" are two different
+# lines; without these they both became "dal" and the threader merged them
+# into one, dropping a kilo of somebody's order. Some are nouns as well
+# ("chana", "amul") -- extract_items reads those as a modifier only when an
+# item follows them.
+_GROCERY = {
+    "toor", "tuar", "arhar", "moong", "mung", "masoor", "urad", "chana",
+    "basmati", "sona", "kolam", "sarson", "sarso", "mustard", "refined",
+    "groundnut", "desi", "organic", "amul", "tata", "fortune", "aashirvaad",
+    "patanjali", "mother", "britannia", "garam", "kali", "hari", "lal",
+    "brown", "white", "fresh", "toned", "full", "double",
+    # Brands said in front of the thing: "2 dettol soap", "lux sabun". Each
+    # is also an item on its own ("1 dettol").
+    "dettol", "lux", "lifebuoy", "vim", "rin", "surf", "colgate", "parle",
+    "harpic", "lizol", "nirma", "tide", "ariel", "dabur", "haldiram", "bikaji",
+    "nestle", "everest", "mdh",
+}
+
 _MODIFIERS: dict[Category, set[str]] = {
     Category.APPAREL: _COLOURS | _SIZES,
     Category.HARDWARE: _COLOURS | _SIZES,
     Category.ELECTRONICS: _COLOURS | _SIZES,
-    Category.STATIONERY: _COLOURS,
-    Category.KIRANA: set(),
+    Category.STATIONERY: _COLOURS | {"geometry", "drawing", "practical", "long", "single", "double"},
+    Category.KIRANA: _GROCERY,
     Category.PHARMACY: set(),
     Category.GENERAL: set(),
 }
@@ -200,6 +261,7 @@ _UNITS_BY_CATEGORY: dict[Category, dict[str, str]] = {
     },
     Category.PHARMACY: {
         "strip": "strip", "स्ट्रिप": "strip", "tab": "tab", "tabs": "tab",
+        "patta": "strip", "patte": "strip", "पत्ता": "strip", "strips": "strip",
         "vial": "vial", "tube": "tube", "sachet": "sachet",
     },
     Category.HARDWARE: {
@@ -269,6 +331,11 @@ def all_known_modifiers() -> set[str]:
     for words in _MODIFIERS.values():
         out |= words
     return out
+
+
+def pharmacy_items() -> set[str]:
+    """The chemist's nouns -- the ones whose trailing number is a strength."""
+    return set(_PHARMACY)
 
 
 def all_known_items() -> set[str]:

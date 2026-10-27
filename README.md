@@ -92,6 +92,50 @@ The honest claim today is: *"the engine handles every construction we have
 thought to test, and here is the list."* That is worth something, but it is
 not 100% accuracy in the wild, and the report should not say it is.
 
+### Whole conversations, with a held-out split
+
+The 122 cases above are single messages. What the app actually does is read
+a **chat** — thread the turns, decide whether an order exists, and resolve its
+items, total and payment mode. `eval/chats.py` measures that, on 91 WhatsApp
+threads in Hinglish, English and Devanagari across six kinds of shop, about a
+fifth of them chatter, questions, complaints or cancellations that must book
+nothing.
+
+They are split in two, **and only one half was ever tuned on**:
+`chats_test.jsonl` was written before the engine was changed and scored only
+to report the result.
+
+```bash
+cd backend && python3 -m eval.chats --set all          # add --verbose for every miss
+```
+
+| Held-out test set (45 threads, 35 orders) | Before | After |
+|---|---|---|
+| Orders found (recall) | 28.6% | **100%** |
+| Orders invented (precision) | 66.7% | **94.6%** |
+| Total correct | 20.0% | **94.3%** |
+| Order completely right — items, quantities, total, mode | **8.6%** | **80.0%** |
+
+One caveat on the 80.0%: two of its points come from the thousands-comma bug
+("1,250" read as 250), which was found in an exploratory probe before the test
+set existed but only fixed after the first scoring; without it the figure is
+74.3%. The dev half now scores 100%, which — like the 122 — says only that it
+was tuned on.
+
+What still goes wrong on the held-out set, deliberately left unfixed so the
+number stays honest:
+
+- a question about a *future* standing order ("roz 2 packet doodh chahiye hoga kya?") is booked as an order;
+- a refund request ("2 baar payment ho gaya, 200 wapas kar dena") is booked as a payment;
+- a brand-plus-product phrase the lexicon lacks ("tata tea", "kurta pajama set") loses its quantity or splits in two;
+- an item separated from its order by a clause ("bp wali dawai khatam ho gayi, 2 patta bhej dena") loses its quantity;
+- "500 ka note de raha hu" (paying cash with a note) is not recognised as cash.
+
+`ChatBenchmarkParityTest` replays every one of these threads through the
+Kotlin engine on the phone and requires the identical answer, so the two
+engines cannot quietly drift apart. Re-run `python3 -m eval.chats --set all
+--dump` after any engine change to refresh what it compares against.
+
 **The stage-2 lift is still unmeasured.** Running `--llm` needs credentials:
 
 ```bash

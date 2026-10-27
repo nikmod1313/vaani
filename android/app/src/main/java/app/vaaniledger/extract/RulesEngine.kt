@@ -55,6 +55,8 @@ object RulesEngine {
         "baki" to PaymentMode.UDHAAR, "credit" to PaymentMode.UDHAAR,
         "khaate" to PaymentMode.UDHAAR, "khate" to PaymentMode.UDHAAR,
         "उधार" to PaymentMode.UDHAAR, "बाकी" to PaymentMode.UDHAAR,
+        // Cash on delivery is how an online-style order says "cash".
+        "cod" to PaymentMode.CASH,
     )
 
     // Devanagari-safe word boundaries.
@@ -69,8 +71,11 @@ object RulesEngine {
 
     /** Phrases meaning "write it down" -> credit, even without the word udhaar. */
     private val CREDIT_PHRASES = listOf(
-        """\blikh\s+(?:lena|lo|dena|do|dijiye)\b""",
-        """\bkhaate?\s+mein\b""",
+        """\blikh\s+(?:lena|lo|dena|do|dijiye|lijiye|lijie)\b""",
+        // "khate me" is written at least as often as "khate mein".
+        """\bkhaate?\s+m(?:ein|e|ai|ain)\b""",
+        """\b(?:hisaa?b|account|khaate?)\s+m(?:ein|e)\s+(?:jod|likh|daal|dal|add)\w*""",
+        """\bjod\s+(?:do|dena|dijiye|lena)\b""",
         DEVA_START + """लिख\s+(?:लेना|लो|देना|दो)""" + DEVA_END,
         DEVA_START + """खाते\s+में""" + DEVA_END,
     ).map { Regex(it) }
@@ -135,11 +140,10 @@ object RulesEngine {
         """\bsettle\w*\b""",
         """\b(?:account|khata|hisab|hisaab)\b.{0,15}?\bclear\b""",
         """\bclear\s+kar\s+diy[ae]\b""",
-        """\b(?:de|bhej|kar|jama)\s+diy[ae]\b""",
-        """\bbheja\b""",
-        """\bbheje\b""",
         """\b(?:nakad|nagad|cash|rokad|upi|online)\s+diy[ae]\b""",
-        """\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online|scan|transfer)\b.{0,25}?\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|diy[ae]|kiya|bheja|bheje|mila|mile)\b""",
+        // A payment app plus any completed action, in either order.
+        """\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online|scan|transfer)\b.{0,25}?\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|diy[ae]|kiya|kia|bheja|bheje|mila|mile|done|ho\s+gaya)\b""",
+        """\b(?:kar\s+diy[ae]|bhej\s+diy[ae]|bheja|bheje|kiya|kia|sent|paid|transferred)\b.{0,25}?\b(?:phonepe|gpay|googlepay|paytm|bhim|upi|online)\b""",
         DEVA_START + """पैसे?\s*(?:मिल|आ|दे)\w*""",
         DEVA_START + """जमा""" + DEVA_END,
         DEVA_START + """(?:भेज|कर|दे)\s*(?:दिया|दिये|दिए)""" + DEVA_END,
@@ -147,12 +151,44 @@ object RulesEngine {
         DEVA_START + """भेजे""" + DEVA_END,
     ).map { Regex(it) }
 
+    /**
+     * Generic past-tense giving and sending. "bhej diya" is how most payments
+     * are written -- and also how a complaint about goods is: "kal 3 kg aata
+     * bheja tha, kharab tha" invented a payment out of a bad bag of flour. So
+     * these count only when the message is ABOUT money. Mirrors rules.py.
+     */
+    private val MONEY_GATED_PAYMENT_PHRASES = listOf(
+        """\b(?:de|bhej|kar|jama)\s+diy[ae]\b""",
+        """\bbheja\b""", """\bbheje\b""",
+    ).map { Regex(it) }
+
+    private val MONEY_WORDS = Regex(
+        """\b(?:paise?|paisa|pese|payment|amount|rupaye|rupay|rupees|rs|cash|nakad|nagad|""" +
+            """upi|online|gpay|phonepe|paytm)\b|₹|रुपये|रुपए|पैसे?"""
+    )
+
+    /**
+     * A payment that SETTLES something names the debt. Without one of these,
+     * goods with quantities said to be paid for are a sale paid on the spot
+     * -- "3 sabun 120 ka UPI kar diya" -- not a balance being cleared.
+     */
+    private val SETTLEMENT_WORDS = Regex(
+        """\b(?:paise?|paisa|pese|baaki|baki|udhaa?r|hisaa?b|pichl\w*|purana|purane|""" +
+            """due|balance|khaate?|bakaya)\b|पैसे?|बाकी|उधार|हिसाब"""
+    )
+
     private val UNITS: Map<String, String> = mapOf(
-        "kilo" to "kg", "kg" to "kg", "kilos" to "kg", "किलो" to "kg",
-        "gram" to "g", "gm" to "g", "g" to "g", "ग्राम" to "g",
-        "litre" to "l", "liter" to "l", "ltr" to "l", "l" to "l", "लीटर" to "l",
+        "kilo" to "kg", "kg" to "kg", "kilos" to "kg", "kgs" to "kg",
+        "kilogram" to "kg", "किलो" to "kg",
+        "gram" to "g", "grams" to "g", "gm" to "g", "gms" to "g", "g" to "g", "ग्राम" to "g",
+        "litre" to "l", "liter" to "l", "litres" to "l", "liters" to "l",
+        "ltr" to "l", "ltrs" to "l", "lt" to "l", "l" to "l", "लीटर" to "l",
         "ml" to "ml",
-        "packet" to "packet", "pkt" to "packet", "पैकेट" to "packet",
+        "packet" to "packet", "pkt" to "packet", "pkts" to "packet", "pack" to "packet",
+        "packs" to "packet", "packets" to "packet", "पैकेट" to "packet", "pouch" to "packet",
+        "tray" to "tray", "trays" to "tray", "ट्रे" to "tray",
+        "box" to "box", "dabba" to "box", "dabbe" to "box", "डिब्बा" to "box", "डिब्बे" to "box",
+        "jar" to "jar", "tin" to "tin", "roll" to "roll", "bundle" to "bundle",
         "dozen" to "dozen", "darjan" to "dozen", "दर्जन" to "dozen",
         "piece" to "pc", "pieces" to "pc", "pcs" to "pc", "pc" to "pc",
         "nag" to "pc", "अदद" to "pc",
@@ -166,7 +202,10 @@ object RulesEngine {
     // These only count as items when a quantity or unit sits next to them.
     private val WEAK_ITEMS = setOf("dal", "daal", "दाल", "aata")
 
-    private val CURRENCY = Regex("""(?:₹|rs\.?|rupaye|rupees|रु\.?|रुपये)""", RegexOption.IGNORE_CASE)
+    private val CURRENCY = Regex(
+        """(?:₹|rs\.?|rupaye|rupees|rupay|rupye|rupya|rupiya|रु\.?|रुपये|रुपए|रूपये)""",
+        RegexOption.IGNORE_CASE,
+    )
 
     // Tokens that mark the number before them as MONEY rather than a count.
     //
@@ -178,8 +217,23 @@ object RulesEngine {
 
     private val PRICE_MARKERS = setOf(
         "ka", "ki", "ke", "का", "की", "के",
-        "rupaye", "rupees", "rupay", "rs", "₹", "रुपये", "रुपए",
+        "rupaye", "rupees", "rupay", "rupye", "rupya", "rupiya", "rs", "₹", "रुपये", "रुपए",
     )
+
+    /**
+     * Joining words. An unattached measure does not survive one: in "2 coke 2
+     * litre wali aur 1 lays" the "2 litre" describes the coke.
+     */
+    private val CONJUNCTIONS = setOf("aur", "and", "&", "+", "और", "n")
+
+    private val POSSESSIVES = setOf("ka", "ki", "ke", "का", "की", "के")
+
+    /**
+     * Containers sold as things in their own right as well as used as
+     * measures. Deliberately not "packet": "2 packet bhej do" is always a
+     * measure of whatever was being discussed.
+     */
+    private val CONTAINERS = setOf("box", "dabba", "bottle", "botal", "bag", "बोतल", "डिब्बा")
 
     // Words meaning the number beside them is a PER-UNIT rate, not a total.
     //
@@ -281,12 +335,39 @@ object RulesEngine {
         // A promise to pay is not a payment. Checked first so no amount of
         // past-tense-looking wording after it can flip the reading.
         val promised = FUTURE_PAYMENT_PHRASES.any { it.containsMatchIn(norm) }
-        if (!promised && PAYMENT_PHRASES.any { it.containsMatchIn(norm) }) {
+        val items = extractItems(text, category)
+
+        var paid = false
+        if (!promised) {
+            paid = PAYMENT_PHRASES.any { it.containsMatchIn(norm) }
+            if (!paid && aboutMoney(text, norm, items, category)) {
+                paid = MONEY_GATED_PAYMENT_PHRASES.any { it.containsMatchIn(norm) }
+            }
+        }
+        if (paid) {
+            // Goods with quantities, paid for in the same breath, are a SALE
+            // settled on the spot. Only a message that names a debt is a
+            // payment.
+            val counted = items.any { it.quantity != null }
+            if (counted && !SETTLEMENT_WORDS.containsMatchIn(norm)) return Direction.SALE
             return Direction.PAYMENT
         }
         // Items present means goods moved.
-        if (extractItems(text, category).isNotEmpty()) return Direction.SALE
+        if (items.isNotEmpty()) return Direction.SALE
         return Direction.UNKNOWN
+    }
+
+    /** Does this message talk about money, rather than about goods? */
+    private fun aboutMoney(
+        text: String,
+        norm: String,
+        items: List<LineItem>,
+        category: ShopCategory,
+    ): Boolean {
+        if (MONEY_WORDS.containsMatchIn(norm) || CURRENCY.containsMatchIn(norm)) return true
+        val counts = items.mapNotNull { it.quantity }.toMutableSet()
+        counts.addAll(measureValues(text, category))
+        return NumberParser.findNumbers(text).any { it.value !in counts }
     }
 
     /**
@@ -303,6 +384,10 @@ object RulesEngine {
         if (token in lexicon) return token
         if (token.endsWith("es") && token.dropLast(2) in lexicon) return token.dropLast(2)
         if (token.endsWith("s") && token.dropLast(1) in lexicon) return token.dropLast(1)
+        // The Hindi oblique / plural: ande, kele, dabbe, kabze -- and in
+        // Devanagari अंडे for अंडा. "ek darjan ande" named no item at all.
+        if (token.endsWith("e") && token.dropLast(1) + "a" in lexicon) return token.dropLast(1) + "a"
+        if (token.endsWith("े") && token.dropLast(1) + "ा" in lexicon) return token.dropLast(1) + "ा"
         return null
     }
 
@@ -369,7 +454,9 @@ object RulesEngine {
      * Pull item / quantity / unit / rate tuples.
      *
      * Walks the token stream tracking the most recent number and unit, so
-     * "2 kilo chawal" and "chawal 2 kilo" both resolve.
+     * "2 kilo chawal" and "chawal 2 kilo" both resolve. A line-for-line port
+     * of `extract_items` in rules.py; see there for the reasoning behind
+     * each rule, which is restated here only briefly.
      */
     fun extractItems(
         text: String,
@@ -378,8 +465,30 @@ object RulesEngine {
         val lexicon = CategoryLexicon.itemsFor(category)
         val modifiers = CategoryLexicon.modifiersFor(category)
         val units = UNITS + CategoryLexicon.unitsFor(category)
+        val drugs = strengthItems(category)
 
         val tokens = NumberParser.tokenize(text)
+
+        fun tokAt(k: Int): String = if (k in tokens.indices) tokens[k].trim('.') else ""
+
+        /** An item noun at k, allowing modifiers in front of it. */
+        fun itemFollows(from: Int): Boolean {
+            var k = from
+            while (k < tokens.size && tokAt(k) in modifiers && matchItem(tokAt(k), lexicon) == null) k++
+            return matchItem(tokAt(k), lexicon) != null
+        }
+
+        fun numberRun(from: Int): Pair<Double?, Int> {
+            var j = from
+            while (j < tokens.size && NumberParser.isNumberToken(tokAt(j))) j++
+            val value = if (j > from) NumberParser.parseNumberPhrase(tokens.subList(from, j)) else null
+            return value to j
+        }
+
+        // In a LIST, a small bare number after an item is its count:
+        // "maggi 4 packet, doodh 2 packet, bread 1".
+        val isList = tokens.indices.count { matchItem(tokAt(it), lexicon) != null } >= 2
+
         val items = mutableListOf<LineItem>()
         var pendingQty: Double? = null
         var pendingUnit: String? = null
@@ -390,9 +499,9 @@ object RulesEngine {
 
         var i = 0
         while (i < tokens.size) {
-            val token = tokens[i].trim('.')
+            val token = tokAt(i)
 
-            if (token == NumberParser.BOUNDARY) {
+            if (token == NumberParser.BOUNDARY || token in CONJUNCTIONS) {
                 pendingQty = null; pendingUnit = null; pendingModifier = null
                 pendingMeasured = false
                 i++
@@ -401,50 +510,44 @@ object RulesEngine {
 
             // Collect a number run.
             if (NumberParser.isNumberToken(token)) {
-                var j = i
-                while (j < tokens.size && NumberParser.isNumberToken(tokens[j].trim('.'))) j++
-                val value = NumberParser.parseNumberPhrase(tokens.subList(i, j))
-                val next = if (j < tokens.size) tokens[j].trim('.') else ""
+                val (value, j) = numberRun(i)
+                val next = tokAt(j)
 
-                // A number followed by a unit is a MEASURE -- "2kg" is two
-                // kilos, and nothing later in the sentence can turn it into
-                // something else.
+                // A number followed by a unit is a MEASURE.
                 val measured = next in units
 
-                // "paune sau ka chai" -- a price, not a count. Leaving
-                // pendingQty unset keeps the number available as the amount.
+                // "paune sau ka chai" -- a price, not a count.
                 if (value != null && next !in PRICE_MARKERS) {
                     if (pendingQty != null && pendingMeasured && !measured) {
                         // A BARE number after an established measure is a
-                        // price, not a replacement count. Real chat states
-                        // them in this order, often across separate messages:
-                        //
-                        //     "2kg for"  "500 only"  "organic"  "tamatar"
-                        //
-                        // Overwriting booked FIVE HUNDRED KILOS of tomatoes,
-                        // because the unit from the measure survived next to
-                        // the new number. Mirrors rules.py exactly.
+                        // price, not a replacement count: "2kg for" "500
+                        // only" must not become five hundred kilos.
                     } else {
                         pendingQty = value
                         pendingMeasured = measured
-                        // A bare number carries no unit of its own.
                         if (!measured) pendingUnit = null
                     }
                 }
+                // A number between an adjective and a noun breaks them apart.
+                pendingModifier = null
                 i = j
                 continue
             }
 
-            if (token in units) {
+            // A container word is a unit only when it measures an item after
+            // it: "1 box pen" is a box of pens, "1 geometry box" is a box.
+            if (token in units &&
+                !(token in CONTAINERS && matchItem(token, lexicon) != null && !itemFollows(i + 1))
+            ) {
                 pendingUnit = units[token]
                 i++
                 continue
             }
 
-            // An adjective in front of a noun belongs to it: "blue kurti" is
-            // one item. Held rather than emitted, because a modifier with no
-            // noun after it ("blue hai kya") is not an order for anything.
-            if (token in modifiers) {
+            // An adjective in front of a noun belongs to it. Words that are
+            // nouns as well -- "chana", "amul", "dettol" -- only qualify the
+            // noun that follows them; on their own they are the item.
+            if (token in modifiers && (matchItem(token, lexicon) == null || itemFollows(i + 1))) {
                 pendingModifier = token
                 i++
                 continue
@@ -452,9 +555,9 @@ object RulesEngine {
 
             val matched = matchItem(token, lexicon)
             if (matched != null) {
-                val next = if (i + 1 < tokens.size) tokens[i + 1].trim('.') else ""
+                val next = tokAt(i + 1)
                 // A digit or a unit counts as corroboration; a weak number
-                // word does not -- "daal do" is "put it in", not two kilos.
+                // word does not -- "daal do" is "put it in".
                 val corroborated = next in units ||
                     (NumberParser.isNumberToken(next) && next != "do" && next != "de")
 
@@ -471,38 +574,52 @@ object RulesEngine {
                 pendingQty = null; pendingUnit = null; pendingModifier = null
                 pendingMeasured = false
                 i++
+                var name = matched
 
-                // Trailing quantity: shopkeepers write both "2 kilo chawal"
-                // and "chawal 2 kilo". Without this the trailing quantity
-                // drifts onto the NEXT item and the orphaned number gets
-                // picked as the amount -- "dal 2 kilo aur atta 5 kilo" booked
-                // Rs 5. A trailing number counts as a quantity ONLY when a
-                // unit follows it: "chawal 300" is three hundred rupees of
-                // rice, and swallowing that as a quantity loses the amount.
-                if (quantity == null && i < tokens.size) {
-                    val lookahead = tokens[i].trim('.')
-                    if (NumberParser.isNumberToken(lookahead) &&
-                        lookahead != "do" && lookahead != "de"
+                // A medicine's strength is part of its name: "dolo 650".
+                if (matched in drugs && isNumeric(tokAt(i))) {
+                    val (strength, j) = numberRun(i)
+                    val after = tokAt(j)
+                    if (strength != null && strength >= 50 && (
+                            after in STRENGTH_UNITS || after in POSSESSIVES ||
+                                NumberParser.isNumberToken(after) ||
+                                after == NumberParser.BOUNDARY || after == ""
+                            )
                     ) {
-                        var j = i
-                        while (j < tokens.size &&
-                            NumberParser.isNumberToken(tokens[j].trim('.'))
-                        ) j++
-                        val followedByUnit = j < tokens.size && tokens[j].trim('.') in units
-                        val value = if (followedByUnit) {
-                            NumberParser.parseNumberPhrase(tokens.subList(i, j))
-                        } else null
-                        if (value != null) {
+                        val s = if (strength == Math.floor(strength)) strength.toInt().toString()
+                        else strength.toString()
+                        name = "$matched $s"
+                        i = if (after in STRENGTH_UNITS) j + 1 else j
+                    }
+                }
+
+                // Trailing quantity: "chawal 2 kilo", with one possessive
+                // allowed in between ("biscuit ke 4 packet"). Only with a unit
+                // -- "chawal 300" is three hundred rupees of rice -- except a
+                // small count inside a list.
+                if (quantity == null && i < tokens.size) {
+                    val k = if (tokAt(i) in POSSESSIVES && NumberParser.isNumberToken(tokAt(i + 1))) i + 1 else i
+                    val lookahead = tokAt(k)
+                    if (NumberParser.isNumberToken(lookahead) && lookahead != "do" && lookahead != "de") {
+                        val (value, j) = numberRun(k)
+                        if (value != null && tokAt(j) in units) {
                             quantity = value
-                            unit = units[tokens[j].trim('.')]
+                            unit = units[tokAt(j)]
                             i = j + 1
+                        } else if (value != null && k == i && isList &&
+                            value == Math.floor(value) && value > 0 && value <= 12 &&
+                            (tokAt(j) == NumberParser.BOUNDARY || tokAt(j) == "" ||
+                                tokAt(j) in CONJUNCTIONS || itemFollows(j))
+                        ) {
+                            quantity = value
+                            i = j
                         }
                     }
                 }
 
                 items.add(
                     LineItem(
-                        name = matched,
+                        name = name,
                         quantity = quantity,
                         unit = unit,
                         modifier = modifier,
@@ -517,6 +634,16 @@ object RulesEngine {
 
         return items
     }
+
+    private val STRENGTH_UNITS = setOf("mg", "ml", "mcg")
+
+    private fun isNumeric(token: String) = Regex("""\d+(?:\.\d+)?""").matches(token)
+
+    /** Medicines, whose trailing number is a strength rather than a count. */
+    private fun strengthItems(category: ShopCategory): Set<String> =
+        if (category == ShopCategory.PHARMACY || category == ShopCategory.GENERAL) {
+            CategoryLexicon.pharmacyItems()
+        } else emptySet()
 
     /** Every number immediately followed by a unit. These are never money. */
     private fun measureValues(text: String, category: ShopCategory): Set<Double> {
@@ -583,8 +710,13 @@ object RulesEngine {
             items.mapNotNull { it.quantity }.forEach { add(it) }
             items.mapNotNull { it.unitPrice }.forEach { add(it) }
             addAll(measureValues(text, category))
+            addAll(countValues(text, category))
         }
-        val spare = numbers.filter { it.value !in used }
+        // A rupee or two is not a bill: below ten, an unattached number is a
+        // count the parser could not place. "2 packet parle g, 1 kurkure"
+        // booked Rs 1. A real small price still arrives through the currency
+        // and mode checks above.
+        val spare = numbers.filter { it.value !in used && it.value >= 10 }
         if (spare.isNotEmpty()) {
             return spare.maxByOrNull { it.value }!!.value to "largest-unused"
         }
@@ -596,7 +728,31 @@ object RulesEngine {
         // money out of someone's pocket.
         if (items.isNotEmpty()) return null to null
 
-        return numbers.maxByOrNull { it.value }!!.value to "largest-overall"
+        // The same holds with no item recognised: a measure is never money.
+        val candidates = numbers.filter { it.value !in used && it.value >= 10 }
+        if (candidates.isEmpty()) return null to null
+        return candidates.maxByOrNull { it.value }!!.value to "largest-overall"
+    }
+
+    /** Every number immediately followed by an item noun -- a count, never money. */
+    private fun countValues(text: String, category: ShopCategory): Set<Double> {
+        val lexicon = CategoryLexicon.itemsFor(category)
+        val modifiers = CategoryLexicon.modifiersFor(category)
+        val tokens = NumberParser.tokenize(text)
+        val found = mutableSetOf<Double>()
+        var i = 0
+        while (i < tokens.size) {
+            if (!NumberParser.isNumberToken(tokens[i].trim('.'))) { i++; continue }
+            var j = i
+            while (j < tokens.size && NumberParser.isNumberToken(tokens[j].trim('.'))) j++
+            var k = j
+            while (k < tokens.size && tokens[k].trim('.') in modifiers) k++
+            if (k < tokens.size && matchItem(tokens[k].trim('.'), lexicon) != null) {
+                NumberParser.parseNumberPhrase(tokens.subList(i, j))?.let { found.add(it) }
+            }
+            i = maxOf(j, i + 1)
+        }
+        return found
     }
 
     /** Run the whole deterministic layer over one message. */

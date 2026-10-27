@@ -157,6 +157,7 @@ object NumberParser {
     private val RE_CURRENCY_PREFIX = Regex("""(₹|रु\.?)\s*(\d)""")
     private val RE_RS_PREFIX = Regex("""\brs\.?\s*(\d)""")
     private val RE_TRAILING_SLASH = Regex("""(\d)\s*/-""")
+    private val RE_DIGIT_GROUP = Regex("""(?<=\d),(?=\d{2},\d|\d{3}(?!\d))""")
     private val RE_GLUED_UNIT = Regex(
         """(?<=\d)(kgs?|kilos?|gms?|grams?|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b"""
     )
@@ -191,6 +192,10 @@ object NumberParser {
         text = RE_CURRENCY_PREFIX.replace(text) { "${it.groupValues[1]} ${it.groupValues[2]}" }
         text = RE_RS_PREFIX.replace(text) { "rs ${it.groupValues[1]}" }
         text = RE_TRAILING_SLASH.replace(text) { "${it.groupValues[1]} " }
+        // Digit-group commas belong to the number: "1,250", the Indian
+        // "1,25,000". Left in, the comma became a clause boundary and
+        // "total 1,250 hua" was read as Rs 250. Mirrors numbers.py.
+        text = RE_DIGIT_GROUP.replace(text, "")
         // Split glued measures: people type "atta 5kg, dal 2kg" far more often
         // than "5 kg". Without this the unit never registers and the item
         // loses its quantity entirely.

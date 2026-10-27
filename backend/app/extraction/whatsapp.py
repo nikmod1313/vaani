@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .conversation import ResolvedOrder, Turn, build_threads, resolve
+from .conversation import ResolvedOrder, Turn, build_threads, resolve_thread
 from .numbers import normalise
 from .rules import _ITEMS, _MODE_WORDS, _UNITS, apply_rules
 
@@ -456,7 +456,7 @@ def ingest_conversation(
 
     turns = to_turns(fresh, customer, shop_aliases)
     threads = build_threads(turns, customer, gap_minutes)
-    orders = [o for t in threads if (o := resolve(t, category)) is not None]
+    orders = [o for t in threads for o in resolve_thread(t, category)]
 
     return ConversationResult(
         total_messages=total,

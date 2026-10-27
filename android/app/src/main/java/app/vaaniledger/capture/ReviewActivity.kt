@@ -73,6 +73,8 @@ class ReviewActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var heading: TextView
 
+    private var approveAllButton: View? = null
+
     /** Cards still awaiting a decision, so "approve all" knows what is left. */
     private val outstanding = mutableMapOf<View, ReviewQueue.Pending>()
 
@@ -96,9 +98,10 @@ class ReviewActivity : Activity() {
         val pending = ReviewQueue.take()
 
         if (pending.isNotEmpty()) {
-            root.addView(button("✓  ${t.approveAll}", t.approveAllSub(pending.size), primary = true) {
+            approveAllButton = button("✓  ${t.approveAll}", t.approveAllSub(pending.size), primary = true) {
                 approveAll()
-            })
+            }
+            root.addView(approveAllButton)
         }
 
         list = LinearLayout(this).apply {
@@ -140,6 +143,9 @@ class ReviewActivity : Activity() {
 
     private fun refreshHeading() {
         heading.text = if (outstanding.isEmpty()) t.allDone else t.newOrder(outstanding.size)
+        // Nothing left to approve: an "approve all" button over an empty
+        // queue invites a tap that does nothing.
+        if (outstanding.isEmpty()) approveAllButton?.visibility = View.GONE
     }
 
     // ----------------------------------------------------------------------

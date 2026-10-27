@@ -307,4 +307,62 @@ class OfflineParityTest {
         assertEquals(2.0, items[0].quantity!!, 0.001)
         assertEquals(5.0, items[1].quantity!!, 0.001)
     }
+    // ----------------------------------------------------------------------
+    // Detection fixes found by backend/eval/chats.py -- mirrors test_detection.py
+    // ----------------------------------------------------------------------
+
+    /** "total 1,250 hua" was read as Rs 250. */
+    @Test
+    fun `digit group commas are part of the number`() {
+        assertEquals(1250.0, NumberParser.findNumbers("total 1,250 hua")[0].value, 0.001)
+        assertEquals(125000.0, NumberParser.findNumbers("1,25,000 ho gaya")[0].value, 0.001)
+        assertEquals(listOf(2.0, 3.0), NumberParser.findNumbers("2,3 kurti").map { it.value })
+    }
+
+    /** "2 packet parle g, 1 kurkure" booked Rs 1. */
+    @Test
+    fun `a count is never money`() {
+        assertNull(amountOf("2 packet parle g, 1 kurkure", ShopCategory.KIRANA))
+        assertNull(amountOf("do kele aur ek kilo seb", ShopCategory.KIRANA))
+    }
+
+    /** "3 sabun 120 ka UPI kar diya" was booked as a debt being settled. */
+    @Test
+    fun `goods paid for on the spot are a sale`() {
+        val r = RulesEngine.applyRules("3 sabun 120 ka UPI kar diya", ShopCategory.KIRANA)
+        assertEquals(RulesEngine.Direction.SALE, r.direction)
+        assertEquals(120.0, r.amount!!, 0.001)
+    }
+
+    /** "bheja tha" about bad flour invented a payment. */
+    @Test
+    fun `a complaint about goods is not a payment`() {
+        val r = RulesEngine.applyRules("kal 3 kg aata bheja tha wo kharab tha", ShopCategory.KIRANA)
+        assertTrue(r.direction != RulesEngine.Direction.PAYMENT)
+    }
+
+    @Test
+    fun `everyday grocery and hindi plurals are known`() {
+        val names = RulesEngine.extractItems(
+            "1 kg besan, 500 gram sooji, ek darjan ande, paav kilo adrak", ShopCategory.KIRANA,
+        ).map { it.name }.toSet()
+        assertEquals(setOf("besan", "sooji", "anda", "adrak"), names)
+    }
+
+    /** "toor dal" and "moong dal" were both "dal". */
+    @Test
+    fun `varieties stay separate lines`() {
+        val labels = RulesEngine.extractItems("toor dal 2 kg moong dal 1 kg", ShopCategory.KIRANA)
+            .map { it.displayName }
+        assertEquals(listOf("toor dal", "moong dal"), labels)
+        assertEquals("chana", RulesEngine.extractItems("2 kg chana", ShopCategory.KIRANA)[0].name)
+    }
+
+    @Test
+    fun `a medicine strength is part of its name`() {
+        val item = RulesEngine.extractItems("dolo 650 ki 2 strip", ShopCategory.PHARMACY)[0]
+        assertEquals("dolo 650", item.name)
+        assertEquals(2.0, item.quantity!!, 0.001)
+        assertEquals("strip", item.unit)
+    }
 }

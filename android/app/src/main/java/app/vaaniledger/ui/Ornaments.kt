@@ -197,8 +197,19 @@ class ArchDrawable(
  * cover, with its edges browned a little as old paper does. Drawn behind the
  * scroll view, so the texture holds still while the writing moves.
  */
-class PaperBackground(private val context: Context) : Drawable() {
+class PaperBackground(
+    private val context: Context,
+    /**
+     * A paisley endpaper pressed into the parchment, as the inside cover of
+     * a bound register is printed. On for the dashboard tabs, which a
+     * shopkeeper lives in; off for onboarding, review and the sheets over
+     * WhatsApp, where the page should be as quiet as possible behind text.
+     */
+    private val pattern: Boolean = false,
+) : Drawable() {
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    /** Gold line work at low strength: present in the page, never competing with the writing on it. */
+    private val patternPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply { alpha = 0x5A }
     private val vignette = Paint(Paint.ANTI_ALIAS_FLAG)
     /** The scan is warm and uneven; a parchment wash over it keeps contrast predictable for text. */
     private val wash = Paint().apply { color = Color.argb(0x5C, 0xF6, 0xEE, 0xD9) }
@@ -216,6 +227,7 @@ class PaperBackground(private val context: Context) : Drawable() {
         val r = RectF(bounds)
         canvas.drawColor(Theme.paper)
         canvas.drawCover(Art.get(context, R.drawable.tex_parchment), r, paint)
+        if (pattern) canvas.drawCover(Art.get(context, R.drawable.tex_paisley), r, patternPaint, focusY = 0f)
         canvas.drawRect(r, wash)
         canvas.drawRect(r, vignette)
     }

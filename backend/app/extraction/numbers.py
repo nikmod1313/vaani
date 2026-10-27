@@ -139,6 +139,12 @@ def normalise(text: str) -> str:
     text = re.sub(r"(₹|रु\.?)\s*(\d)", r"\1 \2", text)
     text = re.sub(r"\brs\.?\s*(\d)", r"rs \1", text)
     text = re.sub(r"(\d)\s*/-", r"\1 ", text)
+    # Digit-group commas belong to the number, not the sentence: "1,250" and
+    # the Indian "1,25,000". Left in, the comma became a clause boundary and
+    # "total 1,250 hua" was read as Rs 250 -- a thousand rupees lost on one
+    # bill. Only a comma followed by exactly three digits (or two digits and
+    # another group) is a separator; "2,3 kurti" stays two numbers.
+    text = re.sub(r"(?<=\d),(?=\d{2},\d|\d{3}(?!\d))", "", text)
     # Split glued measures: people type "atta 5kg, dal 2kg" far more often
     # than "5 kg". Without this the unit never registers and the item loses
     # its quantity entirely.
