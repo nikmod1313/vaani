@@ -1,22 +1,38 @@
 package app.vaaniledger
 
-import app.vaaniledger.ui.Theme
-
 import android.app.Activity
-import android.graphics.Color
-import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import app.vaaniledger.data.AppLanguage
 import app.vaaniledger.data.ShopCategory
 import app.vaaniledger.data.ShopSettings
 import app.vaaniledger.data.Strings
+import app.vaaniledger.ui.ArchDrawable
+import app.vaaniledger.ui.ArchWindow
+import app.vaaniledger.ui.ArtView
+import app.vaaniledger.ui.LineIcon
+import app.vaaniledger.ui.ManuscriptFrame
+import app.vaaniledger.ui.Motion
+import app.vaaniledger.ui.OrnamentRule
+import app.vaaniledger.ui.Scaffold.plainPage
+import app.vaaniledger.ui.Theme
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.body
+import app.vaaniledger.ui.Views.button
+import app.vaaniledger.ui.Views.dp
+import app.vaaniledger.ui.Views.eyebrow
+import app.vaaniledger.ui.Views.gap
+import app.vaaniledger.ui.Views.matchWrap
+import app.vaaniledger.ui.Views.pressable
+import app.vaaniledger.ui.Views.segmented
+import app.vaaniledger.ui.Views.text
+import app.vaaniledger.ui.Views.title
+import app.vaaniledger.ui.Views.weight
+import app.vaaniledger.ui.Views.withAlpha
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +58,11 @@ import kotlinx.coroutines.launch
  * ONE DECISION PER SCREEN. Each step asks exactly one thing with large,
  * illustrated choices -- the interface this app needs is for someone running
  * a shop counter, not someone comfortable with a form.
+ *
+ * The language can also be flipped on the welcome page itself, before any
+ * question is asked: someone who reads English should not have to get
+ * through two Hinglish screens to reach the one that lets them say so. The
+ * choice is held here and only written when the last step is answered.
  */
 class OnboardingActivity : Activity() {
 
@@ -53,12 +74,6 @@ class OnboardingActivity : Activity() {
     // is written in before anyone has chosen anything.
     private var chosenLanguage: AppLanguage = AppLanguage.HI
 
-    private val ink = Theme.ink
-    private val muted = Theme.muted
-    private val indigo = Theme.primary
-    private val paper = Theme.paper
-    private val line = Theme.border
-
     private lateinit var root: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,11 +81,10 @@ class OnboardingActivity : Activity() {
 
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(paper)
-            setPadding(dp(24), dp(40), dp(24), dp(32))
+            setPadding(dp(24), dp(20), dp(24), dp(32))
         }
-        setContentView(ScrollView(this).apply { addView(root) })
-        render()
+        setContentView(plainPage(root))
+        render(direction = 0)
     }
 
     override fun onDestroy() {
@@ -78,43 +92,72 @@ class OnboardingActivity : Activity() {
         super.onDestroy()
     }
 
+    /** Back walks back through the steps before it leaves. */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (step > 0) go(step - 1) else {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        }
+    }
+
+    private fun go(next: Int) {
+        val direction = if (next > step) 1 else -1
+        step = next
+        render(direction)
+    }
+
     // ----------------------------------------------------------------------
 
-    private fun render() {
+    /**
+     * Draw the current step. [direction] slides it in from the side it came
+     * from: forward from the right, back from the left, so the order of the
+     * steps is something the hand can feel.
+     */
+    private fun render(direction: Int) {
         root.removeAllViews()
         val bundle = Strings.of(chosenLanguage)
-        val o = bundle.onboarding
 
-        if (step > 0) {
-            root.addView(TextView(this).apply {
-                text = o.stepOf(step, TOTAL_STEPS)
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(6))
-            })
-            root.addView(dots())
-            root.addView(View(this), LinearLayout.LayoutParams(0, dp(20)))
-        }
+        if (step > 0) root.addView(stepBar(bundle.onboarding))
 
         when (step) {
             0 -> welcome(bundle)
             1 -> categoryStep(bundle)
             2 -> languageStep(bundle)
         }
+
+        if (direction == 0) {
+            Motion.stagger(root, startDelay = 80, step = 70)
+        } else {
+            root.alpha = 0f
+            root.translationX = dp(28).toFloat() * direction
+            root.animate().alpha(1f).translationX(0f).setDuration(320).setInterpolator(Motion.ease).start()
+        }
     }
 
-    private fun dots(): View = LinearLayout(this).apply {
+    /** Back arrow, "Step 1 / 2", and a gold segment per step. */
+    private fun stepBar(o: Strings.Onboarding): View = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        for (i in 1 until TOTAL_STEPS + 1) {
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(0, 0, 0, dp(26))
+
+        addView(View(this@OnboardingActivity).apply {
+            background = LineIcon(this@OnboardingActivity, LineIcon.Glyph.BACK, Theme.ink, sizeDp = 22)
+            contentDescription = o.back
+            pressable()
+            setOnClickListener { go(step - 1) }
+        }, LinearLayout.LayoutParams(dp(22), dp(22)).apply { marginEnd = dp(14) })
+
+        addView(eyebrow(o.stepOf(step, TOTAL_STEPS), Theme.muted))
+        addView(View(this@OnboardingActivity), LinearLayout.LayoutParams(0, 1, 1f))
+
+        for (i in 1..TOTAL_STEPS) {
             addView(View(this@OnboardingActivity).apply {
                 background = GradientDrawable().apply {
-                    setColor(if (i <= step) indigo else line)
-                    cornerRadius = dp(3).toFloat()
+                    setColor(if (i <= step) Theme.accent else Theme.accent.withAlpha(0x40))
+                    cornerRadius = dp(2).toFloat()
                 }
-            }, LinearLayout.LayoutParams(dp(28), dp(5)).apply {
-                marginEnd = dp(6)
-            })
+            }, LinearLayout.LayoutParams(dp(if (i == step) 30 else 18), dp(4)).apply { marginStart = dp(5) })
         }
     }
 
@@ -122,172 +165,154 @@ class OnboardingActivity : Activity() {
 
     private fun welcome(t: Strings.Bundle) {
         val o = t.onboarding
-        root.addView(TextView(this).apply {
-            text = "👋"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 48f)
+
+        // Language, first and small, top right.
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(text("वाणी", 22f, Theme.primary, Type.display(this@OnboardingActivity)), weight())
+            addView(segmented(
+                AppLanguage.entries.map { it to it.displayName },
+                chosenLanguage,
+            ) { chosenLanguage = it; render(direction = 0) }, LinearLayout.LayoutParams(dp(170), -2))
+        }, matchWrap(dp(22)))
+
+        // The palace through an arch, with the elephant stepping out of it --
+        // a collage, as the reference boards are, rather than a framed photo.
+        val heroHeight = (resources.displayMetrics.heightPixels / resources.displayMetrics.density * 0.40f)
+            .toInt().coerceIn(260, 380)
+        root.addView(FrameLayout(this).apply {
+            addView(ArchWindow(this@OnboardingActivity, R.drawable.art_palace, arched = true, focusY = 0.85f),
+                FrameLayout.LayoutParams(-1, dp(heroHeight)).apply {
+                    marginStart = dp(26); marginEnd = dp(26)
+                })
+            addView(ArtView(this@OnboardingActivity, R.drawable.art_elephant),
+                FrameLayout.LayoutParams(dp(150), dp(170), Gravity.BOTTOM or Gravity.END))
+            addView(ArtView(this@OnboardingActivity, R.drawable.art_oud),
+                FrameLayout.LayoutParams(dp(66), dp(106), Gravity.BOTTOM or Gravity.START).apply {
+                    bottomMargin = dp(4)
+                })
+        }, matchWrap(dp(26)).apply { height = dp(heroHeight + 24) })
+
+        root.addView(eyebrow(if (chosenLanguage == AppLanguage.EN) "Namaste" else "Namaste · नमस्ते"))
+        root.addView(title(o.welcomeTitle, 32f).apply { setPadding(0, dp(6), 0, dp(10)) })
+        root.addView(body(o.welcomeSubtitle, 15f))
+        root.addView(OrnamentRule(this), LinearLayout.LayoutParams(-1, dp(14)).apply {
+            topMargin = dp(22); bottomMargin = dp(22)
         })
-        root.addView(TextView(this).apply {
-            text = o.welcomeTitle
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dp(16), 0, dp(8))
-        })
-        root.addView(TextView(this).apply {
-            text = o.welcomeSubtitle
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            setPadding(0, 0, 0, dp(36))
-        })
-        root.addView(primaryButton(o.welcomeStart) { step = 1; render() })
+        root.addView(button(o.welcomeStart, primary = true) { go(1) })
     }
 
     // ---- step 1: category --------------------------------------------------
 
     private fun categoryStep(t: Strings.Bundle) {
         val o = t.onboarding
-        root.addView(TextView(this).apply {
-            text = o.categoryTitle
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-            typeface = Typeface.DEFAULT_BOLD
-        })
-        root.addView(TextView(this).apply {
-            text = o.categorySubtitle
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, dp(6), 0, dp(22))
-        })
+        root.addView(title(o.categoryTitle, 28f))
+        root.addView(body(o.categorySubtitle).apply { setPadding(0, dp(8), 0, dp(24)) })
 
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         ShopCategory.entries.chunked(2).forEach { pair ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(0, 0, 0, dp(10))
+                setPadding(0, 0, 0, dp(12))
             }
             pair.forEach { cat ->
                 row.addView(
-                    categoryTile(cat) { chosenCategory = cat; step = 2; render() },
-                    LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                        .apply { marginEnd = if (cat == pair.first()) dp(10) else 0 },
+                    categoryTile(cat, selected = cat == chosenCategory) { tile ->
+                        chosenCategory = cat
+                        // Show the choice land before moving on, so the tap
+                        // visibly did something rather than the page jumping.
+                        tile.background = ArchDrawable(this, Theme.primary, Theme.gold)
+                        tile.postDelayed({ go(2) }, 260)
+                    },
+                    LinearLayout.LayoutParams(0, dp(146), 1f)
+                        .apply { marginEnd = if (cat == pair.first() && pair.size > 1) dp(12) else 0 },
                 )
             }
+            if (pair.size == 1) row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = dp(12) })
             grid.addView(row)
         }
         root.addView(grid)
-
-        root.addView(TextView(this).apply {
-            text = "← ${o.back}"
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(4), dp(18), dp(4), dp(4))
-            isClickable = true
-            setOnClickListener { step = 0; render() }
-        })
     }
 
-    private fun categoryTile(category: ShopCategory, onClick: () -> Unit): View =
+    private fun categoryTile(category: ShopCategory, selected: Boolean, onPick: (View) -> Unit): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(12), dp(20), dp(12), dp(16))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), line)
-            }
-            isClickable = true
-            setOnClickListener { onClick() }
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            setPadding(dp(10), dp(30), dp(10), dp(16))
+            background = if (selected) ArchDrawable(this@OnboardingActivity, Theme.primary, Theme.gold)
+            else ArchDrawable(this@OnboardingActivity, Theme.surface, Theme.border)
+            pressable()
+            setOnClickListener { onPick(this) }
 
-            addView(TextView(this@OnboardingActivity).apply {
-                text = emojiFor(category)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 32f)
+            val (english, local) = category.label.split(" / ").let {
+                (it.getOrNull(1) ?: it[0]) to it[0]
+            }
+            addView(View(this@OnboardingActivity).apply {
+                background = LineIcon(this@OnboardingActivity, glyphFor(category),
+                    if (selected) Theme.gold else Theme.primary, sizeDp = 30)
+            }, LinearLayout.LayoutParams(dp(30), dp(30)))
+            addView(text(local, 16f, if (selected) Theme.onPrimary else Theme.ink, Type.display(this@OnboardingActivity)).apply {
                 gravity = Gravity.CENTER
+                setPadding(0, dp(10), 0, 0)
             })
-            addView(TextView(this@OnboardingActivity).apply {
-                text = category.label
-                setTextColor(ink)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                typeface = Typeface.DEFAULT_BOLD
+            if (english != local) addView(text(english, 12f, if (selected) Theme.onPrimaryMuted else Theme.muted).apply {
                 gravity = Gravity.CENTER
-                setPadding(0, dp(8), 0, 0)
             })
         }
 
-    private fun emojiFor(category: ShopCategory): String = when (category) {
-        ShopCategory.KIRANA -> "🛒"
-        ShopCategory.APPAREL -> "👕"
-        ShopCategory.PHARMACY -> "💊"
-        ShopCategory.HARDWARE -> "🔧"
-        ShopCategory.STATIONERY -> "📒"
-        ShopCategory.ELECTRONICS -> "🔌"
-        ShopCategory.GENERAL -> "🏪"
+    private fun glyphFor(category: ShopCategory): LineIcon.Glyph = when (category) {
+        ShopCategory.KIRANA -> LineIcon.Glyph.SACK
+        ShopCategory.APPAREL -> LineIcon.Glyph.KURTA
+        ShopCategory.PHARMACY -> LineIcon.Glyph.MEDICINE
+        ShopCategory.HARDWARE -> LineIcon.Glyph.HAMMER
+        ShopCategory.STATIONERY -> LineIcon.Glyph.PEN
+        ShopCategory.ELECTRONICS -> LineIcon.Glyph.BULB
+        ShopCategory.GENERAL -> LineIcon.Glyph.SHOP
     }
 
     // ---- step 2: language --------------------------------------------------
 
+    /**
+     * Two painted doors, one per language. Each is captioned in its own
+     * language, so whichever one a person can read is the one meant for them.
+     */
     private fun languageStep(t: Strings.Bundle) {
         val o = t.onboarding
-        root.addView(TextView(this).apply {
-            text = o.languageTitle
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-            typeface = Typeface.DEFAULT_BOLD
-        })
-        root.addView(TextView(this).apply {
-            text = o.languageSubtitle
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, dp(6), 0, dp(22))
-        })
+        root.addView(title(o.languageTitle, 28f))
+        root.addView(body(o.languageSubtitle).apply { setPadding(0, dp(8), 0, dp(26)) })
 
-        AppLanguage.entries.forEach { lang ->
-            root.addView(
-                languageTile(lang) { finishOnboarding(lang) },
-                LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { bottomMargin = dp(10) },
-            )
-        }
-
-        root.addView(TextView(this).apply {
-            text = "← ${o.back}"
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(4), dp(18), dp(4), dp(4))
-            isClickable = true
-            setOnClickListener { step = 1; render() }
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            AppLanguage.entries.forEachIndexed { i, lang ->
+                if (i > 0) addView(View(this@OnboardingActivity), LinearLayout.LayoutParams(dp(14), 1))
+                addView(doorTile(lang) { finishOnboarding(lang) }, weight())
+            }
         })
     }
 
-    private fun languageTile(language: AppLanguage, onClick: () -> Unit): View =
+    private fun doorTile(language: AppLanguage, onClick: () -> Unit): View =
         LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(18), dp(18), dp(18), dp(18))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), line)
-            }
-            isClickable = true
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(14), dp(18), dp(14), dp(18))
+            val on = language == chosenLanguage
+            background = ManuscriptFrame(this@OnboardingActivity, outer = if (on) Theme.accent else Theme.border)
+            pressable()
             setOnClickListener { onClick() }
 
-            addView(TextView(this@OnboardingActivity).apply {
-                text = language.displayName
-                setTextColor(ink)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-                typeface = Typeface.DEFAULT_BOLD
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-
-            addView(TextView(this@OnboardingActivity).apply {
-                text = "›"
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            addView(ArtView(this@OnboardingActivity, R.drawable.art_door), LinearLayout.LayoutParams(-1, dp(170)))
+            addView(text(language.displayName, 24f, Theme.ink, Type.display(this@OnboardingActivity)).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(14), 0, dp(2))
             })
+            addView(text(Strings.of(language).main.tagline, 12.5f, Theme.muted, Type.displayItalic(this@OnboardingActivity)).apply {
+                gravity = Gravity.CENTER
+            })
+            addView(gap(12))
+            addView(View(this@OnboardingActivity).apply {
+                background = LineIcon(this@OnboardingActivity, LineIcon.Glyph.CHEVRON, Theme.accent, sizeDp = 20)
+            }, LinearLayout.LayoutParams(dp(20), dp(20)))
         }
 
     // ----------------------------------------------------------------------
@@ -304,26 +329,10 @@ class OnboardingActivity : Activity() {
             android.content.Intent(this, MainActivity::class.java)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
         )
+        @Suppress("DEPRECATION")
+        overridePendingTransition(R.anim.vaani_fade_in, R.anim.vaani_fade_out)
         finish()
     }
-
-    private fun primaryButton(title: String, onClick: () -> Unit): View =
-        TextView(this).apply {
-            text = title
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(dp(16), dp(17), dp(16), dp(17))
-            background = GradientDrawable().apply {
-                setColor(indigo)
-                cornerRadius = dp(12).toFloat()
-            }
-            isClickable = true
-            setOnClickListener { onClick() }
-        }
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private companion object {
         const val TOTAL_STEPS = 2

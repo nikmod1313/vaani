@@ -254,7 +254,11 @@ class OverlayService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.BOTTOM }
+        ).apply {
+            gravity = Gravity.BOTTOM
+            // The sheet rises from the bottom edge as the keyboard does.
+            windowAnimations = android.R.style.Animation_InputMethod
+        }
 
         windowManager.addView(view, params)
         panel = view
@@ -306,7 +310,11 @@ class OverlayService : Service() {
                     layoutType,
                     WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                     PixelFormat.TRANSLUCENT,
-                ).apply { gravity = Gravity.BOTTOM }
+                ).apply {
+            gravity = Gravity.BOTTOM
+            // The sheet rises from the bottom edge as the keyboard does.
+            windowAnimations = android.R.style.Animation_InputMethod
+        }
                 windowManager.addView(view, params)
                 khataSheet = view
                 bubble?.visibility = View.GONE
@@ -559,7 +567,11 @@ class OverlayService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.BOTTOM }
+        ).apply {
+            gravity = Gravity.BOTTOM
+            // The sheet rises from the bottom edge as the keyboard does.
+            windowAnimations = android.R.style.Animation_InputMethod
+        }
 
         windowManager.addView(view, params)
         confirmSheet = view
@@ -755,7 +767,7 @@ class OverlayService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "VaaniLedger",
+                "Vaani",
                 NotificationManager.IMPORTANCE_MIN,
             ).apply { description = "Keeps the ledger bubble available" }
             getSystemService(NotificationManager::class.java)
@@ -763,9 +775,10 @@ class OverlayService : Service() {
         }
 
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("VaaniLedger chalu hai")
+            .setContentTitle("Vaani chalu hai")
             .setContentText("Bubble dabaye, hisaab likhne ke liye")
             .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setColor(app.vaaniledger.ui.Theme.primary)
             .setOngoing(true)
             .build()
     }

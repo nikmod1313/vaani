@@ -1,6 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.VaaniLedger" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.VaaniLedger" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Parchment behind every window, so a page never flashes white
+             before its texture is drawn. -->
+        <item name="android:windowBackground">@color/parchment</item>
+        <item name="android:colorPrimary">@color/indigo</item>
+        <item name="android:colorPrimaryDark">@color/indigo_deep</item>
+        <!-- Tints cursors, checkboxes, and the radio buttons in pickers. -->
+        <item name="android:colorAccent">@color/indigo</item>
+        <item name="android:colorControlActivated">@color/indigo</item>
+        <item name="android:statusBarColor">@color/parchment</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/indigo_deep</item>
+        <item name="android:alertDialogTheme">@style/Theme.VaaniLedger.Dialog</item>
+    </style>
+
+    <style name="Theme.VaaniLedger.Dialog" parent="android:Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">@color/indigo</item>
+        <item name="android:colorPrimary">@color/indigo</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:background">@color/parchment</item>
+    </style>
+
+    <!-- The splash is indigo from its very first frame, so the hand-off from
+         the launcher icon never shows a parchment flash. -->
+    <style name="Theme.VaaniLedger.Splash" parent="Theme.VaaniLedger">
+        <item name="android:windowBackground">@color/indigo_deep</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+
     <style name="Theme.VaaniLedger.Transparent" parent="Theme.VaaniLedger">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsTranslucent">true</item>

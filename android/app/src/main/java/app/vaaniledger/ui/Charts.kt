@@ -40,11 +40,15 @@ object ChartPalette {
 }
 
 
-private fun Paint.text(size: Float, colour: Int, bold: Boolean = false) = apply {
+/**
+ * Chart text in the app's own faces: figures in the manuscript serif, labels
+ * in the working sans, so a chart reads as part of the page around it.
+ */
+private fun View.textPaint(size: Float, colour: Int, bold: Boolean = false) = Paint().apply {
     isAntiAlias = true
     textSize = size
     color = colour
-    typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+    typeface = if (bold) Type.display(context) else Type.body(context)
 }
 
 /** Short money, because an axis has no room for "₹1,25,000". */
@@ -72,9 +76,9 @@ class BarChartView(
 
     private val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = barColour }
     private val gridPaint = Paint().apply { color = ChartPalette.grid; strokeWidth = dp(1f) }
-    private val labelPaint = Paint().text(sp(10f), ChartPalette.muted)
-    private val valuePaint = Paint().text(sp(10f), ChartPalette.ink, bold = true)
-    private val emptyPaint = Paint().text(sp(13f), ChartPalette.muted).apply {
+    private val labelPaint = textPaint(sp(10f), ChartPalette.muted)
+    private val valuePaint = textPaint(sp(10f), ChartPalette.ink, bold = true)
+    private val emptyPaint = textPaint(sp(13f), ChartPalette.muted).apply {
         textAlign = Paint.Align.CENTER
     }
 
@@ -157,12 +161,12 @@ class RankBarView(
 
     private val bar = Paint(Paint.ANTI_ALIAS_FLAG)
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ChartPalette.grid }
-    private val namePaint = Paint().text(sp(13f), ChartPalette.ink, bold = true)
-    private val captionPaint = Paint().text(sp(10f), ChartPalette.muted)
-    private val valuePaint = Paint().text(sp(13f), ChartPalette.ink, bold = true).apply {
+    private val namePaint = textPaint(sp(13f), ChartPalette.ink, bold = true)
+    private val captionPaint = textPaint(sp(10f), ChartPalette.muted)
+    private val valuePaint = textPaint(sp(13f), ChartPalette.ink, bold = true).apply {
         textAlign = Paint.Align.RIGHT
     }
-    private val emptyPaint = Paint().text(sp(13f), ChartPalette.muted).apply {
+    private val emptyPaint = textPaint(sp(13f), ChartPalette.muted).apply {
         textAlign = Paint.Align.CENTER
     }
 
@@ -236,15 +240,15 @@ class DonutChartView(
     data class Slice(val label: String, val value: Double, val colour: Int)
 
     private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
-    private val totalPaint = Paint().text(sp(18f), ChartPalette.ink, bold = true).apply {
+    private val totalPaint = textPaint(sp(18f), ChartPalette.ink, bold = true).apply {
         textAlign = Paint.Align.CENTER
     }
-    private val captionPaint = Paint().text(sp(10f), ChartPalette.muted).apply {
+    private val captionPaint = textPaint(sp(10f), ChartPalette.muted).apply {
         textAlign = Paint.Align.CENTER
     }
-    private val legendPaint = Paint().text(sp(12f), ChartPalette.ink)
+    private val legendPaint = textPaint(sp(12f), ChartPalette.ink)
     private val swatch = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val emptyPaint = Paint().text(sp(13f), ChartPalette.muted).apply {
+    private val emptyPaint = textPaint(sp(13f), ChartPalette.muted).apply {
         textAlign = Paint.Align.CENTER
     }
 

@@ -1,18 +1,23 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.LineIcon
+import app.vaaniledger.ui.ManuscriptFrame
+import app.vaaniledger.ui.OrnamentRule
+import app.vaaniledger.ui.SealFrame
+import app.vaaniledger.ui.SheetBackground
 import app.vaaniledger.ui.Theme
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.dp
+import app.vaaniledger.ui.Views.eyebrow
+import app.vaaniledger.ui.Views.pressable
+import app.vaaniledger.ui.Views.text
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
-import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.TextView
 import app.vaaniledger.data.Strings
 
 /**
@@ -44,20 +49,12 @@ class PanelView(
 
     private val ink = Theme.ink
     private val muted = Theme.muted
-    private val saffron = Theme.accent
-    private val good = Theme.good
 
     init {
         orientation = VERTICAL
-        setPadding(dp(16), dp(14), dp(16), dp(16))
-        background = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadii = floatArrayOf(
-                dp(18).toFloat(), dp(18).toFloat(), dp(18).toFloat(), dp(18).toFloat(),
-                0f, 0f, 0f, 0f,
-            )
-        }
-        elevation = dp(16).toFloat()
+        setPadding(context.dp(20), context.dp(18), context.dp(20), context.dp(34))
+        background = SheetBackground(context)
+        elevation = context.dp(16).toFloat()
 
         addView(header())
         addView(stats())
@@ -73,6 +70,7 @@ class PanelView(
                 false
             }
         }
+
     }
 
     // ----------------------------------------------------------------------
@@ -81,20 +79,14 @@ class PanelView(
         orientation = HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
 
-        addView(TextView(context).apply {
-            text = "VaaniLedger"
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = Typeface.DEFAULT_BOLD
-        }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        addView(context.text("वाणी", 22f, Theme.primary, Type.display(context)))
+        addView(View(context), LayoutParams(0, 1, 1f))
 
-        addView(TextView(context).apply {
-            text = "✕"
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setPadding(dp(12), dp(4), dp(4), dp(4))
+        addView(View(context).apply {
+            background = LineIcon(context, LineIcon.Glyph.CLOSE, muted, sizeDp = 20)
+            pressable()
             setOnClickListener { onDismiss() }
-        })
+        }, LayoutParams(context.dp(20), context.dp(20)))
     }
 
     private fun rupees(v: Double) = "₹%,.0f".format(v)
@@ -107,87 +99,75 @@ class PanelView(
      * between "sync is broken" and "sync has not run yet", and the shopkeeper
      * should be able to see which.
      */
-    private fun subtitle(): View = TextView(context).apply {
-        text = when {
+    private fun subtitle(): View = context.text(
+        when {
             today.entries == 0 -> strings.noEntriesToday
             today.pendingSync > 0 -> "${today.entries} entries · ${today.pendingSync} pending sync"
             else -> "${today.entries} entries · synced"
-        }
-        setTextColor(if (today.pendingSync > 0) saffron else muted)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-        setPadding(0, dp(2), 0, 0)
-    }
+        },
+        12.5f, if (today.pendingSync > 0) Theme.warn else muted, Type.displayItalic(context),
+    ).apply { setPadding(0, context.dp(2), 0, 0) }
 
     private fun stats(): View = LinearLayout(context).apply {
-        orientation = HORIZONTAL
-        setPadding(0, dp(14), 0, dp(6))
-        addView(stat(strings.statLabelSale, rupees(today.sale), ink), equalWeight())
-        addView(stat(strings.statLabelCash, rupees(today.cashIn), good), equalWeight())
-        addView(stat(strings.statLabelCredit, rupees(today.udhaar), saffron), equalWeight())
+        orientation = VERTICAL
+        setPadding(0, context.dp(14), 0, context.dp(6))
+        addView(LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            addView(stat(strings.statLabelSale, rupees(today.sale), ink), equalWeight())
+            addView(stat(strings.statLabelCash, rupees(today.cashIn), Theme.good), equalWeight())
+            addView(stat(strings.statLabelCredit, rupees(today.udhaar), Theme.warn), equalWeight())
+        })
+        addView(OrnamentRule(context), LayoutParams(LayoutParams.MATCH_PARENT, context.dp(12)).apply {
+            topMargin = context.dp(12)
+        })
     }
 
     private fun stat(label: String, value: String, colour: Int): View =
         LinearLayout(context).apply {
             orientation = VERTICAL
-            addView(TextView(context).apply {
-                text = label
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
-                letterSpacing = 0.12f
-            })
-            addView(TextView(context).apply {
-                text = value
-                setTextColor(colour)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-                typeface = Typeface.DEFAULT_BOLD
-            })
+            addView(context.eyebrow(label, muted).apply { textSize = 10f })
+            addView(context.text(value, 22f, colour, Type.display(context)))
         }
 
     private fun actions(): View = LinearLayout(context).apply {
         orientation = VERTICAL
-        setPadding(0, dp(12), 0, 0)
+        setPadding(0, context.dp(12), 0, 0)
 
-        addView(button("📖  ${strings.readChat}", strings.readChatSub, primary = true) { onCapture() })
+        addView(button(LineIcon.Glyph.CHAT, strings.readChat, strings.readChatSub, primary = true) { onCapture() })
 
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
-            setPadding(0, dp(8), 0, 0)
-            addView(button("🎙️  ${strings.speak}", strings.speakSub) { onVoice() }, equalWeight())
-            addView(View(context), LayoutParams(dp(8), 1))
-            addView(button("📒  ${strings.ledger}", strings.ledgerSub) { onKhata() }, equalWeight())
+            setPadding(0, context.dp(10), 0, 0)
+            addView(button(LineIcon.Glyph.MIC, strings.speak, strings.speakSub) { onVoice() }, equalWeight())
+            addView(View(context), LayoutParams(context.dp(10), 1))
+            addView(button(LineIcon.Glyph.BOOK, strings.ledger, strings.ledgerSub) { onKhata() }, equalWeight())
         })
     }
 
     private fun button(
+        icon: LineIcon.Glyph,
         title: String,
         subtitle: String,
         primary: Boolean = false,
         onClick: () -> Unit,
     ): View = LinearLayout(context).apply {
-        orientation = VERTICAL
-        setPadding(dp(13), dp(11), dp(13), dp(11))
-        background = GradientDrawable().apply {
-            setColor(if (primary) BubbleView.INDIGO else Theme.subtle)
-            cornerRadius = dp(11).toFloat()
-        }
-        isClickable = true
+        orientation = HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(context.dp(16), context.dp(13), context.dp(14), context.dp(13))
+        background = if (primary) SealFrame(context) else ManuscriptFrame(context)
+        pressable()
         setOnClickListener { onClick() }
 
-        addView(TextView(context).apply {
-            text = title
-            setTextColor(if (primary) Color.WHITE else ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            typeface = Typeface.DEFAULT_BOLD
-        })
-        addView(TextView(context).apply {
-            text = subtitle
-            setTextColor(if (primary) Color.argb(180, 255, 255, 255) else muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+        addView(View(context).apply {
+            background = LineIcon(context, icon, if (primary) Theme.gold else Theme.primary, sizeDp = 22)
+        }, LayoutParams(context.dp(22), context.dp(22)).apply { marginEnd = context.dp(12) })
+
+        addView(LinearLayout(context).apply {
+            orientation = VERTICAL
+            addView(context.text(title, 15.5f, if (primary) Theme.onPrimary else ink, Type.medium(context)))
+            addView(context.text(subtitle, 11.5f, if (primary) Theme.onPrimaryMuted else muted))
         })
     }
 
     private fun equalWeight() = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
 }

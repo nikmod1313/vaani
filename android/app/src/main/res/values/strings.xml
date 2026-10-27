@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">VaaniLedger</string>
+    <string name="app_name">Vaani</string>
     <string name="import_to_ledger">Khate mein daalo</string>
-    <string name="accessibility_description">Lets VaaniLedger read the chat you are looking at when you tap Capture, so an order can be written into the khata. It reads WhatsApp only, never in the background, and the text is discarded unless you save the entry.</string>
+    <string name="accessibility_description">Lets Vaani read the chat you are looking at when you tap Capture, so an order can be written into the khata. It reads WhatsApp only, never in the background, and the text is discarded unless you save the entry.</string>
 </resources>

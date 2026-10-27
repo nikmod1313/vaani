@@ -5,6 +5,20 @@ import app.vaaniledger.ui.Nav
 import app.vaaniledger.ui.Scaffold.page
 
 import app.vaaniledger.ui.Theme
+import app.vaaniledger.ui.ArchWindow
+import app.vaaniledger.ui.ArtView
+import app.vaaniledger.ui.ManuscriptFrame
+import app.vaaniledger.ui.Motion
+import app.vaaniledger.ui.OrnamentRule
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.chip
+import app.vaaniledger.ui.Views.body
+import app.vaaniledger.ui.Views.dp
+import app.vaaniledger.ui.Views.eyebrow
+import app.vaaniledger.ui.Views.matchWrap
+import app.vaaniledger.ui.Views.pageHeader
+import app.vaaniledger.ui.Views.segmented
+import app.vaaniledger.ui.Views.text
 
 import android.app.Activity
 import android.graphics.Color
@@ -87,31 +101,19 @@ class AnalyticsActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(32), dp(18), dp(28))
+            setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        root.addView(TextView(this).apply {
-            text = s.title
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
-            typeface = Typeface.DEFAULT_BOLD
-        })
-        root.addView(TextView(this).apply {
-            text = s.subtitle
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, dp(3), 0, dp(16))
+        root.addView(pageHeader(ShopSettings.NAME, s.title, s.subtitle).apply {
+            setPadding(0, 0, 0, dp(18))
         })
 
-        tabRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        root.addView(HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(tabRow)
-        })
+        tabRow = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(tabRow)
 
         rangeRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(10), 0, 0)
+            setPadding(0, dp(12), 0, 0)
         }
         root.addView(rangeRow)
 
@@ -143,14 +145,15 @@ class AnalyticsActivity : Activity() {
     private fun renderChips() {
         val s = strings()
         tabRow.removeAllViews()
-        listOf(
-            Tab.OVERVIEW to s.tabOverview,
-            Tab.SALES to s.tabSales,
-            Tab.PRODUCTS to s.tabProducts,
-            Tab.CUSTOMERS to s.tabCustomers,
-        ).forEach { (value, label) ->
-            tabRow.addView(chip(label, value == tab) { tab = value; renderChips(); load() })
-        }
+        tabRow.addView(segmented(
+            listOf(
+                Tab.OVERVIEW to s.tabOverview,
+                Tab.SALES to s.tabSales,
+                Tab.PRODUCTS to s.tabProducts,
+                Tab.CUSTOMERS to s.tabCustomers,
+            ),
+            tab,
+        ) { tab = it; renderChips(); load() })
 
         rangeRow.removeAllViews()
         listOf(
@@ -167,11 +170,8 @@ class AnalyticsActivity : Activity() {
     private fun load() {
         val s = strings()
         content.removeAllViews()
-        content.addView(TextView(this).apply {
-            text = "…"
-            setTextColor(muted)
-            setPadding(0, dp(30), 0, dp(30))
-            gravity = Gravity.CENTER
+        content.addView(OrnamentRule(this).apply { alpha = 0.6f }, LinearLayout.LayoutParams(-1, dp(14)).apply {
+            topMargin = dp(40); bottomMargin = dp(40)
         })
 
         scope.launch {
@@ -211,6 +211,7 @@ class AnalyticsActivity : Activity() {
                     Tab.PRODUCTS -> renderProducts(data)
                     Tab.CUSTOMERS -> renderCustomers(data)
                 }
+                Motion.stagger(content, step = 60)
             }
         }
     }
@@ -236,9 +237,9 @@ class AnalyticsActivity : Activity() {
         val s = strings()
         val h = data.headline
 
+        content.addView(heroKpi(s.kpiSale, h.sale, s.paymentMix))
         content.addView(kpiGrid(
             listOf(
-                Triple(s.kpiSale, shortMoney(h.sale), indigo),
                 Triple(s.kpiCashIn, shortMoney(h.cashIn), ChartPalette.good),
                 Triple(s.kpiUdhaar, shortMoney(h.udhaar), ChartPalette.warn),
                 Triple(s.kpiEntries, h.entries.toString(), ink),
@@ -339,6 +340,31 @@ class AnalyticsActivity : Activity() {
 
     // ---- building blocks --------------------------------------------------
 
+    /** The one figure that matters most, on the indigo palace panel. */
+    private fun heroKpi(label: String, value: Double, caption: String): View {
+        val panel = ArchWindow(this, R.drawable.art_palace, arched = false, focusY = 0.9f, shade = 0.9f)
+        val figure = text("₹0", 40f, Theme.onPrimary, Type.display(this))
+        panel.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(18), dp(20), dp(20))
+            addView(eyebrow(label, Theme.gold))
+            addView(figure.apply { setPadding(0, dp(6), 0, 0) })
+            addView(text(rangeLabel(), 13f, Theme.onPrimaryMuted))
+        })
+        Motion.countUp(figure, value) { "₹%,.0f".format(it) }
+        panel.layoutParams = matchWrap(dp(12))
+        return panel
+    }
+
+    private fun rangeLabel(): String {
+        val s = strings()
+        return when (range) {
+            Range.QUARTER -> s.range3m
+            Range.YEAR -> s.range12m
+            Range.ALL -> s.rangeAll
+        }
+    }
+
     private fun kpiGrid(cells: List<Triple<String, String, Int>>): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -348,61 +374,40 @@ class AnalyticsActivity : Activity() {
                     pair.forEachIndexed { i, (label, value, colour) ->
                         if (i > 0) addView(
                             View(this@AnalyticsActivity),
-                            LinearLayout.LayoutParams(dp(10), 1),
+                            LinearLayout.LayoutParams(dp(12), 1),
                         )
                         addView(kpi(label, value, colour), equalWeight())
                     }
                     if (pair.size == 1) {
-                        addView(View(this@AnalyticsActivity), LinearLayout.LayoutParams(dp(10), 1))
+                        addView(View(this@AnalyticsActivity), LinearLayout.LayoutParams(dp(12), 1))
                         addView(View(this@AnalyticsActivity), equalWeight())
                     }
-                    (layoutParams as? LinearLayout.LayoutParams)?.bottomMargin = dp(10)
                 }, LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { bottomMargin = dp(10) })
+                ).apply { bottomMargin = dp(12) })
             }
         }
 
     private fun kpi(label: String, value: String, colour: Int): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(13), dp(12), dp(13), dp(12))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(11).toFloat()
-                setStroke(dp(1), Theme.border)
-            }
-            addView(TextView(this@AnalyticsActivity).apply {
-                text = label
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
-                typeface = Typeface.DEFAULT_BOLD
-            })
-            addView(TextView(this@AnalyticsActivity).apply {
-                text = value
-                setTextColor(colour)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, dp(3), 0, 0)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = ManuscriptFrame(this@AnalyticsActivity)
+            addView(eyebrow(label, Theme.muted).apply { textSize = 10f })
+            addView(text(value, 24f, colour, Type.display(this@AnalyticsActivity)).apply {
+                setPadding(0, dp(4), 0, 0)
             })
         }
 
     private fun card(title: String, body: () -> View): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(14), dp(14), dp(14))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Theme.border)
-            }
-            addView(TextView(this@AnalyticsActivity).apply {
-                text = title
-                setTextColor(ink)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(0, 0, 0, dp(12))
+            setPadding(dp(18), dp(16), dp(18), dp(18))
+            background = ManuscriptFrame(this@AnalyticsActivity)
+            addView(text(title, 19f, ink, Type.display(this@AnalyticsActivity)))
+            addView(OrnamentRule(this@AnalyticsActivity, flourish = false), LinearLayout.LayoutParams(-1, dp(8)).apply {
+                topMargin = dp(6); bottomMargin = dp(14)
             })
             addView(body())
             layoutParams = LinearLayout.LayoutParams(
@@ -411,40 +416,22 @@ class AnalyticsActivity : Activity() {
             ).apply { bottomMargin = dp(12) }
         }
 
-    private fun note(text: String): View = TextView(this).apply {
-        this.text = text
-        setTextColor(muted)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-        setPadding(dp(2), 0, dp(2), dp(8))
+    private fun note(text: String): View = text(text, 12.5f, muted, Type.displayItalic(this)).apply {
+        setPadding(dp(4), dp(2), dp(4), dp(8))
     }
 
-    private fun emptyState(text: String): View = TextView(this).apply {
-        this.text = text
-        setTextColor(muted)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        gravity = Gravity.CENTER
-        setPadding(dp(20), dp(50), dp(20), dp(50))
+    /** Nothing sold yet: the elephant, waiting, and one line on how to start. */
+    private fun emptyState(text: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(dp(20), dp(30), dp(20), dp(40))
+        addView(ArtView(this@AnalyticsActivity, R.drawable.art_elephant).apply { alpha = 0.9f },
+            LinearLayout.LayoutParams(dp(150), dp(170)))
+        addView(OrnamentRule(this@AnalyticsActivity), LinearLayout.LayoutParams(dp(180), dp(14)).apply {
+            topMargin = dp(18); bottomMargin = dp(14)
+        })
+        addView(body(text, 15f).apply { gravity = Gravity.CENTER })
     }
-
-    private fun chip(label: String, selected: Boolean, small: Boolean = false, onClick: () -> Unit): View =
-        TextView(this).apply {
-            text = label
-            setTextColor(if (selected) Color.WHITE else ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, if (small) 11f else 13f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(if (small) 12 else 15), dp(8), dp(if (small) 12 else 15), dp(8))
-            background = GradientDrawable().apply {
-                setColor(if (selected) indigo else Color.WHITE)
-                cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), if (selected) indigo else Theme.border)
-            }
-            isClickable = true
-            setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { rightMargin = dp(8) }
-        }
 
     private fun equalWeight() =
         LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -461,8 +448,6 @@ class AnalyticsActivity : Activity() {
 
     private fun trimQty(q: Double): String =
         if (q == Math.floor(q)) q.toInt().toString() else "%.1f".format(q)
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private companion object {
         const val TAG = "VaaniAnalytics"

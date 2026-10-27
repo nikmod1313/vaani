@@ -1,6 +1,11 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.SealFrame
+import app.vaaniledger.ui.SheetBackground
 import app.vaaniledger.ui.Theme
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.pressable
+import app.vaaniledger.ui.Views.withAlpha
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -60,26 +65,21 @@ class EditSheetView(
 
     init {
         orientation = VERTICAL
-        setPadding(dp(16), dp(12), dp(16), dp(16))
-        background = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadii = floatArrayOf(
-                dp(20).toFloat(), dp(20).toFloat(), dp(20).toFloat(), dp(20).toFloat(),
-                0f, 0f, 0f, 0f,
-            )
-        }
+        setPadding(dp(20), dp(20), dp(20), dp(22))
+        background = SheetBackground(context)
         elevation = dp(20).toFloat()
 
         addView(TextView(context).apply {
             text = "Badlo"
             setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-            typeface = Typeface.DEFAULT_BOLD
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+            typeface = Type.display(context)
         })
         addView(TextView(context).apply {
             text = "Jo galat hai use theek kijiye — aapki baat final hai"
             setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = Type.displayItalic(context)
             setPadding(0, dp(2), 0, dp(10))
         })
 
@@ -103,20 +103,22 @@ class EditSheetView(
     private fun field(label: String, value: String, inputType: Int): EditText {
         addView(TextView(context).apply {
             text = label
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
-            letterSpacing = 0.1f
+            setTextColor(Theme.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Type.bold(context)
+            letterSpacing = 0.12f
             setPadding(0, dp(8), 0, dp(3))
         })
         val edit = EditText(context).apply {
             setText(value)
             this.inputType = inputType
             setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            typeface = Type.body(context)
+            setPadding(dp(14), dp(11), dp(14), dp(11))
             background = GradientDrawable().apply {
-                setColor(Theme.subtle)
-                cornerRadius = dp(9).toFloat()
+                setColor(Theme.surface)
+                cornerRadius = dp(10).toFloat()
                 setStroke(dp(1), rule)
             }
         }
@@ -128,9 +130,10 @@ class EditSheetView(
         orientation = VERTICAL
         addView(TextView(context).apply {
             text = "TYPE"
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 9.5f)
-            letterSpacing = 0.1f
+            setTextColor(Theme.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            typeface = Type.bold(context)
+            letterSpacing = 0.12f
             setPadding(0, dp(8), 0, dp(3))
         })
         addView(LinearLayout(context).apply {
@@ -141,10 +144,10 @@ class EditSheetView(
                     val chip = TextView(context).apply {
                         text = label
                         gravity = Gravity.CENTER
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                        typeface = Typeface.DEFAULT_BOLD
-                        setPadding(dp(8), dp(9), dp(8), dp(9))
-                        isClickable = true
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                        typeface = Type.medium(context)
+                        setPadding(dp(8), dp(10), dp(8), dp(10))
+                        pressable()
                         setOnClickListener { select(value) }
                     }
                     modeChips[value] = chip
@@ -158,10 +161,11 @@ class EditSheetView(
         selectedMode = mode
         modeChips.forEach { (value, chip) ->
             val on = value == mode
-            chip.setTextColor(if (on) Color.WHITE else ink)
+            chip.setTextColor(if (on) Theme.onPrimary else ink)
             chip.background = GradientDrawable().apply {
-                setColor(if (on) BubbleView.INDIGO else Theme.subtle)
-                cornerRadius = dp(9).toFloat()
+                setColor(if (on) Theme.primary else Color.TRANSPARENT)
+                cornerRadius = dp(20).toFloat()
+                setStroke(dp(1), if (on) Theme.primary else rule)
             }
         }
     }
@@ -173,13 +177,15 @@ class EditSheetView(
         addView(TextView(context).apply {
             text = "Cancel"
             gravity = Gravity.CENTER
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setPadding(dp(12), dp(13), dp(12), dp(13))
+            setTextColor(ink)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Type.medium(context)
+            setPadding(dp(12), dp(14), dp(12), dp(14))
             background = GradientDrawable().apply {
-                setColor(Theme.subtle); cornerRadius = dp(11).toFloat()
+                setColor(Color.TRANSPARENT); cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), ink.withAlpha(0x55))
             }
-            isClickable = true
+            pressable()
             setOnClickListener { onDismiss() }
         }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
 
@@ -188,14 +194,12 @@ class EditSheetView(
         addView(TextView(context).apply {
             text = "Save karo  ✓"
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(12), dp(13), dp(12), dp(13))
-            background = GradientDrawable().apply {
-                setColor(good); cornerRadius = dp(11).toFloat()
-            }
-            isClickable = true
+            setTextColor(Theme.onPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Type.medium(context)
+            setPadding(dp(12), dp(14), dp(12), dp(14))
+            background = SealFrame(context, fill = good)
+            pressable()
             setOnClickListener {
                 onSave(
                     Corrected(

@@ -5,6 +5,19 @@ import app.vaaniledger.ui.Nav
 import app.vaaniledger.ui.Scaffold.page
 
 import app.vaaniledger.ui.Theme
+import app.vaaniledger.ui.ArtView
+import app.vaaniledger.ui.OrnamentRule
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.chip
+import app.vaaniledger.ui.Views.body
+import app.vaaniledger.ui.Views.button
+import app.vaaniledger.ui.Views.dp
+import app.vaaniledger.ui.Views.eyebrow
+import app.vaaniledger.ui.Views.matchWrap
+import app.vaaniledger.ui.Views.pageHeader
+import app.vaaniledger.ui.Views.pressable
+import app.vaaniledger.ui.Views.text
+import app.vaaniledger.ui.Views.withAlpha
 
 import android.app.Activity
 import android.graphics.Color
@@ -90,20 +103,13 @@ class LedgerActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(32), dp(18), dp(28))
+            setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        root.addView(TextView(this).apply {
-            text = s.title
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
-            typeface = Typeface.DEFAULT_BOLD
-        })
+        root.addView(pageHeader(ShopSettings.NAME, s.title))
 
-        countLabel = TextView(this).apply {
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(3), 0, dp(14))
+        countLabel = text("", 13f, muted).apply {
+            setPadding(0, dp(4), 0, dp(16))
         }
         root.addView(countLabel)
 
@@ -112,7 +118,7 @@ class LedgerActivity : Activity() {
 
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(14), 0, 0)
+            setPadding(0, dp(8), 0, 0)
         }
         root.addView(list)
 
@@ -197,7 +203,10 @@ class LedgerActivity : Activity() {
                         list.addView(dayHeader(day))
                         lastDay = day
                     }
-                    list.addView(row(tx))
+                    list.addView(row(tx).also { r ->
+                        r.alpha = 0f
+                        r.animate().alpha(1f).setDuration(260).start()
+                    })
                 }
                 lastRenderedDay = lastDay
                 loaded += rows.size
@@ -212,79 +221,79 @@ class LedgerActivity : Activity() {
 
     // ----------------------------------------------------------------------
 
-    private fun dayHeader(day: String): View = TextView(this).apply {
-        text = day.uppercase()
-        setTextColor(muted)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-        typeface = Typeface.DEFAULT_BOLD
-        setPadding(dp(2), dp(12), 0, dp(6))
+    /** A date, as a scribe heads a new day in the register: capitals and a gold rule. */
+    private fun dayHeader(day: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(0, dp(20), 0, dp(4))
+        addView(eyebrow(day))
+        addView(OrnamentRule(this@LedgerActivity, flourish = false), LinearLayout.LayoutParams(0, dp(8), 1f).apply {
+            marginStart = dp(10)
+        })
     }
 
+    /**
+     * One ruled line of the register.
+     *
+     * The initial in its medallion is tinted by how the money moved -- green
+     * for a payment, saffron for udhaar, indigo for a paid sale -- and the
+     * amount carries its sign as well, so the colour is never the only cue.
+     */
     private fun row(tx: TransactionEntity): View {
         val s = strings()
         val credit = tx.mode == "udhaar"
         val payment = tx.direction == "payment"
+        val name = tx.customerName?.takeIf { it.isNotBlank() } ?: s.noCustomer
+        val tone = when {
+            payment -> ChartPalette.good
+            credit -> ChartPalette.warn
+            else -> Theme.primary
+        }
 
         return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(11).toFloat()
-                setStroke(dp(1), Theme.border)
-            }
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(2), dp(14), dp(2), dp(14))
+            background = RuledLine(this@LedgerActivity)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(8) }
-
-            isClickable = true
+            )
+            pressable()
             setOnClickListener { edit(tx) }
 
+            addView(text(name.take(1).uppercase(), 18f, tone, Type.display(this@LedgerActivity)).apply {
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.TRANSPARENT)
+                    setStroke(dp(1), tone.withAlpha(0x88))
+                }
+            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(14) })
+
             addView(LinearLayout(this@LedgerActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                addView(TextView(this@LedgerActivity).apply {
-                    text = tx.customerName?.takeIf { it.isNotBlank() } ?: s.noCustomer
-                    setTextColor(ink)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                    typeface = Typeface.DEFAULT_BOLD
-                }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                orientation = LinearLayout.VERTICAL
+                addView(text(name, 16f, ink, Type.medium(this@LedgerActivity)))
+                addView(text(
+                    tx.itemList.joinToString(", ").ifBlank { s.noItems },
+                    13.5f, if (tx.items.isBlank()) muted else ink,
+                ).apply { maxLines = 2 })
+                addView(text(
+                    listOf(
+                        timeFormat.format(Date(tx.occurredAt)),
+                        modeLabel(tx.mode),
+                        tx.source,
+                        if (tx.syncState == SyncState.SYNCED.name) s.synced else s.pending,
+                    ).joinToString("  ·  "),
+                    11.5f, muted,
+                ).apply { setPadding(0, dp(3), 0, 0) })
+            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-                addView(TextView(this@LedgerActivity).apply {
-                    // A payment reduces what is owed, so it reads as a
-                    // negative against the khata rather than another sale.
-                    text = (if (payment) "−" else "+") + "₹%,.0f".format(tx.amount)
-                    setTextColor(
-                        when {
-                            payment -> ChartPalette.good
-                            credit -> ChartPalette.warn
-                            else -> ink
-                        }
-                    )
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-                    typeface = Typeface.DEFAULT_BOLD
-                })
-            })
-
-            addView(TextView(this@LedgerActivity).apply {
-                text = tx.itemList.joinToString(", ").ifBlank { s.noItems }
-                setTextColor(if (tx.items.isBlank()) muted else ink)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(0, dp(4), 0, 0)
-            })
-
-            addView(TextView(this@LedgerActivity).apply {
-                val synced = tx.syncState == SyncState.SYNCED.name
-                text = listOf(
-                    timeFormat.format(Date(tx.occurredAt)),
-                    modeLabel(tx.mode),
-                    tx.source,
-                    if (synced) s.synced else s.pending,
-                ).joinToString(" · ")
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
-                setPadding(0, dp(5), 0, 0)
-            })
+            addView(text(
+                // A payment reduces what is owed, so it reads as a
+                // negative against the khata rather than another sale.
+                (if (payment) "−" else "+") + "₹%,.0f".format(tx.amount),
+                18f, if (payment || credit) tone else ink, Type.display(this@LedgerActivity),
+            ).apply { setPadding(dp(10), 0, 0, 0) })
         }
     }
 
@@ -323,10 +332,13 @@ class LedgerActivity : Activity() {
             onDismiss = { dialog.dismiss() },
         )
         dialog.setView(sheet)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
         dialog.setButton(
             android.app.AlertDialog.BUTTON_NEUTRAL, s.deleteAction,
         ) { _, _ -> confirmDelete(tx) }
         dialog.show()
+        // Deleting is the one destructive action here; it reads as one.
+        dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL)?.setTextColor(Theme.danger)
     }
 
     private fun applyEdit(tx: TransactionEntity, corrected: EditSheetView.Corrected) {
@@ -396,51 +408,38 @@ class LedgerActivity : Activity() {
         }
     }
 
-    private fun loadMoreButton(): View = TextView(this).apply {
-        text = strings().loadMore
-        setTextColor(indigo)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-        typeface = Typeface.DEFAULT_BOLD
-        gravity = Gravity.CENTER
-        setPadding(dp(14), dp(14), dp(14), dp(14))
-        background = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadius = dp(11).toFloat()
-            setStroke(dp(1), Theme.border)
-        }
-        isClickable = true
-        setOnClickListener { loadMore() }
-    }
-
-    private fun emptyState(text: String): View = TextView(this).apply {
-        this.text = text
-        setTextColor(muted)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        gravity = Gravity.CENTER
-        setPadding(dp(20), dp(50), dp(20), dp(50))
-    }
-
-    private fun chip(label: String, selected: Boolean, onClick: () -> Unit): View =
-        TextView(this).apply {
-            text = label
-            setTextColor(if (selected) Color.WHITE else ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            background = GradientDrawable().apply {
-                setColor(if (selected) indigo else Color.WHITE)
-                cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), if (selected) indigo else Theme.border)
-            }
-            isClickable = true
-            setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { rightMargin = dp(8) }
+    private fun loadMoreButton(): View =
+        button(strings().loadMore, primary = false) { loadMore() }.apply {
+            layoutParams = matchWrap().apply { topMargin = dp(18) }
         }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun emptyState(text: String): View = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(dp(20), dp(36), dp(20), dp(40))
+        addView(ArtView(this@LedgerActivity, R.drawable.art_cushions), LinearLayout.LayoutParams(dp(170), dp(150)))
+        addView(OrnamentRule(this@LedgerActivity), LinearLayout.LayoutParams(dp(180), dp(14)).apply {
+            topMargin = dp(18); bottomMargin = dp(14)
+        })
+        addView(body(text, 15f).apply { gravity = Gravity.CENTER })
+    }
+
+    /** A hairline under each entry, inset from the medallion, like a ruled page. */
+    private class RuledLine(context: android.content.Context) : android.graphics.drawable.Drawable() {
+        private val paint = android.graphics.Paint().apply {
+            color = Theme.border
+            strokeWidth = context.resources.displayMetrics.density
+        }
+        private val inset = 56 * context.resources.displayMetrics.density
+        override fun draw(canvas: android.graphics.Canvas) {
+            val y = bounds.bottom - paint.strokeWidth / 2
+            canvas.drawLine(bounds.left + inset, y, bounds.right.toFloat(), y, paint)
+        }
+        override fun setAlpha(alpha: Int) {}
+        override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+    }
 
     private companion object {
         const val PAGE = 25

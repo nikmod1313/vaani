@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ draws its own splash before ours. Make it the same
+         indigo, and empty: ours writes the name into it, so the two read
+         as one opening rather than an icon followed by a second splash. -->
+    <style name="Theme.VaaniLedger.Splash" parent="Theme.VaaniLedger">
+        <item name="android:windowBackground">@color/indigo_deep</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowSplashScreenBackground">@color/indigo_deep</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+    </style>
+</resources>

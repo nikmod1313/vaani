@@ -1,6 +1,11 @@
 package app.vaaniledger.overlay
 
+import app.vaaniledger.ui.SealFrame
+import app.vaaniledger.ui.SheetBackground
 import app.vaaniledger.ui.Theme
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.pressable
+import app.vaaniledger.ui.Views.withAlpha
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -45,14 +50,8 @@ class ConfirmSheetView(
 
     init {
         orientation = VERTICAL
-        setPadding(dp(16), dp(12), dp(16), dp(16))
-        background = GradientDrawable().apply {
-            setColor(Color.WHITE)
-            cornerRadii = floatArrayOf(
-                dp(20).toFloat(), dp(20).toFloat(), dp(20).toFloat(), dp(20).toFloat(),
-                0f, 0f, 0f, 0f,
-            )
-        }
+        setPadding(dp(20), dp(12), dp(20), dp(34))
+        background = SheetBackground(context)
         elevation = dp(20).toFloat()
 
         addView(grabber())
@@ -66,7 +65,7 @@ class ConfirmSheetView(
 
     private fun grabber(): View = View(context).apply {
         background = GradientDrawable().apply {
-            setColor(rule); cornerRadius = dp(2).toFloat()
+            setColor(Theme.accent.withAlpha(0x88)); cornerRadius = dp(2).toFloat()
         }
         layoutParams = LayoutParams(dp(34), dp(4)).apply {
             gravity = Gravity.CENTER_HORIZONTAL
@@ -79,31 +78,33 @@ class ConfirmSheetView(
         addView(TextView(context).apply {
             text = "Yeh sahi hai?"
             setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
-            typeface = Typeface.DEFAULT_BOLD
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+            typeface = Type.display(context)
         })
         val conf = extraction.confidence
         addView(TextView(context).apply {
             text = "CONFIDENCE %.2f  ·  %s".format(conf.overall, conf.route.uppercase())
-            setTextColor(muted)
+            setTextColor(Theme.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
-            letterSpacing = 0.06f
+            typeface = Type.bold(context)
+            letterSpacing = 0.12f
             setPadding(0, dp(3), 0, 0)
         })
     }
 
-    /** The original message, so he can check the extraction against it. */
-    private fun quote(): View = TextView(context).apply {
-        text = "“${extraction.text}”"
-        setTextColor(Theme.muted)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
-        setPadding(dp(11), dp(9), dp(11), dp(9))
-        background = GradientDrawable().apply {
-            setColor(Theme.subtle)
-            cornerRadius = dp(7).toFloat()
-        }
+    /** The original message, so he can check the extraction against it -- set as a quotation. */
+    private fun quote(): View = LinearLayout(context).apply {
+        orientation = HORIZONTAL
+        addView(View(context).apply { setBackgroundColor(Theme.accent) },
+            LayoutParams(dp(2), LayoutParams.MATCH_PARENT).apply { marginEnd = dp(12) })
+        addView(TextView(context).apply {
+            text = "“${extraction.text}”"
+            setTextColor(Theme.muted)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Type.displayItalic(context)
+        }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT)
-            .apply { topMargin = dp(12) }
+            .apply { topMargin = dp(14) }
     }
 
     private fun fields(): View = LinearLayout(context).apply {
@@ -130,30 +131,35 @@ class ConfirmSheetView(
 
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
-            setPadding(dp(11), dp(9), dp(11), dp(9))
-            if (weak) background = GradientDrawable().apply {
-                setColor(warnSoft); cornerRadius = dp(6).toFloat()
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                if (weak) setColor(warnSoft) else setColor(Color.TRANSPARENT)
+                cornerRadius = dp(8).toFloat()
+                if (!weak) setStroke(0, Color.TRANSPARENT)
             }
 
             addView(TextView(context).apply {
                 text = label
                 setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 9f)
-                letterSpacing = 0.1f
-            }, LayoutParams(dp(64), LayoutParams.WRAP_CONTENT))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                typeface = Type.bold(context)
+                letterSpacing = 0.12f
+                setPadding(0, dp(4), 0, 0)
+            }, LayoutParams(dp(70), LayoutParams.WRAP_CONTENT))
 
             addView(LinearLayout(context).apply {
                 orientation = VERTICAL
                 addView(TextView(context).apply {
                     text = value
                     setTextColor(if (weak) warn else ink)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                    typeface = Typeface.DEFAULT_BOLD
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                    typeface = Type.display(context)
                 })
                 if (!hint.isNullOrBlank()) addView(TextView(context).apply {
                     text = hint
                     setTextColor(muted)
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+                    typeface = Type.body(context)
                 })
             }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
 
@@ -174,9 +180,9 @@ class ConfirmSheetView(
 
     private fun footer(): View = LinearLayout(context).apply {
         orientation = HORIZONTAL
-        setPadding(0, dp(14), 0, 0)
+        setPadding(0, dp(16), 0, 0)
         addView(button("Badlo", primary = false) { onEdit() }, weight())
-        addView(View(context), LayoutParams(dp(9), 1))
+        addView(View(context), LayoutParams(dp(10), 1))
         addView(button("Sahi hai  ✓", primary = true) { onConfirm() }, weight())
     }
 
@@ -184,15 +190,17 @@ class ConfirmSheetView(
         TextView(context).apply {
             text = label
             gravity = Gravity.CENTER
-            setTextColor(if (primary) Color.WHITE else Theme.muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (primary) Theme.onPrimary else ink)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = Type.medium(context)
             setPadding(dp(12), dp(14), dp(12), dp(14))
-            background = GradientDrawable().apply {
-                setColor(if (primary) good else Theme.subtle)
-                cornerRadius = dp(11).toFloat()
+            // Confirm is the seal in green: money is about to be written down.
+            background = if (primary) SealFrame(context, fill = good) else GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), ink.withAlpha(0x55))
             }
-            isClickable = true
+            pressable()
             setOnClickListener { onClick() }
         }
 

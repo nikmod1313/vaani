@@ -1,6 +1,21 @@
 package app.vaaniledger.capture
 
 import app.vaaniledger.ui.Theme
+import app.vaaniledger.R
+import app.vaaniledger.ui.ArtView
+import app.vaaniledger.ui.ManuscriptFrame
+import app.vaaniledger.ui.Motion
+import app.vaaniledger.ui.Scaffold.plainPage
+import app.vaaniledger.ui.SealFrame
+import app.vaaniledger.ui.Type
+import app.vaaniledger.ui.Views.body
+import app.vaaniledger.ui.Views.dp
+import app.vaaniledger.ui.Views.eyebrow
+import app.vaaniledger.ui.Views.pill
+import app.vaaniledger.ui.Views.pressable
+import app.vaaniledger.ui.Views.text
+import app.vaaniledger.ui.Views.title
+import app.vaaniledger.ui.Views.withAlpha
 
 import android.app.Activity
 import android.graphics.Color
@@ -67,22 +82,15 @@ class ReviewActivity : Activity() {
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(paper)
-            setPadding(dp(20), dp(36), dp(20), dp(28))
+            setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        heading = TextView(this).apply {
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
-            typeface = Typeface.DEFAULT_BOLD
-        }
+        root.addView(eyebrow(ShopSettings.NAME))
+        heading = title("", 30f).apply { setPadding(0, dp(4), 0, 0) }
         root.addView(heading)
 
-        root.addView(TextView(this).apply {
-            text = ReviewQueue.sourceLabel
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setPadding(0, dp(4), 0, dp(18))
+        root.addView(text(ReviewQueue.sourceLabel, 14f, muted, Type.displayItalic(this)).apply {
+            setPadding(0, dp(2), 0, dp(16))
         })
 
         val pending = ReviewQueue.take()
@@ -106,19 +114,23 @@ class ReviewActivity : Activity() {
         }
 
         if (pending.isEmpty()) {
-            list.addView(TextView(this).apply {
-                text = "📭\n\n${t.emptyTitle}\n\n${t.emptySubtitle}"
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setPadding(0, dp(30), 0, 0)
-                gravity = Gravity.CENTER
+            list.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(0, dp(24), 0, dp(12))
+                addView(ArtView(this@ReviewActivity, R.drawable.art_door), LinearLayout.LayoutParams(dp(110), dp(190)))
+                addView(text(t.emptyTitle, 20f, ink, Type.display(this@ReviewActivity)).apply {
+                    gravity = Gravity.CENTER; setPadding(0, dp(18), 0, dp(6))
+                })
+                addView(body(t.emptySubtitle, 14f).apply { gravity = Gravity.CENTER })
             })
         }
 
         root.addView(button(t.close, "", primary = false) { finishUp() })
 
         refreshHeading()
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(plainPage(root))
+        Motion.stagger(list, startDelay = 120, step = 70)
     }
 
     override fun onDestroy() {
@@ -137,90 +149,78 @@ class ReviewActivity : Activity() {
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(15), dp(16), dp(15))
-            background = GradientDrawable().apply {
-                setColor(Color.WHITE)
-                cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Theme.border)
-            }
+            setPadding(dp(18), dp(18), dp(18), dp(16))
+            background = ManuscriptFrame(this@ReviewActivity)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { bottomMargin = dp(12) }
+            ).apply { bottomMargin = dp(14) }
         }
 
         // Customer and amount, the two things read first.
+        val name = e.customer ?: item.customerName ?: "?"
         card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
 
-            addView(TextView(this@ReviewActivity).apply {
-                text = "👤"
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                setPadding(0, 0, dp(8), 0)
-            })
-            addView(TextView(this@ReviewActivity).apply {
-                text = e.customer ?: item.customerName ?: "?"
-                setTextColor(ink)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                typeface = Typeface.DEFAULT_BOLD
-            }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(text(name.take(1).uppercase(), 18f, indigo, Type.display(this@ReviewActivity)).apply {
+                gravity = Gravity.CENTER
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Theme.subtle)
+                }
+            }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) })
+            addView(text(name, 18f, ink, Type.medium(this@ReviewActivity)),
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
-            addView(TextView(this@ReviewActivity).apply {
-                // An order with no stated price shows a dash, never a zero.
-                // Rs 0 reads as a free sale; "—" reads as what it is, a
-                // number nobody has given us yet.
-                text = e.amount?.let { "₹%,.0f".format(it) } ?: "—"
-                setTextColor(if (e.amount == null) warn else ink)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                typeface = Typeface.DEFAULT_BOLD
-            })
+            // An order with no stated price shows a dash, never a zero.
+            // Rs 0 reads as a free sale; "—" reads as what it is, a
+            // number nobody has given us yet.
+            addView(text(e.amount?.let { "₹%,.0f".format(it) } ?: "—", 24f,
+                if (e.amount == null) warn else ink, Type.display(this@ReviewActivity)))
         })
 
-        card.addView(TextView(this).apply {
-            text = itemLine(e)
-            setTextColor(ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setPadding(dp(24), dp(6), 0, 0)
+        card.addView(text(itemLine(e), 15f, ink).apply {
+            setPadding(dp(52), dp(4), 0, 0)
         })
 
-        badges(e).takeIf { it.isNotBlank() }?.let { tags ->
-            card.addView(TextView(this).apply {
-                text = tags
-                setTextColor(muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(24), dp(6), 0, 0)
+        badges(e).takeIf { it.isNotEmpty() }?.let { tags ->
+            card.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(52), dp(8), 0, 0)
+                tags.forEach { (label, colour, fill) ->
+                    addView(pill(label, colour, fill), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) })
+                }
+            }.let { row ->
+                android.widget.HorizontalScrollView(this).apply {
+                    isHorizontalScrollBarEnabled = false
+                    addView(row)
+                }
             })
         }
 
-        // The evidence. This is the part that makes the card judgeable.
-        card.addView(TextView(this).apply {
-            text = e.text
-            setTextColor(muted)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(dp(10), dp(8), dp(10), dp(8))
-            background = GradientDrawable().apply {
-                setColor(paper)
-                cornerRadius = dp(8).toFloat()
-            }
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(10) }
+        // The evidence. This is the part that makes the card judgeable --
+        // set as a quotation, with a gold rule down its margin.
+        card.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(14), 0, 0)
+            addView(View(this@ReviewActivity).apply { setBackgroundColor(Theme.accent) },
+                LinearLayout.LayoutParams(dp(2), -1).apply { marginEnd = dp(12) })
+            addView(text(e.text, 14f, muted, Type.displayItalic(this@ReviewActivity)),
+                LinearLayout.LayoutParams(0, -2, 1f))
         })
 
         card.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(12), 0, 0)
-            addView(
-                button("✓  ${t.save}", t.saveSub, primary = true) { decide(card, approve = true) },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
-            )
-            addView(View(this@ReviewActivity), LinearLayout.LayoutParams(dp(8), 1))
+            setPadding(0, dp(10), 0, 0)
             addView(
                 button("✕  ${t.skip}", t.skipSub, primary = false) { decide(card, approve = false) },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(View(this@ReviewActivity), LinearLayout.LayoutParams(dp(10), 1))
+            addView(
+                button("✓  ${t.save}", t.saveSub, primary = true) { decide(card, approve = true) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f),
             )
         })
 
@@ -250,24 +250,25 @@ class ReviewActivity : Activity() {
      * and the quantity came from different messages, which is precisely the
      * case a shopkeeper should look at twice before approving.
      */
-    private fun badges(e: Extraction): String {
-        val tags = mutableListOf<String>()
-        if (e.carriedTopic) tags.add(t.fromConversation)
+    private fun badges(e: Extraction): List<Triple<String, Int, Int>> {
+        val tags = mutableListOf<Triple<String, Int, Int>>()
+        if (e.carriedTopic) tags.add(Triple(t.fromConversation, Theme.oxblood, Theme.warnSoft))
         when (e.mode) {
-            "udhaar" -> tags.add(t.modeCredit)
-            "cash" -> tags.add(t.modeCash)
-            "upi" -> tags.add(t.modeOnline)
+            "udhaar" -> tags.add(Triple(t.modeCredit, warn, Theme.warnSoft))
+            "cash" -> tags.add(Triple(t.modeCash, good, Theme.goodSoft))
+            "upi" -> tags.add(Triple(t.modeOnline, Theme.turquoise, Theme.primarySoft))
         }
-        if (e.amount == null) tags.add(t.noPriceYet)
-        if (e.customerIsNew) tags.add(t.newCustomer)
-        return tags.joinToString("  ·  ")
+        if (e.amount == null) tags.add(Triple(t.noPriceYet, warn, Theme.warnSoft))
+        if (e.customerIsNew) tags.add(Triple(t.newCustomer, indigo, Theme.primarySoft))
+        return tags
     }
 
     // ----------------------------------------------------------------------
 
     private fun decide(card: View, approve: Boolean) {
         val item = outstanding.remove(card) ?: return
-        card.visibility = View.GONE
+        card.animate().alpha(0f).translationX(dp(if (approve) 40 else -40).toFloat()).setDuration(220)
+            .withEndAction { card.visibility = View.GONE }.start()
         refreshHeading()
 
         scope.launch {
@@ -322,26 +323,20 @@ class ReviewActivity : Activity() {
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        setPadding(dp(13), dp(14), dp(13), dp(14))
-        background = GradientDrawable().apply {
-            setColor(if (primary) indigo else Theme.subtle)
-            cornerRadius = dp(11).toFloat()
+        setPadding(dp(13), dp(12), dp(13), dp(12))
+        background = if (primary) SealFrame(this@ReviewActivity) else GradientDrawable().apply {
+            setColor(Color.TRANSPARENT)
+            cornerRadius = dp(12).toFloat()
+            setStroke(dp(1), ink.withAlpha(0x55))
         }
-        isClickable = true
+        pressable()
         setOnClickListener { onClick() }
 
-        addView(TextView(this@ReviewActivity).apply {
-            text = title
-            setTextColor(if (primary) Color.WHITE else ink)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            typeface = Typeface.DEFAULT_BOLD
+        addView(text(title, 15.5f, if (primary) Theme.onPrimary else ink, Type.medium(this@ReviewActivity)).apply {
             gravity = Gravity.CENTER
         })
         if (subtitle.isNotBlank()) {
-            addView(TextView(this@ReviewActivity).apply {
-                text = subtitle
-                setTextColor(if (primary) Color.argb(180, 255, 255, 255) else muted)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f)
+            addView(text(subtitle, 11f, if (primary) Theme.onPrimaryMuted else muted).apply {
                 gravity = Gravity.CENTER
             })
         }
@@ -356,8 +351,6 @@ class ReviewActivity : Activity() {
 
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
         private const val TAG = "VaaniReview"

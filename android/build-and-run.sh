@@ -73,7 +73,7 @@ echo "▸ installing"
 # On a real phone this prompt cannot be bypassed — grant it in the app.
 "$ADB" shell appops set app.vaaniledger SYSTEM_ALERT_WINDOW allow 2>/dev/null || true
 
-"$ADB" shell am start -n app.vaaniledger/.MainActivity >/dev/null
+"$ADB" shell am start -n app.vaaniledger/.SplashActivity >/dev/null
 
 cat <<'TXT'
 

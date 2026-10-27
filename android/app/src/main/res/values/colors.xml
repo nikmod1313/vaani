@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#253A6E</color>
+    <!-- Mirrors ui/Theme.kt. Only what XML itself needs lives here. -->
+    <color name="ic_launcher_background">#1B2A5C</color>
+    <color name="indigo">#1B2A5C</color>
+    <color name="indigo_deep">#111C42</color>
+    <color name="parchment">#F3EAD3</color>
+    <color name="gold">#B8862F</color>
+    <color name="ink">#2A1F17</color>
 </resources>

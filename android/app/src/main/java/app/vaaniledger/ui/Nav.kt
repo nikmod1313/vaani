@@ -21,10 +21,10 @@ object Nav {
     fun items(activity: Activity): List<BottomNav.Item> {
         val t = Strings.of(ShopSettings.language(activity)).nav
         return listOf(
-            BottomNav.Item(BottomNav.Destination.HOME, "🏠", t.home),
-            BottomNav.Item(BottomNav.Destination.REPORT, "📊", t.report),
-            BottomNav.Item(BottomNav.Destination.LEDGER, "📒", t.ledger),
-            BottomNav.Item(BottomNav.Destination.SETTINGS, "⚙️", t.settings),
+            BottomNav.Item(BottomNav.Destination.HOME, LineIcon.Glyph.HOME, t.home),
+            BottomNav.Item(BottomNav.Destination.REPORT, LineIcon.Glyph.REPORT, t.report),
+            BottomNav.Item(BottomNav.Destination.LEDGER, LineIcon.Glyph.LEDGER, t.ledger),
+            BottomNav.Item(BottomNav.Destination.SETTINGS, LineIcon.Glyph.SETTINGS, t.settings),
         )
     }
 

@@ -29,6 +29,24 @@ object Strings {
         val analytics: Analytics,
         val ledger: Ledger,
         val nav: Nav,
+        val home: Home,
+    )
+
+    /** The home page's own lines: the greeting, today's tally, setup progress. */
+    data class Home(
+        val greetingMorning: String,
+        val greetingAfternoon: String,
+        val greetingEvening: String,
+        val todayHeading: String,
+        val todayEntries: (Int) -> String,
+        val seeReport: String,
+        val setupHeading: String,
+        val setupProgress: (Int, Int) -> String,
+        val setupDone: String,
+        val bubbleHeading: String,
+        val bubbleOnCaption: String,
+        val bubbleOffCaption: String,
+        val step: (Int) -> String,
     )
 
     data class Onboarding(
@@ -199,7 +217,7 @@ object Strings {
 
     private val HI = Bundle(
         onboarding = Onboarding(
-            welcomeTitle = "VaaniLedger mein swagat hai",
+            welcomeTitle = "Vaani mein swagat hai",
             welcomeSubtitle = "Aapka khata, aapki awaaz mein. Shuru karne se pehle do chhoti si baatein poochni hain.",
             welcomeStart = "Shuru karein",
             categoryTitle = "Aapki dukaan kis cheez ki hai?",
@@ -212,7 +230,7 @@ object Strings {
             stepOf = { step, total -> "Step $step / $total" },
         ),
         main = Main(
-            appTitle = "VaaniLedger",
+            appTitle = "Vaani",
             tagline = "Aapka khata, aapki awaaz mein",
             overlayTitle = "Screen ke upar dikhana",
             overlayDesc = "Bubble ko WhatsApp ke upar aane deta hai. Iske bina app kaam nahi karega.",
@@ -298,6 +316,21 @@ object Strings {
             ledger = "Khata",
             settings = "Setting",
         ),
+        home = Home(
+            greetingMorning = "Shubh prabhat",
+            greetingAfternoon = "Namaste",
+            greetingEvening = "Shubh sandhya",
+            todayHeading = "Aaj ka hisaab",
+            todayEntries = { n -> if (n == 1) "1 entry aaj" else "$n entries aaj" },
+            seeReport = "Poori report",
+            setupHeading = "Shuru karne se pehle",
+            setupProgress = { done, total -> "$total mein se $done ho gaya" },
+            setupDone = "Sab taiyaar hai",
+            bubbleHeading = "Vaani bubble",
+            bubbleOnCaption = "WhatsApp ke upar tair raha hai",
+            bubbleOffCaption = "Abhi band hai",
+            step = { n -> "Kadam $n" },
+        ),
         analytics = Analytics(
             title = "Dhandhe ki report",
             subtitle = "Aapki dukaan kaisi chal rahi hai",
@@ -360,7 +393,7 @@ object Strings {
 
     private val EN = Bundle(
         onboarding = Onboarding(
-            welcomeTitle = "Welcome to VaaniLedger",
+            welcomeTitle = "Welcome to Vaani",
             welcomeSubtitle = "Your ledger, in your own words. Two quick questions before you start.",
             welcomeStart = "Get started",
             categoryTitle = "What does your shop sell?",
@@ -373,7 +406,7 @@ object Strings {
             stepOf = { step, total -> "Step $step of $total" },
         ),
         main = Main(
-            appTitle = "VaaniLedger",
+            appTitle = "Vaani",
             tagline = "Your ledger, in your own words",
             overlayTitle = "Show over other apps",
             overlayDesc = "Lets the bubble float on top of WhatsApp. The app cannot work without this.",
@@ -458,6 +491,21 @@ object Strings {
             report = "Report",
             ledger = "Ledger",
             settings = "Settings",
+        ),
+        home = Home(
+            greetingMorning = "Good morning",
+            greetingAfternoon = "Good afternoon",
+            greetingEvening = "Good evening",
+            todayHeading = "Today",
+            todayEntries = { n -> if (n == 1) "1 entry today" else "$n entries today" },
+            seeReport = "Full report",
+            setupHeading = "Before you begin",
+            setupProgress = { done, total -> "$done of $total done" },
+            setupDone = "All set",
+            bubbleHeading = "Vaani bubble",
+            bubbleOnCaption = "Floating over WhatsApp",
+            bubbleOffCaption = "Off right now",
+            step = { n -> "Step $n" },
         ),
         analytics = Analytics(
             title = "Business report",
