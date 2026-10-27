@@ -19,6 +19,8 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import app.vaaniledger.data.CustomerBalance
+import app.vaaniledger.data.ShopSettings
+import app.vaaniledger.data.Strings
 import app.vaaniledger.data.TransactionEntity
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -41,6 +43,8 @@ class KhataView(
     private val onRemind: (CustomerBalance) -> Unit = {},
 ) : LinearLayout(context) {
 
+    private val t = Strings.of(ShopSettings.language(context)).sheets
+    private val strings get() = t
     private val ink = Theme.ink
     private val muted = Theme.muted
     private val rule = Theme.border
@@ -64,10 +68,10 @@ class KhataView(
                     addView(empty())
                 } else {
                     if (balances.any { it.outstanding > 0 }) {
-                        addView(sectionLabel("KISKA KITNA BAAKI"))
+                        addView(sectionLabel(t.oweHeading))
                         balances.filter { it.outstanding > 0 }.forEach { addView(balanceRow(it)) }
                     }
-                    addView(sectionLabel("PICHHLI ENTRIES"))
+                    addView(sectionLabel(t.recentHeading))
                     recent.forEach { addView(entryRow(it)) }
                 }
             })
@@ -94,13 +98,13 @@ class KhataView(
         addView(LinearLayout(context).apply {
             orientation = VERTICAL
             addView(TextView(context).apply {
-                text = "Khata"
+                text = t.khataTitle
                 setTextColor(ink)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
                 typeface = Type.display(context)
             })
             addView(TextView(context).apply {
-                text = if (total > 0) "Kul baaki ${rupees(total)}" else "Sab clear hai"
+                text = if (total > 0) t.totalDue(rupees(total)) else t.allClear
                 setTextColor(if (total > 0) Theme.warn else good)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                 typeface = Type.displayItalic(context)
@@ -117,7 +121,7 @@ class KhataView(
     }
 
     private fun empty(): View = TextView(context).apply {
-        text = "Abhi koi entry nahi.\n\nWhatsApp chat kholiye, bubble dabaiye,\naur \"Yeh likh lo\" par tap kijiye."
+        text = t.khataEmpty
         setTextColor(muted)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
         typeface = Type.displayItalic(context)
@@ -150,7 +154,7 @@ class KhataView(
             // Overdue is computed, never stored — a stored value is wrong the
             // next morning.
             if (b.daysOverdue > 30) addView(TextView(context).apply {
-                text = "${b.daysOverdue} din purana"
+                text = t.daysOld(b.daysOverdue)
                 setTextColor(cut)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                 typeface = Type.body(context)
@@ -169,7 +173,7 @@ class KhataView(
         // a human seeing it, which for a system that contacts people about
         // money they owe is the right default, not a compromise.
         addView(TextView(context).apply {
-            text = "Yaad dilao"
+            text = t.remind
             setTextColor(Theme.onPrimary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
             typeface = Type.medium(context)
@@ -182,7 +186,7 @@ class KhataView(
         })
     }
 
-    private fun entryRow(t: TransactionEntity): View = LinearLayout(context).apply {
+    private fun entryRow(e: TransactionEntity): View = LinearLayout(context).apply {
         orientation = HORIZONTAL
         setPadding(0, dp(9), 0, dp(9))
         background = GradientDrawable().apply {
@@ -193,8 +197,8 @@ class KhataView(
         addView(LinearLayout(context).apply {
             orientation = VERTICAL
             addView(TextView(context).apply {
-                text = t.itemList.joinToString(", ").ifBlank {
-                    if (t.direction == "payment") "Payment mila" else "Entry"
+                text = e.itemList.joinToString(", ").ifBlank {
+                    if (e.direction == "payment") strings.paymentReceived else strings.entry
                 }
                 setTextColor(ink)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
@@ -203,8 +207,8 @@ class KhataView(
             addView(TextView(context).apply {
                 // Source and sync state on every row: the audit trail, and the
                 // difference between "not synced yet" and "sync is broken".
-                val sync = if (t.syncState == "SYNCED") "" else " · pending"
-                text = "${dayFormat.format(Date(t.occurredAt))} · ${t.source}$sync"
+                val sync = if (e.syncState == "SYNCED") "" else " · ${strings.pending}"
+                text = "${dayFormat.format(Date(e.occurredAt))} · ${e.source}$sync"
                 setTextColor(muted)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                 typeface = Type.body(context)
@@ -212,9 +216,9 @@ class KhataView(
         }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
 
         addView(TextView(context).apply {
-            val sign = if (t.direction == "payment") "−" else "+"
-            text = "$sign${rupees(t.amount)}"
-            setTextColor(if (t.direction == "payment") good else if (t.mode == "udhaar") Theme.warn else ink)
+            val sign = if (e.direction == "payment") "−" else "+"
+            text = "$sign${rupees(e.amount)}"
+            setTextColor(if (e.direction == "payment") good else if (e.mode == "udhaar") Theme.warn else ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             typeface = Type.display(context)
         })

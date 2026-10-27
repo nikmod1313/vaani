@@ -95,6 +95,14 @@ object ChatScraper {
     private val GROUP_METADATA_PATTERN =
         Regex("""\d+\s+members?,?\s*\d*\s*contacts?""", RegexOption.IGNORE_CASE)
 
+    /**
+     * "Save (987) 650-0001?" -- the unknown-number prompt above a new chat.
+     * Its second line was already filtered; this title was not, and the
+     * phone number in it reached the engine as a Rs 987 bill.
+     */
+    private val SAVE_CONTACT_PROMPT =
+        Regex("""^(?:save|add)\s+[+(]?[\d\s()+-]{7,20}\??$""", RegexOption.IGNORE_CASE)
+
     /** A bare phone number is a chat title, not an order. */
     private val PHONE_ONLY = Regex("""^[+(]?[\d\s()+-]{7,20}$""")
 
@@ -213,6 +221,7 @@ object ChatScraper {
         if (TIME_PATTERN.matches(text) || DATE_PATTERN.matches(text)) return false
         if (PHONE_ONLY.matches(text)) return false
         if (CHROME_EXACT.any { lower == it }) return false
+        if (SAVE_CONTACT_PROMPT.matches(lower)) return false
         if (CHROME_CONTAINS.any { lower.contains(it) }) return false
         if (GROUP_METADATA_PATTERN.containsMatchIn(text)) return false
         if (CHROME_IDS.any { id.contains(it) }) return false

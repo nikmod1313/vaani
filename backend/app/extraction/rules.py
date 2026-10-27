@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .categories import Category, items_for, modifiers_for, pharmacy_items, units_for
+from .categories import Category, is_compound, items_for, modifiers_for, pharmacy_items, units_for
 from .numbers import BOUNDARY, find_numbers, normalise, tokenize
 
 
@@ -180,6 +180,21 @@ _MONEY_WORDS = re.compile(
 _SETTLEMENT_WORDS = re.compile(
     r"\b(?:paise?|paisa|pese|baaki|baki|udhaa?r|hisaa?b|pichl\w*|purana|purane|"
     r"due|balance|khaate?|bakaya)\b|पैसे?|बाकी|उधार|हिसाब"
+)
+
+_CASH_PHRASES = re.compile(
+    r"\b\d+\s+(?:ka|ke|wala|wale|rupaye\s+ka)\s+note\b|\bnote\s+(?:de|diya|bhej)\w*"
+    r"|\bchh?utta\b|\b(?:baaki|baki|bacha|bache|change)\b.{0,12}?\b(?:wapa?s|lauta\w*|return)\b"
+)
+
+# Asking for money BACK. "galti se double payment ho gaya, 300 wapas kar do"
+# contains "payment ho gaya" and was booked as a Rs 300 payment received --
+# the exact opposite of what happened.
+_REFUND = re.compile(
+    r"\brefund\w*\b|\bwapa?s\s+(?:kar|de|bhej|karo|dena|kijiye)\w*|\b(?:paid|payment)\s+twice\b"
+    r"|\b(?:double|do\s+baar|2\s+baar|dobara)\s+(?:payment|pay|gpay|paytm|phonepe|upi|ho\s+gaya)\b"
+    r"|\bgalti\s+se\b.{0,30}?\b(?:payment|bhej|pay|gpay|paytm|phonepe)\w*"
+    r"|(?<!\S)वापस\s+(?:कर|दे|भेज)"
 )
 
 _UNITS: dict[str, str] = {
@@ -351,6 +366,14 @@ def detect_mode(text: str) -> tuple[PaymentMode, str | None]:
     instrument wins over the debt type.
     """
     norm = normalise(text)
+
+    # Paying with a note is cash, and the "baaki" in "baaki lauta dena" is the
+    # change coming back, not a debt. Read as credit, "100 ka note de raha
+    # hu, baaki lauta dena" put a paid-for Rs 42 into the udhaar column.
+    m = _CASH_PHRASES.search(norm)
+    if m:
+        return PaymentMode.CASH, m.group(0)
+
     hits: list[tuple[PaymentMode, str]] = []
     for tok in norm.split():
         clean = tok.strip(".")
@@ -377,6 +400,9 @@ def detect_direction(text: str, category: Category | str | None = None) -> Direc
     # A promise to pay is not a payment. Checked first so no amount of
     # past-tense-looking wording after it can flip the reading.
     promised = any(re.search(p, norm) for p in _FUTURE_PAYMENT_PHRASES)
+    # A request for a refund is neither a payment nor a sale.
+    if _REFUND.search(norm):
+        return Direction.UNKNOWN
 
     items = extract_items(text, category)
 
@@ -628,7 +654,14 @@ def extract_items(
             i += 1
             continue
 
+        # Two nouns that name one garment: "salwar kameez", "kurta pajama".
         matched_item = _match_item(tok, lexicon)
+        follower = _match_item(tok_at(i + 1), lexicon)
+        if matched_item is not None and follower is not None and is_compound(matched_item, follower):
+            pending_modifier = matched_item
+            i += 1
+            continue
+
         if matched_item is not None:
             nxt = tok_at(i + 1)
             # A digit or a unit counts as corroboration; a weak number word
@@ -686,6 +719,12 @@ def extract_items(
                     ):
                         quantity = value
                         i = j
+
+            # A unit AFTER the item, for a count stated before it: "1 salwar
+            # kameez set", "2 maggi packet".
+            if quantity is not None and unit is None and tok_at(i) in units and tok_at(i) not in _CONTAINERS:
+                unit = units[tok_at(i)]
+                i += 1
 
             rate = _trailing_rate(tokens, i, lexicon)
             items.append(

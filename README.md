@@ -116,22 +116,42 @@ cd backend && python3 -m eval.chats --set all          # add --verbose for every
 | Total correct | 20.0% | **94.3%** |
 | Order completely right — items, quantities, total, mode | **8.6%** | **80.0%** |
 
+**Second round (27 Oct), on a fresh held-out set.** The first test set's
+failures were read to report them, which spends it as a held-out measure.
+So before the second round of fixes a NEW set, `chats_test2.jsonl` (40
+threads, 29 orders), was written and scored once as a baseline, then again
+only after the fixes — its failures were never looked at in between.
+
+| Fresh held-out set (`test2`) | Before round 2 | After |
+|---|---|---|
+| Orders invented (precision) | 93.5% | **100%** |
+| Order completely right | **82.8%** | **86.2%** |
+
+That the first round's 80% reappeared as 82.8% on a set written afterwards is
+the useful evidence: the first round's gains generalise rather than fitting
+the examples they were tuned on.
+
+Round 2 fixed: questions about a future arrangement ("chahiye hoga kya?")
+booked as orders; refund requests booked as payments; synonyms across a
+thread ("chini" / "sugar") treated as two items; two-noun garments ("salwar
+kameez"); paying with a note ("100 ka note, baaki lauta dena") read as
+credit; and — found only by driving the live capture path on a device — a
+phone number in a captured "Save (987) 650-0001?" banner booked as a Rs 987
+bill. Phone numbers are now removed before any number is read.
+
 One caveat on the 80.0%: two of its points come from the thousands-comma bug
 ("1,250" read as 250), which was found in an exploratory probe before the test
 set existed but only fixed after the first scoring; without it the figure is
 74.3%. The dev half now scores 100%, which — like the 122 — says only that it
 was tuned on.
 
-What still goes wrong on the held-out set, deliberately left unfixed so the
-number stays honest:
+The failure classes the first held-out set exposed were all addressed in
+round 2, through dev cases written for each, not by tuning on that set.
+Run `python3 -m eval.chats --set test2 --verbose` to see what the fresh set
+still gets wrong; it is deliberately not listed here, because listing it is
+the first step towards fixing against it.
 
-- a question about a *future* standing order ("roz 2 packet doodh chahiye hoga kya?") is booked as an order;
-- a refund request ("2 baar payment ho gaya, 200 wapas kar dena") is booked as a payment;
-- a brand-plus-product phrase the lexicon lacks ("tata tea", "kurta pajama set") loses its quantity or splits in two;
-- an item separated from its order by a clause ("bp wali dawai khatam ho gayi, 2 patta bhej dena") loses its quantity;
-- "500 ka note de raha hu" (paying cash with a note) is not recognised as cash.
-
-`ChatBenchmarkParityTest` replays every one of these threads through the
+`ChatBenchmarkParityTest` replays every one of these threads — all three sets, 142 of them — through the
 Kotlin engine on the phone and requires the identical answer, so the two
 engines cannot quietly drift apart. Re-run `python3 -m eval.chats --set all
 --dump` after any engine change to refresh what it compares against.

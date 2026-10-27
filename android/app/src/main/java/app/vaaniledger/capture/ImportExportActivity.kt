@@ -143,7 +143,7 @@ class ImportExportActivity : Activity() {
         scope.launch {
             val db = LedgerDatabase.get(this@ImportExportActivity)
             val category = ShopSettings.category(this@ImportExportActivity)
-            val aliases = setOf(ShopSettings.NAME)
+            val aliases = setOf(ShopSettings.NAME, ShopSettings.name(this@ImportExportActivity))
 
             val parsed = ExportParser.parse(content)
             if (parsed.isEmpty()) {

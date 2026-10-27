@@ -158,5 +158,55 @@ class TestVocabulary(unittest.TestCase):
         self.assertEqual((found[0].name, found[0].quantity, found[0].unit), ("dolo 650", 2, "strip"))
 
 
+
+class TestSecondRound(unittest.TestCase):
+    """Failure classes found after the first benchmark round."""
+
+    def test_a_question_about_a_future_arrangement_is_not_an_order(self):
+        self.assertEqual(orders(("kal se 2 packet doodh roz chahiye hoga kya?", False)), [])
+
+    def test_a_request_phrased_as_a_question_is_still_an_order(self):
+        o = orders(("2 kg chawal bhej doge?", False), ("haan, 120", True))
+        self.assertEqual((o[0].items[0].name, o[0].amount), ("chawal", 120))
+
+    def test_a_refund_request_is_not_a_payment(self):
+        for text in ["galti se double payment ho gaya, 300 wapas kar do",
+                     "please refund 200, i paid twice"]:
+            self.assertEqual(orders((text, False)), [], text)
+
+    def test_synonyms_are_one_product(self):
+        """"chini hai kya?" "haan sugar 45 kilo" is one item, not two."""
+        o = orders(("chini hai kya?", False), ("haan sugar 45 kilo", True), ("1 kilo de do", False))
+        self.assertEqual(len(o[0].items), 1)
+        self.assertEqual(o[0].items[0].name, "chini")   # the customer's own word
+        self.assertEqual(o[0].amount, 45)
+
+    def test_a_two_noun_garment_is_one_item(self):
+        found = extract_items("1 salwar kameez set aur 2 dupatta", "apparel")
+        self.assertEqual([(i.display_name, i.quantity, i.unit) for i in found],
+                         [("salwar kameez", 1, "set"), ("dupatta", 2, None)])
+
+    def test_paying_with_a_note_is_cash_and_baaki_is_change(self):
+        o = orders(("3 packet maggi", False), ("42", True),
+                   ("100 ka note de raha hu, baaki lauta dena", False))
+        self.assertEqual((o[0].amount, o[0].mode), (42, "cash"))
+
+
+
+class TestPhoneNumbers(unittest.TestCase):
+    """A captured "Save (987) 650-0001?" banner was booked as a Rs 987 bill."""
+
+    def test_a_phone_number_is_never_money(self):
+        for text in [
+            "Save (987) 650-0001? bhaiya 1 kg besan aur 2 packet maggi bhej dena",
+            "is number pe call karna 9876543210, 2 kg chawal",
+            "delivery 98765 43210 pe, 1 kg cheeni",
+        ]:
+            self.assertIsNone(apply_rules(text, "kirana").amount, text)
+
+    def test_money_beside_a_phone_number_survives(self):
+        self.assertEqual(apply_rules("+91 98765 43210 pe bhejo 500 ka saman", "kirana").amount, 500)
+
+
 if __name__ == "__main__":
     unittest.main()

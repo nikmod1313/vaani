@@ -10,10 +10,13 @@ the engine was tuned on it until it passed. This scores what the app now
 actually does with a chat: thread the turns, decide whether an order exists,
 and resolve its items, quantities, total and payment mode.
 
-TWO SETS, AND ONLY ONE OF THEM MAY BE TUNED ON. `chats_dev.jsonl` is for
-finding failures and fixing them. `chats_test.jsonl` was written before any
-engine change and is scored only to report the result; tuning against it
-would turn it into a second dev set and the number it gives into fiction.
+HELD-OUT SETS ARE NEVER TUNED ON. `chats_dev.jsonl` is for finding failures
+and fixing them. `chats_test.jsonl` was written before the first round of
+engine changes; its failures were then read (to report them), so it is now
+spent as a held-out set and kept for continuity. `chats_test2.jsonl` was
+written before the second round and is the current held-out measure.
+Tuning against a held-out set turns it into a second dev set and the number
+it gives into fiction.
 
 Scoring, per expected order:
 
@@ -284,12 +287,12 @@ def report(name: str, r: dict) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--set", default="dev", choices=["dev", "test", "all"])
+    ap.add_argument("--set", default="dev", choices=["dev", "test", "test2", "all"])
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--dump", action="store_true", help="write chats_engine_output.json")
     args = ap.parse_args()
 
-    names = ["dev", "test"] if args.set == "all" else [args.set]
+    names = ["dev", "test", "test2"] if args.set == "all" else [args.set]
     dump = {}
     for name in names:
         r = evaluate(load(name), verbose=args.verbose)

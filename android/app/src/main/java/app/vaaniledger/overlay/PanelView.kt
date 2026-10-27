@@ -47,6 +47,7 @@ class PanelView(
         val pendingSync: Int = 0,
     )
 
+    private val sheets = Strings.of(app.vaaniledger.data.ShopSettings.language(context)).sheets
     private val ink = Theme.ink
     private val muted = Theme.muted
 
@@ -102,8 +103,8 @@ class PanelView(
     private fun subtitle(): View = context.text(
         when {
             today.entries == 0 -> strings.noEntriesToday
-            today.pendingSync > 0 -> "${today.entries} entries · ${today.pendingSync} pending sync"
-            else -> "${today.entries} entries · synced"
+            today.pendingSync > 0 -> sheets.entriesPending(today.entries, today.pendingSync)
+            else -> sheets.entriesSynced(today.entries)
         },
         12.5f, if (today.pendingSync > 0) Theme.warn else muted, Type.displayItalic(context),
     ).apply { setPadding(0, context.dp(2), 0, 0) }

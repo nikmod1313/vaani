@@ -74,6 +74,12 @@ interface AnalyticsDao {
     @Query("SELECT COUNT(*) FROM transaction_items")
     suspend fun itemRowCount(): Int
 
+    @Query("SELECT * FROM transaction_items")
+    suspend fun allItems(): List<TransactionItemEntity>
+
+    @Query("UPDATE transaction_items SET name = :name WHERE id = :id")
+    suspend fun renameItem(id: String, name: String)
+
     /** Transactions that have labels but no line-item rows yet -- the backfill set. */
     @Query(
         """

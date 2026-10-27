@@ -732,6 +732,129 @@
     "items": [],
     "mode": "cash"
    }
+  ],
+  "d47": [],
+  "d48": [
+   {
+    "amount": 120.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "chawal",
+      "quantity": 2.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "d49": [],
+  "d50": [],
+  "d51": [
+   {
+    "amount": 45.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "chini",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": 45.0
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "d52": [
+   {
+    "amount": 1500.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": "salwar",
+      "name": "kameez",
+      "quantity": 1.0,
+      "unit": "set",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "dupatta",
+      "quantity": 2.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "d53": [
+   {
+    "amount": null,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "atta",
+      "quantity": 5.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "d54": [
+   {
+    "amount": 42.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "maggi",
+      "quantity": 3.0,
+      "unit": "packet",
+      "unit_price": null
+     }
+    ],
+    "mode": "cash"
+   }
+  ],
+  "d55": [
+   {
+    "amount": 56.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "doodh",
+      "quantity": 2.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "d56": [],
+  "d57": [
+   {
+    "amount": 120.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "chawal",
+      "quantity": 2.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
   ]
  },
  "test": {
@@ -841,18 +964,11 @@
     "dir": "sale",
     "items": [
      {
-      "modifier": null,
-      "name": "chai",
-      "quantity": null,
-      "unit": null,
-      "unit_price": null
-     },
-     {
       "modifier": "tata",
-      "name": "tea",
-      "quantity": null,
+      "name": "chai",
+      "quantity": 1.0,
       "unit": null,
-      "unit_price": null
+      "unit_price": 140.0
      }
     ],
     "mode": "unknown"
@@ -952,22 +1068,7 @@
     "mode": "unknown"
    }
   ],
-  "t14": [
-   {
-    "amount": null,
-    "dir": "sale",
-    "items": [
-     {
-      "modifier": null,
-      "name": "doodh",
-      "quantity": 2.0,
-      "unit": "packet",
-      "unit_price": null
-     }
-    ],
-    "mode": "unknown"
-   }
-  ],
+  "t14": [],
   "t15": [
    {
     "amount": 130.0,
@@ -1145,14 +1246,7 @@
     "mode": "upi"
    }
   ],
-  "t24": [
-   {
-    "amount": 200.0,
-    "dir": "payment",
-    "items": [],
-    "mode": "unknown"
-   }
-  ],
+  "t24": [],
   "t25": [
    {
     "amount": null,
@@ -1275,17 +1369,10 @@
     "dir": "sale",
     "items": [
      {
-      "modifier": null,
-      "name": "kurta",
-      "quantity": 2.0,
-      "unit": null,
-      "unit_price": null
-     },
-     {
-      "modifier": null,
+      "modifier": "kurta",
       "name": "pajama",
-      "quantity": null,
-      "unit": null,
+      "quantity": 2.0,
+      "unit": "set",
       "unit_price": null
      }
     ],
@@ -1486,7 +1573,598 @@
       "unit_price": null
      }
     ],
+    "mode": "cash"
+   }
+  ]
+ },
+ "test2": {
+  "u01": [
+   {
+    "amount": 290.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": "basmati",
+      "name": "chawal",
+      "quantity": 2.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": "chana",
+      "name": "dal",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "cash"
+   }
+  ],
+  "u02": [],
+  "u03": [],
+  "u04": [
+   {
+    "amount": 48.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": "tata",
+      "name": "salt",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "parle",
+      "quantity": 2.0,
+      "unit": "g",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u05": [
+   {
+    "amount": 60.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "sabzi",
+      "quantity": null,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "aloo",
+      "quantity": 2.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
     "mode": "udhaar"
+   }
+  ],
+  "u06": [
+   {
+    "amount": 185.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "aata",
+      "quantity": 3.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "chini",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "cash"
+   }
+  ],
+  "u07": [
+   {
+    "amount": null,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "anda",
+      "quantity": 5.0,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "bread",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u08": [
+   {
+    "amount": 3450.0,
+    "dir": "payment",
+    "items": [],
+    "mode": "upi"
+   }
+  ],
+  "u09": [],
+  "u10": [
+   {
+    "amount": 105.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "pyaz",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "tamatar",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "adrak",
+      "quantity": 250.0,
+      "unit": "g",
+      "unit_price": null
+     }
+    ],
+    "mode": "upi"
+   }
+  ],
+  "u11": [
+   {
+    "amount": 168.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "maggi",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": 168.0
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u12": [],
+  "u13": [
+   {
+    "amount": 150.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "दाल",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "नमक",
+      "quantity": 2.0,
+      "unit": "packet",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u14": [
+   {
+    "amount": 375.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": "fortune",
+      "name": "tel",
+      "quantity": 2.0,
+      "unit": "l",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "sooji",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "udhaar"
+   }
+  ],
+  "u15": [
+   {
+    "amount": 800.0,
+    "dir": "payment",
+    "items": [],
+    "mode": "cash"
+   }
+  ],
+  "u16": [
+   {
+    "amount": 120.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "chips",
+      "quantity": 4.0,
+      "unit": "packet",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "frooti",
+      "quantity": 2.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "upi"
+   }
+  ],
+  "u17": [],
+  "u18": [
+   {
+    "amount": 200.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "paneer",
+      "quantity": 500.0,
+      "unit": "g",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u19": [
+   {
+    "amount": 88.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "chawal",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "maggi",
+      "quantity": 2.0,
+      "unit": "packet",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u20": [],
+  "u21": [
+   {
+    "amount": 220.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "kela",
+      "quantity": 2.0,
+      "unit": "dozen",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "seb",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "udhaar"
+   }
+  ],
+  "u22": [
+   {
+    "amount": 300.0,
+    "dir": "sale",
+    "items": [],
+    "mode": "udhaar"
+   }
+  ],
+  "u23": [],
+  "u24": [
+   {
+    "amount": 130.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "dettol",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "lifebuoy",
+      "quantity": 2.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "upi"
+   }
+  ],
+  "u25": [
+   {
+    "amount": 1300.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": "pink",
+      "name": "kurti",
+      "quantity": 2.0,
+      "unit": null,
+      "unit_price": 650.0
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u26": [
+   {
+    "amount": 2100.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "saree",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "blouse",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "cash"
+   }
+  ],
+  "u27": [],
+  "u28": [
+   {
+    "amount": 85.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "crocin 650",
+      "quantity": 1.0,
+      "unit": "strip",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "vicks",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u29": [
+   {
+    "amount": 450.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "goli",
+      "quantity": 3.0,
+      "unit": "strip",
+      "unit_price": null
+     }
+    ],
+    "mode": "udhaar"
+   }
+  ],
+  "u30": [
+   {
+    "amount": 380.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "keel",
+      "quantity": 2.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "hathoda",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "upi"
+   }
+  ],
+  "u31": [],
+  "u32": [
+   {
+    "amount": 350.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "notebook",
+      "quantity": 5.0,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "pen",
+      "quantity": 10.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "cash"
+   }
+  ],
+  "u33": [
+   {
+    "amount": 600.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "charger",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "earphone",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "upi"
+   }
+  ],
+  "u34": [],
+  "u35": [
+   {
+    "amount": 260.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "daal",
+      "quantity": 2.0,
+      "unit": "kg",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u36": [
+   {
+    "amount": 250.0,
+    "dir": "sale",
+    "items": [],
+    "mode": "udhaar"
+   }
+  ],
+  "u37": [
+   {
+    "amount": null,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "haldi",
+      "quantity": 1.0,
+      "unit": "kg",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "powder",
+      "quantity": null,
+      "unit": null,
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "mirch",
+      "quantity": 500.0,
+      "unit": "g",
+      "unit_price": null
+     }
+    ],
+    "mode": "unknown"
+   }
+  ],
+  "u38": [
+   {
+    "amount": 1100.0,
+    "dir": "payment",
+    "items": [],
+    "mode": "unknown"
+   }
+  ],
+  "u39": [],
+  "u40": [
+   {
+    "amount": 155.0,
+    "dir": "sale",
+    "items": [
+     {
+      "modifier": null,
+      "name": "biscuit",
+      "quantity": 3.0,
+      "unit": "packet",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "namkeen",
+      "quantity": 1.0,
+      "unit": "packet",
+      "unit_price": null
+     },
+     {
+      "modifier": null,
+      "name": "coke",
+      "quantity": 1.0,
+      "unit": null,
+      "unit_price": null
+     }
+    ],
+    "mode": "upi"
    }
   ]
  }

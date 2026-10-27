@@ -124,6 +124,12 @@ _DEVA_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
 # Normalisation
 # --------------------------------------------------------------------------
 
+_PHONE = re.compile(
+    r"\+?91[\s-]?[6-9]\d{4}[\s-]?\d{5}(?!\d)|(?<!\d)[6-9]\d{9}(?!\d)|(?<!\d)[6-9]\d{4}[\s-]\d{5}(?!\d)"
+    r"|\(\d{3}\)\s?\d{3}[\s.-]\d{4}(?!\d)|(?<!\d)\d{3}[.-]\d{3}[.-]\d{4}(?!\d)"
+)
+
+
 def normalise(text: str) -> str:
     """
     Lowercase, fold Devanagari digits to ASCII, and mark clause boundaries.
@@ -134,6 +140,12 @@ def normalise(text: str) -> str:
     text = unicodedata.normalize("NFC", text)
     text = text.translate(_DEVA_DIGITS)
     text = text.lower()
+    # A phone number is never money. Customers send them -- "is number pe
+    # call karna", a delivery contact -- and a captured "Save (987)
+    # 650-0001?" banner was read as a Rs 987 bill. Removed before any number
+    # is read: +91 forms, bare 10-digit mobiles, "98765 43210", and the
+    # bracketed and dashed forms a phone's contact UI writes.
+    text = _PHONE.sub(" ", text)
     # Detach currency markers from the digits they hug, so "₹250", "rs.250"
     # and "250/-" all yield a bare numeric token.
     text = re.sub(r"(₹|रु\.?)\s*(\d)", r"\1 \2", text)

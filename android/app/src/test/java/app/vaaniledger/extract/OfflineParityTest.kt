@@ -358,6 +358,14 @@ class OfflineParityTest {
         assertEquals("chana", RulesEngine.extractItems("2 kg chana", ShopCategory.KIRANA)[0].name)
     }
 
+    /** A captured "Save (987) 650-0001?" banner was booked as a Rs 987 bill. */
+    @Test
+    fun `a phone number is never money`() {
+        assertNull(amountOf("Save (987) 650-0001? bhaiya 1 kg besan aur 2 packet maggi bhej dena", ShopCategory.KIRANA))
+        assertNull(amountOf("is number pe call karna 9876543210, 2 kg chawal", ShopCategory.KIRANA))
+        assertEquals(500.0, amountOf("+91 98765 43210 pe bhejo 500 ka saman", ShopCategory.KIRANA)!!, 0.001)
+    }
+
     @Test
     fun `a medicine strength is part of its name`() {
         val item = RulesEngine.extractItems("dolo 650 ki 2 strip", ShopCategory.PHARMACY)[0]

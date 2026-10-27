@@ -61,6 +61,8 @@ object ConversationResolver {
         """\border\s+(?:karna|kar|karni|kardo|kar\s+do)\b""",
         // Hinglish -- instructing
         """\bbhej\s*(?:do|dena|dijiye|de)\b""", """\bbhejo\b""", """\bbhejna\b""",
+        // A request phrased as a question is still a request: "bhej doge?"
+        """\b(?:bhej|de|bhijwa|pack\s+kar)\s*(?:doge|denge|dogi|dijiyega|sakte|sakoge)\b""",
         """\bde\s*(?:do|dena|dijiye)\b""", """\bdedo\b""",
         """\bpack\s+kar\b""", """\bnikal\s*(?:do|dena)\b""",
         """\bbhijwa\s*(?:do|dena|dijiye|de)\b""", """\bbhejiye\b""", """\bbhej\s+dijie\b""",
@@ -133,10 +135,21 @@ object ConversationResolver {
     /** "write it down" on an amount with nothing named is still a khata entry. */
     private val CREDIT_ENTRY = Regex("""\blikh\w*|\budhaa?r\w*|\bkhaate?\b|(?<!\S)उधार|(?<!\S)लिख""")
 
+    /**
+     * A question about an arrangement, not an order: "kal se roz 2 packet
+     * doodh chahiye hoga kya?". "bhej doge?" is still an order, so only the
+     * asking words disqualify, not the question mark.
+     */
+    private val ASKING = Regex(
+        """\b(?:hoga|hogi|honge|milega|milegi|milenge|mil\s+jaye?ga|mil\s+jayegi|available|ho\s+payega|""" +
+            """chalega|kya)\b|(?<!\S)(?:होगा|मिलेगा|क्या)"""
+    )
+
     /** Did this turn actually order something? */
     fun isCommitment(text: String): Boolean {
         val norm = NumberParser.normalise(text)
         if (NEGATION.any { it.containsMatchIn(norm) }) return false
+        if ('?' in text && ASKING.containsMatchIn(norm)) return false
         return COMMIT.any { it.containsMatchIn(norm) }
     }
 
@@ -290,8 +303,13 @@ object ConversationResolver {
         return null
     }
 
+    /** An item's identity across spellings: (modifier, noun), both canonical. */
+    private fun key(item: LineItem): Pair<String, String> =
+        CategoryLexicon.canonical(item.modifier) to CategoryLexicon.canonical(item.name)
+
+    // The FIRST word for the thing is kept -- usually the customer's own.
     private fun merged(existing: LineItem, named: LineItem) = LineItem(
-        name = named.name,
+        name = existing.name,
         quantity = named.quantity ?: existing.quantity,
         unit = named.unit ?: existing.unit,
         modifier = named.modifier ?: existing.modifier,
@@ -305,13 +323,13 @@ object ConversationResolver {
      * tamatar" is one line. Mirrors `_merge_item`.
      */
     private fun mergeItem(store: LinkedHashMap<Pair<String, String>, LineItem>, named: LineItem) {
-        val key = (named.modifier ?: "") to named.name
+        val key = key(named)
         val existing = store[key]
         if (existing != null) {
             store[key] = merged(existing, named)
             return
         }
-        val same = store.keys.filter { it.second == named.name && (it.first.isEmpty() || key.first.isEmpty()) }
+        val same = store.keys.filter { it.second == key.second && (it.first.isEmpty() || key.first.isEmpty()) }
         if (same.size == 1) {
             val old = same[0]
             val prior = store.remove(old)!!
@@ -564,7 +582,7 @@ object ConversationResolver {
         }
         for (i in items.indices) {
             if (items[i].quantity != null) continue
-            val established = topics[(items[i].modifier ?: "") to items[i].name] ?: continue
+            val established = topics[key(items[i])] ?: continue
             if (established.quantity != null) {
                 items[i] = items[i].copy(
                     quantity = established.quantity,

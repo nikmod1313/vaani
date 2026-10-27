@@ -1,5 +1,6 @@
 package app.vaaniledger.data
 
+import app.vaaniledger.extract.CategoryLexicon
 import app.vaaniledger.net.Extraction
 
 /**
@@ -20,7 +21,9 @@ object LineItems {
             TransactionItemEntity(
                 transactionId = transaction.id,
                 shopId = transaction.shopId,
-                name = li.name.ifBlank { li.displayName }.ifBlank { li.label },
+                // The product key, not the raw word -- see CategoryLexicon.productKey.
+                name = li.name.ifBlank { li.displayName }.ifBlank { li.label }
+                    .let { CategoryLexicon.productKey(it, li.modifier) },
                 displayName = li.displayName.ifBlank { li.name }.ifBlank { li.label },
                 quantity = li.quantity,
                 unit = li.unit,
@@ -57,8 +60,9 @@ object LineItems {
                     transactionId = transaction.id,
                     shopId = transaction.shopId,
                     // The last word of a display name is the noun; anything
-                    // before it is a modifier ("blue kurti" -> "kurti").
-                    name = display.substringAfterLast(' ').ifBlank { display },
+                    // before it is a modifier. Keyed as a product: "blue
+                    // kurti" -> "kurti", "toor dal" -> "toor dal".
+                    name = CategoryLexicon.productKeyFromDisplay(display),
                     displayName = display,
                     quantity = match?.groupValues?.get(2)?.toDoubleOrNull(),
                     unit = match?.groupValues?.get(3)?.ifBlank { null },

@@ -19,6 +19,8 @@ import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import app.vaaniledger.data.ShopSettings
+import app.vaaniledger.data.Strings
 import app.vaaniledger.net.Extraction
 
 /**
@@ -51,6 +53,7 @@ class EditSheetView(
         val items: List<String>,
     )
 
+    private val t = Strings.of(ShopSettings.language(context)).sheets
     private val ink = Theme.ink
     private val muted = Theme.muted
     private val rule = Theme.border
@@ -70,13 +73,13 @@ class EditSheetView(
         elevation = dp(20).toFloat()
 
         addView(TextView(context).apply {
-            text = "Badlo"
+            text = t.editTitle
             setTextColor(ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
             typeface = Type.display(context)
         })
         addView(TextView(context).apply {
-            text = "Jo galat hai use theek kijiye — aapki baat final hai"
+            text = t.editSubtitle
             setTextColor(muted)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
             typeface = Type.displayItalic(context)
@@ -84,13 +87,13 @@ class EditSheetView(
         })
 
         amountField = field(
-            "RAKAM (₹)",
+            t.amountLabel,
             extraction.amount?.let { "%.0f".format(it) } ?: "",
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL,
         )
-        customerField = field("GRAHAK", extraction.customer ?: "", InputType.TYPE_CLASS_TEXT)
+        customerField = field(t.fieldCustomer, extraction.customer ?: "", InputType.TYPE_CLASS_TEXT)
         itemsField = field(
-            "SAMAN (comma se alag)",
+            t.itemsLabel,
             extraction.items.joinToString(", "),
             InputType.TYPE_CLASS_TEXT,
         )
@@ -129,7 +132,7 @@ class EditSheetView(
     private fun modeRow(): View = LinearLayout(context).apply {
         orientation = VERTICAL
         addView(TextView(context).apply {
-            text = "TYPE"
+            text = t.fieldMode
             setTextColor(Theme.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
             typeface = Type.bold(context)
@@ -138,7 +141,7 @@ class EditSheetView(
         })
         addView(LinearLayout(context).apply {
             orientation = HORIZONTAL
-            listOf("nakad" to "cash", "UPI" to "upi", "udhaar" to "udhaar")
+            listOf(t.modeCash to "cash", t.modeUpi to "upi", t.modeCredit to "udhaar")
                 .forEachIndexed { i, (label, value) ->
                     if (i > 0) addView(View(context), LayoutParams(dp(8), 1))
                     val chip = TextView(context).apply {
@@ -175,7 +178,7 @@ class EditSheetView(
         setPadding(0, dp(14), 0, 0)
 
         addView(TextView(context).apply {
-            text = "Cancel"
+            text = t.cancel
             gravity = Gravity.CENTER
             setTextColor(ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
@@ -192,7 +195,7 @@ class EditSheetView(
         addView(View(context), LayoutParams(dp(9), 1))
 
         addView(TextView(context).apply {
-            text = "Save karo  ✓"
+            text = t.save
             gravity = Gravity.CENTER
             setTextColor(Theme.onPrimary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)

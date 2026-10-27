@@ -345,13 +345,14 @@ class LedgerAccessibilityService : AccessibilityService() {
 
         /**
          * Keep in step with accessibility_config.xml. Google Messages is
-         * present for development only — remove both before shipping.
+         * readable in DEBUG builds only, for testing on an emulator; the
+         * release config and this set both exclude it, so it cannot ship.
          */
-        val SUPPORTED_CHAT_PACKAGES = setOf(
-            "com.whatsapp",
-            "com.whatsapp.w4b",
-            "com.google.android.apps.messaging",
-        )
+        val SUPPORTED_CHAT_PACKAGES: Set<String> = buildSet {
+            add("com.whatsapp")
+            add("com.whatsapp.w4b")
+            if (app.vaaniledger.BuildConfig.DEBUG) add("com.google.android.apps.messaging")
+        }
         private val TIME_PATTERN = Regex("""\d{1,2}:\d{2}(\s?[apAP]\.?[mM]\.?)?""")
     }
 }

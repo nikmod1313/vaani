@@ -157,6 +157,10 @@ object NumberParser {
     private val RE_CURRENCY_PREFIX = Regex("""(₹|रु\.?)\s*(\d)""")
     private val RE_RS_PREFIX = Regex("""\brs\.?\s*(\d)""")
     private val RE_TRAILING_SLASH = Regex("""(\d)\s*/-""")
+    private val RE_PHONE = Regex(
+        """\+?91[\s-]?[6-9]\d{4}[\s-]?\d{5}(?!\d)|(?<!\d)[6-9]\d{9}(?!\d)|(?<!\d)[6-9]\d{4}[\s-]\d{5}(?!\d)""" +
+            """|\(\d{3}\)\s?\d{3}[\s.-]\d{4}(?!\d)|(?<!\d)\d{3}[.-]\d{3}[.-]\d{4}(?!\d)"""
+    )
     private val RE_DIGIT_GROUP = Regex("""(?<=\d),(?=\d{2},\d|\d{3}(?!\d))""")
     private val RE_GLUED_UNIT = Regex(
         """(?<=\d)(kgs?|kilos?|gms?|grams?|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b"""
@@ -187,6 +191,11 @@ object NumberParser {
         }
 
         text = text.lowercase()
+        // A phone number is never money. Customers send them -- "is number
+        // pe call karna", a delivery contact -- and a captured "Save (987)
+        // 650-0001?" banner was read as a Rs 987 bill. Removed before any
+        // number is read. Mirrors numbers.py.
+        text = RE_PHONE.replace(text, " ")
         // Detach currency markers from the digits they hug, so "₹250",
         // "rs.250" and "250/-" all yield a bare numeric token.
         text = RE_CURRENCY_PREFIX.replace(text) { "${it.groupValues[1]} ${it.groupValues[2]}" }

@@ -87,7 +87,7 @@ class ReviewActivity : Activity() {
             setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        root.addView(eyebrow(ShopSettings.NAME))
+        root.addView(eyebrow(ShopSettings.name(this)))
         heading = title("", 30f).apply { setPadding(0, dp(4), 0, 0) }
         root.addView(heading)
 
@@ -315,7 +315,7 @@ class ReviewActivity : Activity() {
 
     private fun finishUp() {
         ReviewQueue.clear()
-        app.vaaniledger.sync.SyncWorker.syncNow(this, ShopSettings.ID, ShopSettings.NAME)
+        app.vaaniledger.sync.SyncWorker.syncNow(this, ShopSettings.ID, ShopSettings.name(this))
         finish()
     }
 

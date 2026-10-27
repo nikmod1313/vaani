@@ -64,18 +64,24 @@ object ReminderLinks {
         amount: Double,
         asOf: Date = Date(),
         language: String = "hi-IN",
+        /**
+         * Whether a pay link follows. The line pointing at "the link below"
+         * is only written when there is one -- without the shop's UPI ID
+         * set, it sent customers looking for a link that was not there.
+         */
+        withLink: Boolean = false,
     ): String {
         val rupees = "₹%,.0f".format(amount)
         val date = dateFormat.format(asOf)
 
         return when (language) {
             "en-IN" -> "Namaste $customerName 🙏 This is $shopName. Your balance " +
-                "of $rupees is pending as of $date. You can pay using the link " +
-                "below. Thank you!"
+                "of $rupees is pending as of $date. " +
+                (if (withLink) "You can pay using the link below. " else "") + "Thank you!"
 
             else -> "Namaste $customerName ji 🙏 $shopName se — aapka $rupees " +
-                "baaki hai ($date tak). Neeche tap karke pay kar sakte hain. " +
-                "Dhanyavaad!"
+                "baaki hai ($date tak). " +
+                (if (withLink) "Neeche tap karke pay kar sakte hain. " else "") + "Dhanyavaad!"
         }
     }
 
@@ -134,7 +140,7 @@ object ReminderLinks {
         language: String = "hi-IN",
     ): Intent {
         val message = buildString {
-            append(composeMessage(customerName, shopName, amount, language = language))
+            append(composeMessage(customerName, shopName, amount, language = language, withLink = payeeVpa != null))
             if (payeeVpa != null) {
                 append("\n\n")
                 append(upiLink(payeeVpa, shopName, amount, "$shopName udhaar"))

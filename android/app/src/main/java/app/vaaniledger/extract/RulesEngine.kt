@@ -177,6 +177,19 @@ object RulesEngine {
             """due|balance|khaate?|bakaya)\b|पैसे?|बाकी|उधार|हिसाब"""
     )
 
+    private val CASH_PHRASES = Regex(
+        """\b\d+\s+(?:ka|ke|wala|wale|rupaye\s+ka)\s+note\b|\bnote\s+(?:de|diya|bhej)\w*""" +
+            """|\bchh?utta\b|\b(?:baaki|baki|bacha|bache|change)\b.{0,12}?\b(?:wapa?s|lauta\w*|return)\b"""
+    )
+
+    /** Asking for money BACK -- neither a payment nor a sale. Mirrors `_REFUND`. */
+    private val REFUND = Regex(
+        """\brefund\w*\b|\bwapa?s\s+(?:kar|de|bhej|karo|dena|kijiye)\w*|\b(?:paid|payment)\s+twice\b""" +
+            """|\b(?:double|do\s+baar|2\s+baar|dobara)\s+(?:payment|pay|gpay|paytm|phonepe|upi|ho\s+gaya)\b""" +
+            """|\bgalti\s+se\b.{0,30}?\b(?:payment|bhej|pay|gpay|paytm|phonepe)\w*""" +
+            """|(?<!\S)वापस\s+(?:कर|दे|भेज)"""
+    )
+
     private val UNITS: Map<String, String> = mapOf(
         "kilo" to "kg", "kg" to "kg", "kilos" to "kg", "kgs" to "kg",
         "kilogram" to "kg", "किलो" to "kg",
@@ -299,6 +312,11 @@ object RulesEngine {
     /** Payment mode plus the word that decided it. */
     fun detectMode(text: String): Pair<PaymentMode, String?> {
         val norm = NumberParser.normalise(text)
+
+        // Paying with a note is cash, and the "baaki" in "baaki lauta dena"
+        // is the change coming back, not a debt.
+        CASH_PHRASES.find(norm)?.let { return PaymentMode.CASH to it.value }
+
         val hits = mutableListOf<Pair<PaymentMode, String>>()
         for (token in norm.split(Regex("""\s+"""))) {
             val clean = token.trim('.')
@@ -335,6 +353,8 @@ object RulesEngine {
         // A promise to pay is not a payment. Checked first so no amount of
         // past-tense-looking wording after it can flip the reading.
         val promised = FUTURE_PAYMENT_PHRASES.any { it.containsMatchIn(norm) }
+        // A request for a refund is neither a payment nor a sale.
+        if (REFUND.containsMatchIn(norm)) return Direction.UNKNOWN
         val items = extractItems(text, category)
 
         var paid = false
@@ -553,7 +573,15 @@ object RulesEngine {
                 continue
             }
 
+            // Two nouns that name one garment: "salwar kameez", "kurta pajama".
             val matched = matchItem(token, lexicon)
+            val follower = matchItem(tokAt(i + 1), lexicon)
+            if (matched != null && follower != null && CategoryLexicon.isCompound(matched, follower)) {
+                pendingModifier = matched
+                i++
+                continue
+            }
+
             if (matched != null) {
                 val next = tokAt(i + 1)
                 // A digit or a unit counts as corroboration; a weak number
@@ -615,6 +643,12 @@ object RulesEngine {
                             i = j
                         }
                     }
+                }
+
+                // A unit AFTER the item, for a count stated before it.
+                if (quantity != null && unit == null && tokAt(i) in units && tokAt(i) !in CONTAINERS) {
+                    unit = units[tokAt(i)]
+                    i++
                 }
 
                 items.add(

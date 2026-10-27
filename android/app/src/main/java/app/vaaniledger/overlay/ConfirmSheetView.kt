@@ -17,6 +17,8 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
+import app.vaaniledger.data.ShopSettings
+import app.vaaniledger.data.Strings
 import app.vaaniledger.net.Extraction
 
 /**
@@ -40,6 +42,7 @@ class ConfirmSheetView(
     private val onDismiss: () -> Unit,
 ) : LinearLayout(context) {
 
+    private val t = Strings.of(ShopSettings.language(context)).sheets
     private val ink = Theme.ink
     private val muted = Theme.muted
     private val rule = Theme.border
@@ -76,7 +79,7 @@ class ConfirmSheetView(
     private fun header(): View = LinearLayout(context).apply {
         orientation = VERTICAL
         addView(TextView(context).apply {
-            text = "Yeh sahi hai?"
+            text = t.confirmTitle
             setTextColor(ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
             typeface = Type.display(context)
@@ -112,14 +115,20 @@ class ConfirmSheetView(
         setPadding(0, dp(12), 0, 0)
 
         val c = extraction.confidence
-        row("GRAHAK", extraction.customer ?: "—",
-            if (extraction.customerIsNew) "naya grahak" else "khaate mein hai",
+        row(t.fieldCustomer, extraction.customer ?: "—",
+            // With no name read at all, "in your ledger" was a false
+            // reassurance; say plainly that one is needed.
+            when {
+                extraction.customer.isNullOrBlank() -> t.customerUnknown
+                extraction.customerIsNew -> t.newCustomer
+                else -> t.knownCustomer
+            },
             c.fields["customer"]?.score)
-        row("RAKAM", extraction.amount?.let { "₹%,.0f".format(it) } ?: "—",
+        row(t.fieldAmount, extraction.amount?.let { "₹%,.0f".format(it) } ?: "—",
             c.fields["amount"]?.reason, c.fields["amount"]?.score)
-        row("SAMAN", extraction.items.joinToString(", ").ifBlank { "—" },
+        row(t.fieldItems, extraction.items.joinToString(", ").ifBlank { "—" },
             c.fields["items"]?.reason, c.fields["items"]?.score)
-        row("TYPE", extraction.mode.uppercase(),
+        row(t.fieldMode, modeLabel(extraction.mode),
             c.fields["mode"]?.reason, c.fields["mode"]?.score)
     }
 
@@ -181,9 +190,9 @@ class ConfirmSheetView(
     private fun footer(): View = LinearLayout(context).apply {
         orientation = HORIZONTAL
         setPadding(0, dp(16), 0, 0)
-        addView(button("Badlo", primary = false) { onEdit() }, weight())
+        addView(button(t.edit, primary = false) { onEdit() }, weight())
         addView(View(context), LayoutParams(dp(10), 1))
-        addView(button("Sahi hai  ✓", primary = true) { onConfirm() }, weight())
+        addView(button(t.confirm, primary = true) { onConfirm() }, weight())
     }
 
     private fun button(label: String, primary: Boolean, onClick: () -> Unit): View =
@@ -203,6 +212,13 @@ class ConfirmSheetView(
             pressable()
             setOnClickListener { onClick() }
         }
+
+    private fun modeLabel(mode: String) = when (mode) {
+        "cash" -> t.modeCash
+        "upi" -> t.modeUpi
+        "udhaar" -> t.modeCredit
+        else -> "—"
+    }.uppercase()
 
     private fun weight() = LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f)
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

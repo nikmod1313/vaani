@@ -24,6 +24,7 @@ import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.content.Intent
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -93,10 +94,19 @@ class SettingsActivity : Activity() {
         val en = lang == AppLanguage.EN
         val t = Strings.of(lang).main
 
-        root.addView(pageHeader(ShopSettings.NAME, t.settingsTitle))
+        root.addView(pageHeader(ShopSettings.name(this), t.settingsTitle))
 
         root.addView(sectionHeading(if (en) "Your shop" else "Aapki dukaan"))
         root.addView(group(
+            settingRow(
+                LineIcon.Glyph.PENCIL, if (en) "Shop name" else "Dukaan ka naam",
+                ShopSettings.name(this),
+            ) { editShopName() },
+            settingRow(
+                LineIcon.Glyph.QR, "UPI ID",
+                ShopSettings.upiId(this) ?: if (en) "Not set — reminders go without a pay link"
+                else "Nahi daala — reminder mein pay link nahi jayega",
+            ) { editUpiId() },
             settingRow(
                 LineIcon.Glyph.SHOP, if (en) "Shop category" else "Dukaan ki category",
                 ShopSettings.category(this).label,
@@ -105,6 +115,15 @@ class SettingsActivity : Activity() {
                 LineIcon.Glyph.GLOBE, if (en) "Language" else "Bhasha",
                 lang.displayName,
             ) { chooseLanguage() },
+        ))
+
+        root.addView(sectionHeading(if (en) "Backup" else "Khata ka backup"))
+        root.addView(group(
+            settingRow(
+                LineIcon.Glyph.SHARE, if (en) "Export the khata" else "Khata export karein",
+                if (en) "Every entry in one spreadsheet — send it to WhatsApp, Drive or email"
+                else "Saari entries ek file mein — WhatsApp, Drive ya email par bhejein",
+            ) { exportKhata() },
         ))
 
         root.addView(sectionHeading("Advanced"))
@@ -197,6 +216,115 @@ class SettingsActivity : Activity() {
                 render()
             }
             .show()
+    }
+
+    /** One line of text, in the app's own field style, with Save / Cancel. */
+    private fun textDialog(
+        title: String,
+        message: String?,
+        initial: String,
+        inputType: Int,
+        onSave: (String) -> Boolean,
+    ) {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        val input = EditText(this).apply {
+            setText(initial)
+            setSelection(text.length)
+            this.inputType = inputType
+            setTextColor(ink)
+            typeface = Type.body(this@SettingsActivity)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Theme.subtle)
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), line)
+            }
+        }
+        val holder = android.widget.FrameLayout(this).apply {
+            setPadding(dp(22), dp(6), dp(22), 0)
+            addView(input)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .apply { if (message != null) setMessage(message) }
+            .setView(holder)
+            .setPositiveButton(if (en) "Save" else "Save karein", null)
+            .setNegativeButton(if (en) "Cancel" else "Rehne dein", null)
+            .create()
+        dialog.setOnShowListener {
+            // Validated before closing, so a mistyped UPI ID gets a second
+            // chance instead of being silently thrown away.
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (onSave(input.text.toString().trim())) {
+                    dialog.dismiss()
+                    render()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun editShopName() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        textDialog(
+            if (en) "Shop name" else "Dukaan ka naam",
+            if (en) "Shown on every page and in every reminder your customers read."
+            else "Har page par aur har reminder mein yahi naam dikhega.",
+            ShopSettings.name(this),
+            android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS,
+        ) { value ->
+            if (value.isBlank()) false else {
+                ShopSettings.setName(this, value)
+                scope.launch { ShopSettings.persist(this@SettingsActivity) }
+                true
+            }
+        }
+    }
+
+    private fun editUpiId() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        textDialog(
+            "UPI ID",
+            if (en) "Example: sharmakirana@okaxis\nReminders will carry a link your customer taps to pay."
+            else "Udaharan: sharmakirana@okaxis\nReminder mein link jayega, grahak tap karke pay kar sakega.",
+            ShopSettings.upiId(this).orEmpty(),
+            android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+        ) { value ->
+            when {
+                value.isBlank() -> { ShopSettings.setUpiId(this, null); true }
+                ShopSettings.isValidUpiId(value) -> { ShopSettings.setUpiId(this, value); true }
+                else -> {
+                    Toast.makeText(
+                        this,
+                        if (en) "That doesn't look like a UPI ID (name@bank)" else "Yeh UPI ID sahi nahi lag raha (naam@bank)",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    false
+                }
+            }
+        }
+    }
+
+    private fun exportKhata() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        scope.launch {
+            val intent = runCatching {
+                app.vaaniledger.data.KhataExport.build(
+                    this@SettingsActivity, ShopSettings.ID, ShopSettings.name(this@SettingsActivity),
+                )
+            }.onFailure { android.util.Log.e("VaaniSettings", "export failed", it) }.getOrNull()
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                if (intent == null) {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        if (en) "Couldn't create the file" else "File nahi ban payi",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                } else {
+                    startActivity(Intent.createChooser(intent, if (en) "Send the khata to…" else "Khata kahan bhejein?"))
+                }
+            }
+        }
     }
 
     /**

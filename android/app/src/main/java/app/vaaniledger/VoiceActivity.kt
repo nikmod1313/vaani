@@ -43,7 +43,7 @@ class VoiceActivity : Activity() {
         if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
             listen()
         } else {
-            toast("Mic ki ijaazat chahiye")
+            toast(strings.micNeeded)
             finish()
         }
     }
@@ -57,12 +57,12 @@ class VoiceActivity : Activity() {
             // Hindi first; the recogniser still returns Hinglish, which is
             // what the extraction engine is built for.
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Boliye — kya likhna hai?")
+            putExtra(RecognizerIntent.EXTRA_PROMPT, strings.voicePrompt)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
         }
         runCatching { startActivityForResult(intent, REQ_SPEECH) }
             .onFailure {
-                toast("Is phone par voice available nahi hai")
+                toast(strings.voiceUnavailable)
                 finish()
             }
     }
@@ -76,7 +76,7 @@ class VoiceActivity : Activity() {
             ?.trim()
 
         if (resultCode != RESULT_OK || spoken.isNullOrBlank()) {
-            toast("Kuch sunai nahi diya")
+            toast(strings.heardNothing)
         } else {
             // Same pipeline as chat capture: extract, confirm, save. Voice is
             // just another way in, not a separate path.
@@ -89,6 +89,10 @@ class VoiceActivity : Activity() {
         }
         finish()
     }
+
+    private val strings get() = app.vaaniledger.data.Strings.of(
+        app.vaaniledger.data.ShopSettings.language(this),
+    ).sheets
 
     private fun toast(message: String) =
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()

@@ -624,3 +624,17 @@ def dashboard() -> FileResponse:
     if not index.exists():
         raise HTTPException(404, "dashboard not built")
     return FileResponse(index, media_type="text/html")
+
+
+@app.get("/assets/{name}", include_in_schema=False)
+def dashboard_asset(name: str) -> FileResponse:
+    """
+    The dashboard's art -- the same parchment, paisley and palace the app
+    draws. Served from dashboard/assets only: the resolved path must sit
+    directly in that folder, so "../" in a name cannot reach anything else.
+    """
+    folder = (DASHBOARD / "assets").resolve()
+    path = (folder / name).resolve()
+    if path.parent != folder or not path.is_file():
+        raise HTTPException(404, "no such asset")
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})

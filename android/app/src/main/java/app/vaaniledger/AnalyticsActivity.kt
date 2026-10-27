@@ -104,7 +104,7 @@ class AnalyticsActivity : Activity() {
             setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        root.addView(pageHeader(ShopSettings.NAME, s.title, s.subtitle).apply {
+        root.addView(pageHeader(ShopSettings.name(this), s.title, s.subtitle).apply {
             setPadding(0, 0, 0, dp(18))
         })
 
@@ -179,6 +179,7 @@ class AnalyticsActivity : Activity() {
             // otherwise leave the product charts empty on a shop that has
             // plainly been selling things.
             runCatching { LineItemBackfill.runIfNeeded(this@AnalyticsActivity) }
+            runCatching { LineItemBackfill.rekeyIfNeeded(this@AnalyticsActivity) }
 
             val db = LedgerDatabase.get(this@AnalyticsActivity)
             val dao = db.analytics()

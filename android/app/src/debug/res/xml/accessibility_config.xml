@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Scoped as tightly as the feature allows.
+
+    packageNames limits which apps we can read at all — we cannot see any
+    app not on this list, which is the concrete privacy claim the report
+    makes.
+
+    DEBUG BUILDS ONLY. This copy overrides src/main's for the debug build
+    type and adds Google Messages: WhatsApp cannot be installed on a bare
+    emulator without a Play account, and the parser has to be proven against
+    a real chat app's view tree. A release build uses src/main's file, which
+    lists WhatsApp alone — so the development package cannot ship by
+    accident, which a "remember to remove it" comment did not guarantee.
+-->
+<accessibility-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="false"
+    android:notificationTimeout="100"
+    android:packageNames="com.whatsapp,com.whatsapp.w4b,com.google.android.apps.messaging"
+    android:description="@string/accessibility_description"
+    android:settingsActivity="app.vaaniledger.MainActivity" />

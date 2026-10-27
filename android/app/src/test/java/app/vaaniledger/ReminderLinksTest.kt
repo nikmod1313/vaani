@@ -65,6 +65,17 @@ class ReminderLinksTest {
         assertTrue(msg.contains("250"))
     }
 
+    /** Without a UPI ID there is no link, so the message must not point at one. */
+    @Test
+    fun `the pay line appears only with a link`() {
+        val bare = ReminderLinks.composeMessage("Rahul", "Sharma Kirana", 250.0)
+        assertTrue(!bare.contains("Neeche tap"))
+        val linked = ReminderLinks.composeMessage("Rahul", "Sharma Kirana", 250.0, withLink = true)
+        assertTrue(linked.contains("Neeche tap"))
+        val english = ReminderLinks.composeMessage("Rahul", "Sharma Kirana", 250.0, language = "en-IN", withLink = true)
+        assertTrue(english.contains("link below"))
+    }
+
     @Test
     fun `upi link fixes two decimals and INR`() {
         // Several UPI apps reject or mis-parse anything else.

@@ -89,7 +89,7 @@ class ChatBenchmarkParityTest {
 
         var compared = 0
         val drift = mutableListOf<String>()
-        for (set in listOf("dev", "test")) {
+        for (set in listOf("dev", "test", "test2")) {
             val python = expected[set]!!.jsonObject
             File(dir, "chats_$set.jsonl").readLines().filter { it.isNotBlank() }.forEach { line ->
                 val case = Json.parseToJsonElement(line).jsonObject
@@ -121,7 +121,7 @@ class ChatBenchmarkParityTest {
             }
         }
 
-        assertTrue("benchmark files are empty", compared > 80)
+        assertTrue("benchmark files are empty", compared > 120)
         assertEquals("Kotlin and Python disagree on ${drift.size} thread(s):\n" + drift.joinToString("\n"), 0, drift.size)
     }
 }

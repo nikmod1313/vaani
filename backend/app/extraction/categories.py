@@ -333,6 +333,67 @@ def all_known_modifiers() -> set[str]:
     return out
 
 
+# --------------------------------------------------------------------------
+# One product, many words
+# --------------------------------------------------------------------------
+#
+# The same thing arrives in English, in Hinglish spelled three ways, and in
+# Devanagari. A thread that says "chini hai kya?" and gets "haan sugar 45
+# kilo" is about ONE item; treated as two, the customer's "1 kilo de do"
+# could not say which, and the order lost its quantity and its price. The
+# first word of each group is the canonical key; the customer's own word is
+# still what the khata shows.
+_SYNONYMS: list[tuple[str, ...]] = [
+    ("cheeni", "chini", "sugar", "shakkar", "चीनी", "शक्कर"),
+    ("aata", "atta", "flour", "आटा"),
+    ("chawal", "rice", "चावल"),
+    ("doodh", "dudh", "milk", "दूध"),
+    ("dahi", "curd", "दही"),
+    ("pyaz", "pyaaz", "onion", "प्याज"),
+    ("aloo", "aalu", "aalo", "alu", "potato", "आलू"),
+    ("tamatar", "tomato", "टमाटर"),
+    ("anda", "egg", "अंडा"),
+    ("kela", "banana", "केला"),
+    ("seb", "apple", "सेब"),
+    ("tel", "oil", "तेल"),
+    ("chai", "chay", "tea", "चाय"),
+    ("namak", "salt", "नमक"),
+    ("sabun", "soap", "साबुन"),
+    ("dal", "daal", "दाल"),
+    ("makhan", "butter", "मक्खन"),
+    ("pani", "water", "पानी"),
+    ("gobhi", "gobi", "गोभी"),
+    ("tala", "lock", "ताला"),
+    ("kabza", "hinge", "कब्ज़ा"),
+    ("dawai", "dava", "medicine", "दवाई", "दवा"),
+    ("goli", "tablet", "गोली", "टैबलेट"),
+    ("kalam", "pen", "पेन", "कलम"),
+    ("copy", "notebook", "कॉपी"),
+    ("coldrink", "colddrink"),
+]
+_CANONICAL = {w: group[0] for group in _SYNONYMS for w in group}
+
+
+def canonical(word: str | None) -> str:
+    """The product key for an item noun or modifier: the same for every spelling of it."""
+    if not word:
+        return ""
+    return _CANONICAL.get(word, word)
+
+
+# Garments named by two nouns: "salwar kameez" is one suit, not a salwar and
+# a kameez. Read as a modifier and a noun, so the label keeps both words.
+_COMPOUNDS: set[tuple[str, str]] = {
+    ("salwar", "kameez"), ("salwaar", "kameez"), ("kurta", "pajama"),
+    ("kurta", "pyjama"), ("kurti", "pant"), ("kurti", "legging"),
+    ("saree", "blouse"), ("shirt", "pant"), ("salwar", "suit"),
+}
+
+
+def is_compound(first: str, second: str) -> bool:
+    return (first, second) in _COMPOUNDS
+
+
 def pharmacy_items() -> set[str]:
     """The chemist's nouns -- the ones whose trailing number is a strength."""
     return set(_PHARMACY)

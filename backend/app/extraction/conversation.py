@@ -42,7 +42,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .categories import Category, units_for
+from .categories import Category, canonical, units_for
 from .numbers import find_numbers, normalise
 from .rules import _UNITS, Direction, LineItem, PaymentMode, apply_rules, detect_mode
 
@@ -65,6 +65,8 @@ _COMMIT_PATTERNS = [
     r"\border\s+(?:karna|kar|karni|kardo|kar\s+do)\b",
     # Hinglish -- instructing
     r"\bbhej\s*(?:do|dena|dijiye|de)\b", r"\bbhejo\b", r"\bbhejna\b",
+    # A request phrased as a question is still a request: "bhej doge?"
+    r"\b(?:bhej|de|bhijwa|pack\s+kar)\s*(?:doge|denge|dogi|dijiyega|sakte|sakoge)\b",
     r"\bde\s*(?:do|dena|dijiye)\b", r"\bdedo\b",
     r"\bpack\s+kar\b", r"\bnikal\s*(?:do|dena)\b",
     r"\bbhijwa\s*(?:do|dena|dijiye|de)\b", r"\bbhejiye\b", r"\bbhej\s+dijie\b",
@@ -145,10 +147,22 @@ _TOTAL_RE = [re.compile(p) for p in _TOTAL_PATTERNS]
 _RATE_RE = [re.compile(p) for p in _RATE_PATTERNS]
 
 
+# A question about an arrangement, not an order: "kal se roz 2 packet doodh
+# chahiye hoga kya?" contains "chahiye" and asks whether something WILL be
+# possible. "bhej doge?" -- will you send it? -- is still an order, so only
+# the asking words disqualify, not the question mark.
+_ASKING_RE = re.compile(
+    r"\b(?:hoga|hogi|honge|milega|milegi|milenge|mil\s+jaye?ga|mil\s+jayegi|available|ho\s+payega|"
+    r"chalega|kya)\b|(?<!\S)(?:होगा|मिलेगा|क्या)"
+)
+
+
 def is_commitment(text: str) -> bool:
     """Did this turn actually order something?"""
     norm = normalise(text)
     if any(r.search(norm) for r in _NEGATION_RE):
+        return False
+    if "?" in text and _ASKING_RE.search(norm):
         return False
     return any(r.search(norm) for r in _COMMIT_RE)
 
@@ -360,6 +374,11 @@ def _measure_quantity(
     return None
 
 
+def _key(item: LineItem) -> tuple[str, str]:
+    """An item's identity across spellings: (modifier, noun), both canonical."""
+    return canonical(item.modifier), canonical(item.name)
+
+
 def _merge_item(store: dict[tuple[str, str], LineItem], named: LineItem) -> tuple[str, str]:
     """
     Add a mention to a running set of items, merging repeats.
@@ -372,9 +391,9 @@ def _merge_item(store: dict[tuple[str, str], LineItem], named: LineItem) -> tupl
     one, and the other way round: "2kg tamatar chaiye" then "organic grown
     tamatar" is one line of organic tomatoes, not two.
     """
-    key = (named.modifier or "", named.name)
+    key = _key(named)
     if key not in store:
-        same = [k for k in store if k[1] == named.name and (not k[0] or not key[0])]
+        same = [k for k in store if k[1] == key[1] and (not k[0] or not key[0])]
         if len(same) == 1:
             old = same[0]
             existing = store.pop(old)
@@ -391,8 +410,11 @@ def _merge_item(store: dict[tuple[str, str], LineItem], named: LineItem) -> tupl
 
 
 def _merged(existing: LineItem, named: LineItem) -> LineItem:
+    # The FIRST word for the thing is kept -- usually the customer's own,
+    # "chini" rather than the shop's "sugar" -- so the khata reads the way
+    # the order was asked for.
     return LineItem(
-        name=named.name,
+        name=existing.name,
         quantity=named.quantity if named.quantity is not None else existing.quantity,
         unit=named.unit or existing.unit,
         modifier=named.modifier or existing.modifier,
@@ -700,7 +722,7 @@ def _resolve_sale(
     # established one for earlier, takes it back.
     for item in items:
         if item.quantity is None:
-            established = topics.get((item.modifier or "", item.name))
+            established = topics.get(_key(item))
             if established is not None and established.quantity is not None:
                 item.quantity = established.quantity
                 item.unit = established.unit or item.unit

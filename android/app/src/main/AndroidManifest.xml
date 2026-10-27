@@ -150,6 +150,18 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.VaaniLedger.Transparent" />
 
+        <!-- Hands the khata CSV backup to whichever app the shopkeeper picks
+             in the share sheet, with a one-file read grant. Not exported. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- The floating bubble + mini dashboard.-->
         <service
             android:name=".overlay.OverlayService"

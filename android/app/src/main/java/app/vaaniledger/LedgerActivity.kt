@@ -106,7 +106,7 @@ class LedgerActivity : Activity() {
             setPadding(dp(20), dp(22), dp(20), dp(28))
         }
 
-        root.addView(pageHeader(ShopSettings.NAME, s.title))
+        root.addView(pageHeader(ShopSettings.name(this), s.title))
 
         countLabel = text("", 13f, muted).apply {
             setPadding(0, dp(4), 0, dp(16))

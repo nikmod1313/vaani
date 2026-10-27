@@ -346,9 +346,13 @@ class OverlayService : Service() {
         val intent = app.vaaniledger.reminder.ReminderLinks.reminderIntent(
             phone = phone,
             customerName = balance.name,
-            shopName = SHOP_NAME,
+            shopName = shopName(),
             amount = balance.outstanding,
-            payeeVpa = null,   // TODO(onboarding): the shop's UPI id
+            // With the shop's UPI ID set, the reminder carries a pay link the
+            // customer taps once; without it, the reminder still goes.
+            payeeVpa = ShopSettings.upiId(this),
+            // In the language the shop chose for itself.
+            language = ShopSettings.language(this).wire,
         ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
 
         // Log the composed draft. Android elides long URIs in logs, so the
@@ -357,7 +361,9 @@ class OverlayService : Service() {
             TAG,
             "reminder to ${balance.name}: " +
                 app.vaaniledger.reminder.ReminderLinks.composeMessage(
-                    balance.name, SHOP_NAME, balance.outstanding,
+                    balance.name, shopName(), balance.outstanding,
+                    language = ShopSettings.language(this).wire,
+                    withLink = ShopSettings.upiId(this) != null,
                 ),
         )
 
@@ -366,13 +372,13 @@ class OverlayService : Service() {
                 startActivity(
                     android.content.Intent.createChooser(
                         app.vaaniledger.reminder.ReminderLinks.untargetedFallback(intent),
-                        "Reminder bhejein",
+                        sheetStrings().sendReminder,
                     ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
             }
             .onFailure {
                 android.util.Log.e(TAG, "reminder intent failed", it)
-                toast("Koi messaging app nahi mili")
+                toast(sheetStrings().noMessagingApp)
             }
     }
 
@@ -467,7 +473,7 @@ class OverlayService : Service() {
                 .filter { it.hash !in seen }
                 .map {
                     app.vaaniledger.extract.ConversationResolver.Turn(
-                        sender = if (it.isOutgoing) SHOP_NAME else customer,
+                        sender = if (it.isOutgoing) shopName() else customer,
                         body = it.text,
                         // A bubble carries a time label, not a date. Null keeps
                         // send order, which is what the resolver needs.
@@ -634,7 +640,7 @@ class OverlayService : Service() {
         scope.launch {
             val db = LedgerDatabase.get(this@OverlayService)
             runCatching {
-                db.shops().upsert(ShopEntity(id = SHOP_ID, name = SHOP_NAME))
+                db.shops().upsert(ShopEntity(id = SHOP_ID, name = shopName()))
 
                 val customer = corrected.customer
                     ?.let { db.customers().resolve(SHOP_ID, it) }
@@ -687,10 +693,10 @@ class OverlayService : Service() {
             }
 
             withContext(Dispatchers.Main) {
-                val amount = corrected.amount?.let { "₹%,.0f".format(it) } ?: "entry"
-                toast("$amount saved (badla hua)")
+                val amount = corrected.amount?.let { "₹%,.0f".format(it) } ?: sheetStrings().entry
+                toast(sheetStrings().savedEdited(amount))
             }
-            SyncWorker.syncNow(this@OverlayService, SHOP_ID, SHOP_NAME)
+            SyncWorker.syncNow(this@OverlayService, SHOP_ID, shopName())
         }
     }
 
@@ -712,7 +718,7 @@ class OverlayService : Service() {
         scope.launch {
             val db = LedgerDatabase.get(this@OverlayService)
             runCatching {
-                db.shops().upsert(ShopEntity(id = SHOP_ID, name = SHOP_NAME))
+                db.shops().upsert(ShopEntity(id = SHOP_ID, name = shopName()))
 
                 val customer = extraction.customer?.takeIf { it.isNotBlank() }
                     ?.let { db.customers().resolve(SHOP_ID, it) }
@@ -741,15 +747,20 @@ class OverlayService : Service() {
             val pending = runCatching { db.transactions().pending().size }.getOrDefault(0)
 
             withContext(Dispatchers.Main) {
-                val amount = extraction.amount?.let { "₹%,.0f".format(it) } ?: "entry"
-                toast("$amount saved · $pending pending sync")
+                val amount = extraction.amount?.let { "₹%,.0f".format(it) } ?: sheetStrings().entry
+                toast(sheetStrings().savedPending(amount, pending))
             }
-            SyncWorker.syncNow(this@OverlayService, SHOP_ID, SHOP_NAME)
+            SyncWorker.syncNow(this@OverlayService, SHOP_ID, shopName())
         }
     }
 
     private fun captureStrings() =
         app.vaaniledger.data.Strings.of(ShopSettings.language(this)).capture
+
+    /** The shop's own name, read fresh: it can change in Settings while the bubble is up. */
+    private fun shopName() = ShopSettings.name(this)
+
+    private fun sheetStrings() = app.vaaniledger.data.Strings.of(ShopSettings.language(this)).sheets
 
     private fun toast(message: String) {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
@@ -775,9 +786,9 @@ class OverlayService : Service() {
         }
 
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Vaani chalu hai")
-            .setContentText("Bubble dabaye, hisaab likhne ke liye")
-            .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setContentTitle(sheetStrings().notificationTitle)
+            .setContentText(sheetStrings().notificationText)
+            .setSmallIcon(app.vaaniledger.R.drawable.ic_stat_vaani)
             .setColor(app.vaaniledger.ui.Theme.primary)
             .setOngoing(true)
             .build()
@@ -820,7 +831,6 @@ class OverlayService : Service() {
         // write into the SAME khata. Three entry points with their own copy
         // of this string would split one ledger into three half-empty ones.
         private val SHOP_ID = app.vaaniledger.data.ShopSettings.ID
-        private val SHOP_NAME = app.vaaniledger.data.ShopSettings.NAME
         private const val CHANNEL_ID = "vaani_overlay"
         private const val NOTIFICATION_ID = 1001
         private const val TAP_SLOP = 12

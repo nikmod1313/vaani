@@ -44,3 +44,14 @@
 {"id": "d44", "cat": "kirana", "turns": [["c", "kal 3 kg aata bheja tha wo kharab tha"], ["s", "sorry ji badal denge"]], "expect": []}
 {"id": "d45", "cat": "kirana", "turns": [["c", "1 kg chini bhejo", 0], ["s", "45", 1], ["c", "2 packet milk bhi chahiye", 120], ["s", "56", 1]], "expect": [{"dir": "sale", "items": {"cheeni": [1, "kg"]}, "amount": 45, "mode": "unknown"}, {"dir": "sale", "items": {"doodh": [2, "packet"]}, "amount": 56, "mode": "unknown"}]}
 {"id": "d46", "cat": "kirana", "turns": [["s", "aapka is mahine ka total 1,25,000 ho gaya"], ["c", "theek hai, 1,25,000 cash de diye kal raat"]], "expect": [{"dir": "payment", "items": {}, "amount": 125000, "mode": "cash"}]}
+{"id": "d47", "cat": "kirana", "turns": [["c", "kal se 2 packet doodh roz chahiye hoga kya?"]], "expect": []}
+{"id": "d48", "cat": "kirana", "turns": [["c", "2 kg chawal bhej doge?"], ["s", "haan, 120"]], "expect": [{"dir": "sale", "items": {"chawal": [2, "kg"]}, "amount": 120, "mode": "unknown"}]}
+{"id": "d49", "cat": "kirana", "turns": [["c", "galti se double payment ho gaya, 300 wapas kar do"]], "expect": []}
+{"id": "d50", "cat": "kirana", "turns": [["c", "please refund 200, i paid twice"]], "expect": []}
+{"id": "d51", "cat": "kirana", "turns": [["c", "chini hai kya?"], ["s", "haan sugar 45 kilo"], ["c", "1 kilo de do"]], "expect": [{"dir": "sale", "items": {"cheeni": [1, "kg"]}, "amount": 45, "mode": "unknown"}]}
+{"id": "d52", "cat": "apparel", "turns": [["c", "1 salwar kameez set aur 2 dupatta"], ["s", "1500 total"]], "expect": [{"dir": "sale", "items": {"salwar kameez": [1, "set"], "dupatta": [2, null]}, "amount": 1500, "mode": "unknown"}]}
+{"id": "d53", "cat": "kirana", "turns": [["c", "atta khatam ho gaya, 5 kilo bhej dena"]], "expect": [{"dir": "sale", "items": {"aata": [5, "kg"]}, "amount": null, "mode": "unknown"}]}
+{"id": "d54", "cat": "kirana", "turns": [["c", "3 packet maggi"], ["s", "42"], ["c", "100 ka note de raha hu, baaki lauta dena"]], "expect": [{"dir": "sale", "items": {"maggi": [3, "packet"]}, "amount": 42, "mode": "cash"}]}
+{"id": "d55", "cat": "kirana", "turns": [["c", "doodh ki thaili 2 bhej do"], ["s", "56"]], "expect": [{"dir": "sale", "items": {"doodh": [2, null]}, "amount": 56, "mode": "unknown"}]}
+{"id": "d56", "cat": "kirana", "turns": [["c", "kya aap card lete ho?"]], "expect": []}
+{"id": "d57", "cat": "kirana", "turns": [["c", "bhaiya 2 kg chawal bhej dena, ghar pe koi na ho to 9876543210 pe call karna"], ["s", "theek hai 120"]], "expect": [{"dir": "sale", "items": {"chawal": [2, "kg"]}, "amount": 120, "mode": "unknown"}]}

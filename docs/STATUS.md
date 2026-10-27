@@ -1,16 +1,20 @@
-# VaaniLedger — status and road to deployable
+# Vaani — status and road to deployable
 
-Written 27 Aug 2026. Update it when the picture changes; a status doc that
-has drifted is worse than none.
+Written 27 Aug 2026; corrected 27 Oct 2026, when most of what follows had
+drifted. Update it when the picture changes; a status doc that has drifted
+is worse than none.
 
 ---
 
 ## The one-line version
 
-The backend is finished and measured. The Android app builds, the floater
-works over other apps, and capture reads real chat messages correctly — but
-**nothing the app captures is saved yet.** Room, sync and reminders are
-written, compiled, and never called.
+*(27 Oct.)* The whole loop runs on the phone and has been driven end to end
+on an emulator: a customer's message arrives in a chat app → the bubble
+reads it → the on-device engine resolves it → the confirm and edit sheets →
+Room → the khata, the report and the reminder. The server is optional.
+Conversation-level accuracy is measured on held-out WhatsApp threads (see
+the README); what is still unmeasured is the Claude stage and real
+shopkeeper messages.
 
 ---
 
@@ -42,11 +46,12 @@ Everything here has been run, not just written.
 
 Compiles, is covered by no runtime path, and must not be described as working.
 
-- **`ReminderLinks` is never called.**
-- *(The panel's hardcoded ₹4,240 was removed on 28 Aug — it now reads today's
-  totals and the pending-sync count from Room.)*
-- `ScreenCaptureService` and `MessageNotificationListener` are stubs.
-- `Badlo` on the confirm sheet dismisses; there is no edit screen yet.
+- `ScreenCaptureService` (screenshot + OCR) and `MessageNotificationListener`
+  (staging incoming messages) are still stubs.
+
+*(Corrected 27 Oct: `ReminderLinks` is called from the khata sheet's
+"Yaad dilao" and now carries a UPI pay link once the shop sets its UPI ID;
+`Badlo` opens a real edit sheet, which also feeds the correction store.)*
 
 *(Room, Retrofit and `SyncWorker` moved out of this list on 27 Aug — the core
 loop now exercises all three.)*
@@ -114,12 +119,15 @@ nothing, `ChatScraper.dump()` tells you why in about a minute.
 
 ## Before any build leaves the team
 
-- [ ] **Remove `com.google.android.apps.messaging` from
-      `accessibility_config.xml`.** It is there so the parser could be proven
-      against a real view tree. Shipping it means the app can read a chat app
-      it has no business reading.
-- [ ] Move `API_BASE` off `10.0.2.2` (emulator-only) to the real host.
-- [ ] Turn off the debug tree dump — it logs chat contents.
+- [x] **Google Messages cannot ship.** It is now listed only in
+      `src/debug/res/xml/accessibility_config.xml` and gated on
+      `BuildConfig.DEBUG` in code; the release APK's config was checked with
+      `aapt2` and reads WhatsApp and WhatsApp Business only.
+- [ ] Move `API_BASE` off `10.0.2.2` (emulator-only) to the real host — or
+      set it per phone in Settings → Server address.
+- [x] The debug tree dump only runs when `BuildConfig.DEBUG`; release builds
+      never log chat contents.
+- [ ] Sign the release build (`assembleRelease` produces an unsigned APK).
 
 ---
 

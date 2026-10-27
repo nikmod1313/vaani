@@ -239,6 +239,86 @@ object CategoryLexicon {
     // Public accessors
     // ----------------------------------------------------------------------
 
+    /**
+     * One product, many words: English, Hinglish spelled three ways,
+     * Devanagari. The first word of each group is the canonical key; the
+     * customer's own word is still what the khata shows. Mirrors
+     * `_SYNONYMS` in categories.py.
+     */
+    private val SYNONYMS: List<List<String>> = listOf(
+        listOf("cheeni", "chini", "sugar", "shakkar", "चीनी", "शक्कर"),
+        listOf("aata", "atta", "flour", "आटा"),
+        listOf("chawal", "rice", "चावल"),
+        listOf("doodh", "dudh", "milk", "दूध"),
+        listOf("dahi", "curd", "दही"),
+        listOf("pyaz", "pyaaz", "onion", "प्याज"),
+        listOf("aloo", "aalu", "aalo", "alu", "potato", "आलू"),
+        listOf("tamatar", "tomato", "टमाटर"),
+        listOf("anda", "egg", "अंडा"),
+        listOf("kela", "banana", "केला"),
+        listOf("seb", "apple", "सेब"),
+        listOf("tel", "oil", "तेल"),
+        listOf("chai", "chay", "tea", "चाय"),
+        listOf("namak", "salt", "नमक"),
+        listOf("sabun", "soap", "साबुन"),
+        listOf("dal", "daal", "दाल"),
+        listOf("makhan", "butter", "मक्खन"),
+        listOf("pani", "water", "पानी"),
+        listOf("gobhi", "gobi", "गोभी"),
+        listOf("tala", "lock", "ताला"),
+        listOf("kabza", "hinge", "कब्ज़ा"),
+        listOf("dawai", "dava", "medicine", "दवाई", "दवा"),
+        listOf("goli", "tablet", "गोली", "टैबलेट"),
+        listOf("kalam", "pen", "पेन", "कलम"),
+        listOf("copy", "notebook", "कॉपी"),
+        listOf("coldrink", "colddrink"),
+    )
+    private val CANONICAL: Map<String, String> =
+        SYNONYMS.flatMap { group -> group.map { it to group[0] } }.toMap()
+
+    /** The product key for an item noun or modifier: the same for every spelling of it. */
+    fun canonical(word: String?): String = if (word.isNullOrEmpty()) "" else CANONICAL[word] ?: word
+
+    /** Garments named by two nouns: "salwar kameez" is one suit. */
+    private val COMPOUNDS: Set<Pair<String, String>> = setOf(
+        "kurta" to "pajama",
+        "kurta" to "pyjama",
+        "kurti" to "legging",
+        "kurti" to "pant",
+        "salwaar" to "kameez",
+        "salwar" to "kameez",
+        "salwar" to "suit",
+        "saree" to "blouse",
+        "shirt" to "pant",
+    )
+
+    fun isCompound(first: String, second: String): Boolean = (first to second) in COMPOUNDS
+
+    /**
+     * The key a sale is grouped under in the business report.
+     *
+     * Every spelling of a thing is one product -- aloo, potato and आलू sell
+     * as one line, not three. A variety or brand makes a DIFFERENT product:
+     * toor dal and moong dal are two lines, and grouping them as "dal"
+     * labelled the whole pile with whichever came first. A colour or size
+     * does not: a clothes shop wants to see how many kurtis it sold, and the
+     * shade is still on every ledger row.
+     */
+    fun productKey(name: String, modifier: String?): String {
+        val noun = canonical(name)
+        if (modifier.isNullOrBlank()) return noun
+        val words = modifier.trim().split(Regex("""\s+"""))
+        if (words.all { it in COLOURS || it in SIZES }) return noun
+        return (words.map { canonical(it) } + noun).joinToString(" ")
+    }
+
+    /** The same key, from a stored display name: "toor dal", "blue kurti". */
+    fun productKeyFromDisplay(display: String): String {
+        val words = display.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
+        if (words.isEmpty()) return display
+        return productKey(words.last(), words.dropLast(1).joinToString(" ").ifBlank { null })
+    }
+
     /** The chemist's nouns -- the ones whose trailing number is a strength. */
     fun pharmacyItems(): Set<String> = PHARMACY
 
