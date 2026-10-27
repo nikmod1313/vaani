@@ -238,6 +238,8 @@ object Strings {
         val deleted: String,
         val cancel: String,
         val tapToEdit: String,
+        val searchHint: String,
+        val noMatch: (String) -> String,
         val payment: String,
     )
 
@@ -474,6 +476,8 @@ object Strings {
             deleted = "Entry hata di",
             cancel = "Rehne dein",
             tapToEdit = "Badalne ke liye entry par dabaiye",
+            searchHint = "Grahak ya saaman dhoondein",
+            noMatch = { q -> "\"$q\" se koi entry nahi mili." },
             payment = "Bhugtan",
         ),
     )
@@ -694,6 +698,8 @@ object Strings {
             deleted = "Entry deleted",
             cancel = "Keep it",
             tapToEdit = "Tap an entry to change it",
+            searchHint = "Search a customer or an item",
+            noMatch = { q -> "No entries match \"$q\"." },
             payment = "Payment",
         ),
     )

@@ -311,4 +311,43 @@ interface AnalyticsDao {
 
     @Query("SELECT COUNT(*) FROM transactions WHERE shop_id = :shopId AND deleted = 0")
     suspend fun ledgerCount(shopId: String): Int
+
+    /**
+     * One page of the ledger, filtered in the database rather than on screen.
+     *
+     * The page loads 25 rows at a time, so filtering only what is loaded
+     * would miss every older entry -- the very ones a disputed bill is
+     * about. [mode] null means every mode; [query] null means no search, and
+     * otherwise matches the customer's name OR the items, so "chawal" finds
+     * every rice sale and "verma" every Verma. SQLite's LIKE ignores case
+     * for Latin letters; Devanagari has no case to ignore.
+     */
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE shop_id = :shopId AND deleted = 0
+          AND (:mode IS NULL OR mode = :mode)
+          AND (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR items LIKE '%' || :query || '%')
+        ORDER BY occurred_at DESC
+        LIMIT :limit OFFSET :offset
+        """
+    )
+    suspend fun ledgerSearch(
+        shopId: String,
+        mode: String?,
+        query: String?,
+        limit: Int,
+        offset: Int,
+    ): List<TransactionEntity>
+
+    /** How many rows [ledgerSearch] would return in all -- the "of N" under a filter. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM transactions
+        WHERE shop_id = :shopId AND deleted = 0
+          AND (:mode IS NULL OR mode = :mode)
+          AND (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR items LIKE '%' || :query || '%')
+        """
+    )
+    suspend fun ledgerSearchCount(shopId: String, mode: String?, query: String?): Int
 }

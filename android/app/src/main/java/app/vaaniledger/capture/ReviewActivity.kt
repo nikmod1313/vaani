@@ -297,8 +297,14 @@ class ReviewActivity : Activity() {
     }
 
     private fun approveAll() {
-        val all = outstanding.toMap()
-        outstanding.clear()
+        // A payment with no stated amount cannot be approved in bulk: saved
+        // blind, it became a "-Rs 0" line that settles nothing and clutters
+        // the khata. Those cards stay on screen for a decision of their own
+        // -- Save after checking, or Skip.
+        val all = outstanding.filterValues {
+            !(it.extraction.direction == "payment" && it.extraction.amount == null)
+        }
+        all.keys.forEach { outstanding.remove(it) }
         all.keys.forEach { it.visibility = View.GONE }
         refreshHeading()
 

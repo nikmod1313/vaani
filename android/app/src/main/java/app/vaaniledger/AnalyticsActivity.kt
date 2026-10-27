@@ -135,6 +135,14 @@ class AnalyticsActivity : Activity() {
         load()
     }
 
+    /** Refresh on every return: the tab is reordered to the front, not rebuilt. */
+    override fun onResume() {
+        super.onResume()
+        if (resumedOnce) load() else resumedOnce = true
+    }
+
+    private var resumedOnce = false
+
     override fun onDestroy() {
         scope.cancel()
         super.onDestroy()

@@ -6,6 +6,7 @@ import app.vaaniledger.ui.Scaffold.page
 
 import app.vaaniledger.ui.Theme
 import app.vaaniledger.ui.ArtView
+import app.vaaniledger.ui.LineIcon
 import app.vaaniledger.ui.OrnamentRule
 import app.vaaniledger.ui.Type
 import app.vaaniledger.ui.Views.chip
@@ -78,6 +79,15 @@ class LedgerActivity : Activity() {
     private lateinit var countLabel: TextView
 
     private var filter: String? = null
+    /** The search text, trimmed; null when the box is empty. */
+    private var query: String? = null
+    /**
+     * Bumped on every reload. A page that comes back for an older
+     * generation -- typing outran the database -- is dropped instead of
+     * being appended under results it no longer belongs to.
+     */
+    private var generation = 0
+    private val debounce = android.os.Handler(android.os.Looper.getMainLooper())
     private var loaded = 0
     private var total = 0
 
@@ -113,6 +123,8 @@ class LedgerActivity : Activity() {
         }
         root.addView(countLabel)
 
+        root.addView(searchBox(), matchWrap(dp(12)))
+
         filterRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         root.addView(filterRow)
 
@@ -134,7 +146,21 @@ class LedgerActivity : Activity() {
         reload()
     }
 
+    /**
+     * Refresh on every return, not only on creation. The tabs are brought
+     * back to the front rather than rebuilt, so a page loaded once kept
+     * showing the ledger as it was -- an order approved from the review
+     * queue a minute later simply was not there.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (resumedOnce) reload() else resumedOnce = true
+    }
+
+    private var resumedOnce = false
+
     override fun onDestroy() {
+        debounce.removeCallbacksAndMessages(null)
         scope.cancel()
         super.onDestroy()
     }
@@ -159,6 +185,7 @@ class LedgerActivity : Activity() {
     }
 
     private fun reload() {
+        generation++
         loaded = 0
         // Without this the first row of a newly filtered list keeps the
         // previous list's date header, or loses its own.
@@ -169,21 +196,24 @@ class LedgerActivity : Activity() {
     }
 
     private fun loadMore() {
+        val gen = generation
+        val mode = filter
+        val q = query
         scope.launch {
             val dao = LedgerDatabase.get(this@LedgerActivity).analytics()
             val shop = ShopSettings.ID
             val offset = loaded
 
             val rows = runCatching {
-                val mode = filter
-                if (mode == null) dao.ledgerPage(shop, PAGE, offset)
-                else dao.ledgerPageByMode(shop, mode, PAGE, offset)
+                dao.ledgerSearch(shop, mode, q, PAGE, offset)
             }.onFailure { android.util.Log.e(TAG, "ledger load failed", it) }
                 .getOrDefault(emptyList())
 
-            val count = runCatching { dao.ledgerCount(shop) }.getOrDefault(0)
+            // Counted under the same filter, so "showing 3 of 3" means three.
+            val count = runCatching { dao.ledgerSearchCount(shop, mode, q) }.getOrDefault(0)
 
             withContext(Dispatchers.Main) {
+                if (gen != generation) return@withContext
                 total = count
                 // Drop the previous page's "show more" before appending,
                 // or they stack up down the screen.
@@ -192,7 +222,7 @@ class LedgerActivity : Activity() {
 
                 if (rows.isEmpty() && loaded == 0) {
                     countLabel.text = ""
-                    list.addView(emptyState(strings().empty))
+                    list.addView(emptyState(if (q != null) strings().noMatch(q) else strings().empty))
                     return@withContext
                 }
 
@@ -405,6 +435,66 @@ class LedgerActivity : Activity() {
             "upi" -> s.filterUpi
             "udhaar" -> s.filterUdhaar
             else -> mode
+        }
+    }
+
+    /**
+     * The search field: a rounded paper box with a magnifier, and a clear
+     * button once there is something to clear. Results follow the typing
+     * after a short pause, so each keystroke is not its own database query.
+     */
+    private fun searchBox(): View {
+        val s = strings()
+        val clear = View(this).apply {
+            background = LineIcon(this@LedgerActivity, LineIcon.Glyph.CLOSE, muted, sizeDp = 16)
+            visibility = View.GONE
+            contentDescription = "clear"
+        }
+        val field = android.widget.EditText(this).apply {
+            hint = s.searchHint
+            setHintTextColor(muted)
+            setTextColor(ink)
+            textSize = 15f
+            typeface = Type.body(this@LedgerActivity)
+            isSingleLine = true
+            background = null
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setPadding(dp(10), dp(10), dp(6), dp(10))
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(t: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(e: android.text.Editable?) {
+                    val text = e?.toString()?.trim().orEmpty()
+                    clear.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+                    debounce.removeCallbacksAndMessages(null)
+                    debounce.postDelayed({
+                        val next = text.ifEmpty { null }
+                        if (next != query) { query = next; reload() }
+                    }, 250)
+                }
+            })
+            setOnEditorActionListener { v, _, _ ->
+                (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .hideSoftInputFromWindow(v.windowToken, 0)
+                true
+            }
+        }
+        clear.setOnClickListener { field.setText("") }
+
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(14), 0, dp(12), 0)
+            background = GradientDrawable().apply {
+                setColor(Theme.surface)
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Theme.border)
+            }
+            addView(View(this@LedgerActivity).apply {
+                background = LineIcon(this@LedgerActivity, LineIcon.Glyph.SEARCH, Theme.accent, sizeDp = 20)
+            }, LinearLayout.LayoutParams(dp(20), dp(20)))
+            addView(field, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(clear, LinearLayout.LayoutParams(dp(16), dp(16)))
         }
     }
 
