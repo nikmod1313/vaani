@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import random
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 import json
@@ -104,8 +105,39 @@ class Transaction:
         return -self.amount if self.direction == "payment" else self.amount
 
 
+def _serialised(cls):
+    """
+    One connection, one caller at a time.
+
+    FastAPI runs plain endpoints on a thread pool, so the dashboard's
+    parallel requests (summary, entries, items, narration) shared this
+    connection at once and sqlite3 failed with "bad parameter or other API
+    misuse" -- a 500 on whichever request lost. Every method takes the
+    store's lock; it is re-entrant, so methods calling methods are fine,
+    and they all return plain lists and dicts, so nothing reads the
+    connection after the lock is released.
+    """
+    import functools
+
+    for name, fn in list(vars(cls).items()):
+        if name.startswith("__") or not callable(fn) or name == "_tx":
+            continue
+
+        def wrap(f):
+            @functools.wraps(f)
+            def locked(self, *a, **kw):
+                with self._lock:
+                    return f(self, *a, **kw)
+            return locked
+
+        setattr(cls, name, wrap(fn))
+    return cls
+
+
+@_serialised
 class LedgerStore:
     def __init__(self, path: str | Path = ":memory:") -> None:
+        self._lock = threading.RLock()
         self.path = str(path)
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)

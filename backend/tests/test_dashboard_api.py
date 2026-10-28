@@ -81,6 +81,25 @@ class DashboardApiTest(unittest.TestCase):
         self.client.post("/sync", json={"shop_id": "s1", "transactions": []})
         self.assertEqual(len(self.client.get("/shops/s1/transactions").json()["transactions"]), before)
 
+    def test_parallel_requests_share_the_store_safely(self):
+        """The dashboard fires four requests at once; one used to 500."""
+        import threading
+
+        main.STORE.seed("s1", days=20)
+        errors = []
+
+        def hammer():
+            try:
+                for _ in range(100):
+                    main.STORE.summary("s1"); main.STORE.transactions("s1"); main.STORE.get_shop("s1")
+            except Exception as e:  # noqa: BLE001 -- any failure is the bug
+                errors.append(e)
+
+        threads = [threading.Thread(target=hammer) for _ in range(8)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()
