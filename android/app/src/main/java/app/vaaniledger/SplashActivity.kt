@@ -127,8 +127,41 @@ class SplashActivity : Activity() {
                 .setStartDelay(2100L + i * 160).setDuration(600).setInterpolator(Motion.ease).start()
         }
 
-        script.onFinished = { root.postDelayed({ proceed() }, 650) }
+        script.onFinished = {
+            chime()
+            root.postDelayed({ proceed() }, 650)
+        }
         script.postDelayed({ script.play() }, if (savedInstanceState == null) 250 else 0)
+    }
+
+    /**
+     * The chime that closes the opening: a santoor-like Sa-Ga-Pa-Sa' with a
+     * small temple bell on the last note, composed for Vaani (res/raw).
+     *
+     * Played on the application context so it rings on into the home screen
+     * instead of being cut off when this activity finishes. Silent when the
+     * phone is on silent or vibrate -- an app that chimes in a quiet shop,
+     * or a meeting, gets its sound turned off for good -- and silent when
+     * the writing is skipped, since a tap means "get on with it".
+     */
+    private fun chime() {
+        val audio = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
+        if (audio.ringerMode != android.media.AudioManager.RINGER_MODE_NORMAL) return
+        runCatching {
+            val player = android.media.MediaPlayer()
+            player.setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+            )
+            applicationContext.resources.openRawResourceFd(R.raw.vaani_chime).use { fd ->
+                player.setDataSource(fd.fileDescriptor, fd.startOffset, fd.length)
+            }
+            player.setOnCompletionListener { it.release() }
+            player.prepare()
+            player.start()
+        }.onFailure { android.util.Log.w("VaaniSplash", "chime failed", it) }
     }
 
     private fun skip() {

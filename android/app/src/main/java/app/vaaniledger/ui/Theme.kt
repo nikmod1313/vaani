@@ -261,14 +261,19 @@ object Views {
             addView(text(label, 13f, if (on) Theme.onPrimary else Theme.muted, Type.medium(this@segmented)).apply {
                 gravity = Gravity.CENTER
                 maxLines = 1
-                setPadding(dp(6), dp(8), dp(6), dp(8))
+                // Devanagari sits taller in its line box than Latin, so a
+                // "हिंदी | English" pair sized itself unevenly. Every cell is
+                // the same width (weight) AND the same fixed height, with the
+                // font's own padding removed, so the two halves always match.
+                includeFontPadding = false
+                setPadding(dp(6), 0, dp(6), 0)
                 if (on) background = GradientDrawable().apply {
                     setColor(Theme.primary)
                     cornerRadius = dp(10).toFloat()
                 }
                 pressable()
                 setOnClickListener { if (!on) onPick(value) }
-            }, weight())
+            }, LinearLayout.LayoutParams(0, dp(36), 1f))
         }
     }
 

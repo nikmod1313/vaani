@@ -175,7 +175,7 @@ class OnboardingActivity : Activity() {
             addView(segmented(
                 AppLanguage.entries.map { it to it.displayName },
                 chosenLanguage,
-            ) { chosenLanguage = it; render(direction = 0) }, LinearLayout.LayoutParams(dp(170), -2))
+            ) { chosenLanguage = it; render(direction = 0) }, LinearLayout.LayoutParams(dp(184), -2))
         }, matchWrap(dp(22)))
 
         // The palace through an arch, with the elephant stepping out of it --
