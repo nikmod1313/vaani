@@ -246,7 +246,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
       <button class="btn" id="newEntry">+ New entry</button>
       <button class="btn" id="csv">Export CSV</button>
       <button class="btn" id="refresh">Refresh</button>
-      <button class="btn primary" id="seed">Load demo data</button>
+      <button class="btn hidden" id="disconnect">Disconnect</button>
     </div>
   </header>
 
@@ -254,8 +254,8 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   <div class="rule" aria-hidden="true"><i></i></div>
 
   <div id="empty" class="msg hidden">
-    <div>No entries from your phone yet.<br><span class="sub">Connect the phone, or look around with demo data.</span></div>
-    <button class="btn primary" id="seedEmpty">Load demo data</button>
+    <div id="emptyText">Connect your phone to see its khata here.</div>
+    <button class="btn primary" id="connectEmpty">Connect phone</button>
   </div>
 
   <div id="main" class="hidden">
@@ -438,7 +438,9 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
     get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
     set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   };
-  var SHOP = new URLSearchParams(location.search).get("shop") || store.get("vaani.shop") || "sharma-kirana";
+  // No pairing, no shop: an unpaired browser shows nothing rather than
+  // whatever khata happens to sit on the server.
+  var SHOP = new URLSearchParams(location.search).get("shop") || store.get("vaani.shop") || null;
 
   var $ = function (id) { return document.getElementById(id); };
   var state = { summary: null, health: null, days: 14, custFilter: "all", txDir: "", catalogue: [] };
@@ -644,30 +646,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   });
 
   // -------------------------------------------------------------- load
-  // Demo data lives in its own shop. Seeded into the phone's shop it was
-  // added to the real khata, and every figure the dashboard showed was the
-  // phone's entries plus three months of invented ones.
-  var DEMO = "demo";
-  var HOME = store.get("vaani.shop") || "sharma-kirana";
-  function seedLabel() {
-    var label = SHOP === DEMO ? "Back to my shop" : "View demo data";
-    [$("seed"), $("seedEmpty")].forEach(function (b) { if (b) b.textContent = label; });
-  }
-  function seed() {
-    if (SHOP === DEMO) { SHOP = HOME; seedLabel(); renderPaired(); return load(); }
-    var btns = [$("seed"), $("seedEmpty")];
-    btns.forEach(function (b) { if (b) { b.disabled = true; b.textContent = "Loading…"; } });
-    return api("/shops/" + DEMO + "/summary").catch(function () {
-      return api("/shops/" + DEMO + "/seed?days=90", { method: "POST" });
-    }).then(function () { SHOP = DEMO; renderPaired(); return load(); })
-      .finally(function () {
-        btns.forEach(function (b) { if (b) b.disabled = false; });
-        seedLabel();
-      });
-  }
 
-  $("seed").addEventListener("click", seed);
-  $("seedEmpty").addEventListener("click", seed);
   $("refresh").addEventListener("click", function () { load(); });
 
   // ------------------------------------------------------------- entries
@@ -870,12 +849,37 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   // ------------------------------------------------------------- pairing
   var pairTimer = null;
   function renderPaired() {
-    var paired = store.get("vaani.shop");
-    $("connect").innerHTML = paired && paired === SHOP
+    $("connect").innerHTML = SHOP
       ? '<span class="paired"><span class="dot"></span>Phone connected</span>' : "Connect phone";
-    $("connect").classList.toggle("hidden", SHOP === DEMO);
+    $("disconnect").classList.toggle("hidden", !SHOP);
+    ["newEntry", "csv", "refresh"].forEach(function (id) { $(id).classList.toggle("hidden", !SHOP); });
   }
+
+  // Forget the phone in this browser. The khata stays on the phone and the
+  // server; connecting again brings it straight back.
+  $("disconnect").addEventListener("click", function () {
+    if (!confirm("Disconnect this computer from the phone? Your khata stays safe on the phone.")) return;
+    try { localStorage.removeItem("vaani.shop"); } catch (e) {}
+    SHOP = null;
+    state.summary = null;
+    history.replaceState(null, "", location.pathname);
+    renderPaired();
+    showEmpty();
+    toast("Disconnected");
+  });
+
+  function showEmpty(text) {
+    $("main").classList.add("hidden");
+    $("empty").classList.remove("hidden");
+    $("emptyText").textContent = text || "Connect your phone to see its khata here.";
+    $("connectEmpty").classList.toggle("hidden", !!SHOP);
+    $("shopName").childNodes[0].nodeValue = "Vaani";
+    $("shopMeta").textContent = SHOP ? "waiting for the phone" : "not connected";
+  }
+  $("connectEmpty").addEventListener("click", function () { $("connect").click(); });
+
   $("connect").addEventListener("click", function () {
+    if (SHOP) return;   // already connected; Disconnect is beside it
     $("pairCode").textContent = "······";
     $("pairNote").textContent = "Same Wi-Fi for both. The code lasts 10 minutes.";
     $("dlgConnect").showModal();
@@ -887,9 +891,8 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
         api("/pair/" + p.code).then(function (st) {
           if (st.status === "paired") {
             clearInterval(pairTimer);
-            SHOP = HOME = st.shop_id;
+            SHOP = st.shop_id;
             store.set("vaani.shop", SHOP);
-            seedLabel();
             history.replaceState(null, "", location.pathname);
             $("dlgConnect").close();
             toast("Connected to " + (st.shop_name || SHOP));
@@ -914,6 +917,12 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   function refreshAll() { load(); }
 
   function load(quiet) {
+    if (!SHOP) {
+      api("/health").then(function (h) { state.health = h; renderStatus(); })
+        .catch(function () { state.health = null; renderStatus(); });
+      showEmpty();
+      return Promise.resolve();
+    }
     return api("/health")
       .then(function (h) { state.health = h; renderStatus(); })
       .catch(function () { state.health = null; renderStatus(); })
@@ -924,7 +933,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
         state.summary = s;
         $("empty").classList.add("hidden");
         $("main").classList.remove("hidden");
-        $("shopName").childNodes[0].nodeValue = SHOP === DEMO ? "Demo shop" : (s.shop && s.shop.name) || SHOP;
+        $("shopName").childNodes[0].nodeValue = (s.shop && s.shop.name) || SHOP;
         $("shopMeta").textContent = new Date().toDateString().toUpperCase();
         renderKpis(s);
         renderChart(s.series);
@@ -936,13 +945,11 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
       .catch(function () {
         // A 404 here means the shop has no data yet, which is the normal
         // first-run state, not an error worth alarming anyone about.
-        $("main").classList.add("hidden");
-        $("empty").classList.remove("hidden");
+        showEmpty("Connected — waiting for the phone's first sync.");
       });
   }
 
   renderPaired();
-  seedLabel();
   load();
   // A paired dashboard keeps up with the counter on its own: the phone
   // syncs as entries are made. Paused while a dialog is open or the tab is
