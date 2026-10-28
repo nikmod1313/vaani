@@ -471,13 +471,17 @@ class OverlayService : Service() {
             val seen = db.cursors().byChat(chatId)?.hashes ?: emptySet()
             val turns = messages
                 .filter { it.hash !in seen }
+                // The shop's own reminders are not part of any order.
+                .filterNot { it.isOutgoing && app.vaaniledger.reminder.ReminderLinks.isReminder(it.text) }
                 .map {
                     app.vaaniledger.extract.ConversationResolver.Turn(
                         sender = if (it.isOutgoing) shopName() else customer,
                         body = it.text,
-                        // A bubble carries a time label, not a date. Null keeps
-                        // send order, which is what the resolver needs.
-                        timestamp = null,
+                        // Dated from the day divider above the bubble plus its
+                        // own time label, so turns from different days fall
+                        // into different threads. Null where no divider was on
+                        // screen, which keeps send order.
+                        timestamp = app.vaaniledger.capture.ChatDates.parse(it.dateLabel, it.timeLabel),
                         isShopkeeper = it.isOutgoing,
                         contentHash = it.hash,
                     )

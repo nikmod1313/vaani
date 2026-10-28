@@ -157,6 +157,21 @@ object ReminderLinks {
     fun untargetedFallback(intent: Intent): Intent =
         Intent(intent).apply { setPackage(null) }
 
+    /**
+     * Is this one of Vaani's own reminders, sent from this phone?
+     *
+     * Read back off the chat on the next capture, "Namaste ... Rs 1,000
+     * baaki hai" carried an amount and landed in the order's evidence -- a
+     * figure the shop never quoted for anything. Matches every language the
+     * reminder has been written in.
+     */
+    fun isReminder(text: String): Boolean {
+        val t = text.lowercase()
+        val greets = t.contains("namaste") || t.contains("नमस्ते")
+        val owes = t.contains("baaki hai") || t.contains("बाकी हैं") || t.contains("is pending as of")
+        return greets && owes
+    }
+
     const val WHATSAPP_PACKAGE = "com.whatsapp"
     const val WHATSAPP_BUSINESS_PACKAGE = "com.whatsapp.w4b"
 }

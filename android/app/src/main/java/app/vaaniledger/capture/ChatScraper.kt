@@ -30,6 +30,11 @@ object ChatScraper {
         val text: String,
         val isOutgoing: Boolean,
         val timeLabel: String?,
+        /**
+         * The day divider above this bubble, if one is on screen. Not part
+         * of the hash, so messages already seen keep their identity.
+         */
+        val dateLabel: String? = null,
     ) {
         val hash: String
             get() = MessageDigest.getInstance("SHA-1")
@@ -48,9 +53,15 @@ object ChatScraper {
     // NOT match it — so "11:07 PM" slipped through a \s?-based pattern.
     private val TIME_PATTERN =
         Regex("""^\d{1,2}:\d{2}([\s\u202f\u00a0]?[apAP]\.?[mM]\.?)?$""")
-    private val DATE_PATTERN = Regex(
-        """^(today|yesterday|aaj|kal|\d{1,2}/\d{1,2}/\d{2,4}|""" +
-            """(mon|tue|wed|thu|fri|sat|sun)\w*|\w+ \d{1,2}, \d{4})$""",
+    /**
+     * WhatsApp's day dividers. "10 September 2026" -- the form an Indian
+     * phone shows -- was missing, so every divider was read as a message
+     * from the customer, and its numbers (10, 2026) competed with the real
+     * quantities and prices. Hindi month names match the same shapes.
+     */
+    internal val DATE_PATTERN = Regex(
+        """^(today|yesterday|aaj|kal|आज|कल|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|""" +
+            """(mon|tue|wed|thu|fri|sat|sun)\w*|\d{1,2}\s+\S+\s+\d{4}|\S+\s+\d{1,2},?\s+\d{4})$""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -130,6 +141,13 @@ object ChatScraper {
         // nearest one below-right of it rather than trusting sibling order,
         // which differs between apps.
         val times = candidates.filter { TIME_PATTERN.matches(it.second) }
+        // Day dividers, top to bottom: each bubble belongs to the nearest one
+        // above it, which is what lets messages from different days be told
+        // apart -- and an order from last month stay out of today's.
+        val dividers = candidates
+            .filter { DATE_PATTERN.matches(it.second.trim()) }
+            .map { (node, text) -> Rect().also { node.getBoundsInScreen(it) }.top to text.trim() }
+            .sortedBy { it.first }
         val bodies = candidates.filter { isBody(it.first, it.second) }
 
         // Sort by vertical position, NOT traversal order. Chat lists are
@@ -144,6 +162,7 @@ object ChatScraper {
                     text = text,
                     isOutgoing = r.centerX() > screenWidth / 2,
                     timeLabel = nearestTime(r, times),
+                    dateLabel = dividers.lastOrNull { it.first <= r.top }?.second,
                 )
             }
     }

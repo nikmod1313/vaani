@@ -44,6 +44,7 @@ class LedgerAccessibilityService : AccessibilityService() {
         val text: String,
         val isOutgoing: Boolean,
         val timeLabel: String?,
+        val dateLabel: String? = null,
     ) {
         /** Stable identity, mirroring the backend's content hash. */
         val hash: String
@@ -181,7 +182,7 @@ class LedgerAccessibilityService : AccessibilityService() {
             }
             val fresh = mutableListOf<CapturedMessage>()
             for (m in ChatScraper.scrape(root, width)) {
-                val message = CapturedMessage(m.text, m.isOutgoing, m.timeLabel)
+                val message = CapturedMessage(m.text, m.isOutgoing, m.timeLabel, m.dateLabel)
                 if (collected.put(m.hash, message) == null) fresh.add(message)
             }
             if (fresh.isNotEmpty()) rounds.add(fresh)
