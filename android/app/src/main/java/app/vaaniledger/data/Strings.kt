@@ -110,6 +110,9 @@ object Strings {
         val next: String,
         val back: String,
         val finish: String,
+        val nameTitle: String,
+        val nameSubtitle: String,
+        val nameHint: String,
         val stepOf: (Int, Int) -> String,
     )
 
@@ -290,6 +293,9 @@ object Strings {
             next = "आगे",
             back = "पीछे",
             finish = "हो गया",
+            nameTitle = "आपकी दुकान का नाम क्या है?",
+            nameSubtitle = "यही नाम हर पेज पर और ग्राहकों को भेजे याद-संदेश में दिखेगा। बाद में सेटिंग्स से बदल सकते हैं।",
+            nameHint = "जैसे: गुप्ता जनरल स्टोर",
             stepOf = { step, total -> "चरण $step / $total" },
         ),
         main = Main(
@@ -526,6 +532,9 @@ object Strings {
             next = "Next",
             back = "Back",
             finish = "Done",
+            nameTitle = "What is your shop called?",
+            nameSubtitle = "It appears on every page and in every reminder your customers read. You can change it later in Settings.",
+            nameHint = "e.g. Gupta General Store",
             stepOf = { step, total -> "Step $step of $total" },
         ),
         main = Main(

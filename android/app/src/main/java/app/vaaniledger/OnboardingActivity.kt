@@ -71,6 +71,7 @@ class OnboardingActivity : Activity() {
 
     private var step = 0
     private var chosenCategory: ShopCategory? = null
+    private var chosenName: String = ""
     // Defaults the WELCOME screen to Hinglish, since that is the language it
     // is written in before anyone has chosen anything.
     private var chosenLanguage: AppLanguage = AppLanguage.HI
@@ -123,8 +124,9 @@ class OnboardingActivity : Activity() {
 
         when (step) {
             0 -> welcome(bundle)
-            1 -> categoryStep(bundle)
-            2 -> languageStep(bundle)
+            1 -> nameStep(bundle)
+            2 -> categoryStep(bundle)
+            3 -> languageStep(bundle)
         }
 
         if (direction == 0) {
@@ -204,7 +206,58 @@ class OnboardingActivity : Activity() {
         root.addView(button(o.welcomeStart, primary = true) { go(1) })
     }
 
-    // ---- step 1: category --------------------------------------------------
+    // ---- step 1: the shop's name ---------------------------------------------
+
+    /**
+     * The shop's own name, asked first because it is on every page and in
+     * every reminder a customer reads. Nothing is prefilled -- a sample name
+     * left in place would end up on real customers' messages.
+     */
+    private fun nameStep(t: Strings.Bundle) {
+        val o = t.onboarding
+        root.addView(title(o.nameTitle, 28f))
+        root.addView(body(o.nameSubtitle).apply { setPadding(0, dp(8), 0, dp(24)) })
+
+        lateinit var next: View
+        val field = android.widget.EditText(this).apply {
+            setText(chosenName)
+            setSelection(text.length)
+            hint = o.nameHint
+            setHintTextColor(Theme.muted)
+            setTextColor(Theme.ink)
+            textSize = 20f
+            typeface = Type.display(this@OnboardingActivity)
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_NEXT
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            background = ManuscriptFrame(this@OnboardingActivity)
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(e: android.text.Editable?) {
+                    chosenName = e?.toString()?.trim().orEmpty()
+                    next.isEnabled = chosenName.isNotEmpty()
+                    next.alpha = if (chosenName.isNotEmpty()) 1f else 0.45f
+                }
+            })
+            setOnEditorActionListener { _, _, _ ->
+                if (chosenName.isNotEmpty()) go(2)
+                true
+            }
+        }
+        root.addView(field, matchWrap(dp(24)))
+
+        next = button(o.next, primary = true) { if (chosenName.isNotEmpty()) go(2) }.apply {
+            isEnabled = chosenName.isNotEmpty()
+            alpha = if (chosenName.isNotEmpty()) 1f else 0.45f
+        }
+        root.addView(next)
+        field.requestFocus()
+    }
+
+    // ---- step 2: category --------------------------------------------------
 
     private fun categoryStep(t: Strings.Bundle) {
         val o = t.onboarding
@@ -224,7 +277,7 @@ class OnboardingActivity : Activity() {
                         // Show the choice land before moving on, so the tap
                         // visibly did something rather than the page jumping.
                         tile.background = ArchDrawable(this, Theme.primary, Theme.gold)
-                        tile.postDelayed({ go(2) }, 260)
+                        tile.postDelayed({ go(3) }, 260)
                     },
                     LinearLayout.LayoutParams(0, dp(146), 1f)
                         .apply { marginEnd = if (cat == pair.first() && pair.size > 1) dp(12) else 0 },
@@ -272,7 +325,7 @@ class OnboardingActivity : Activity() {
         ShopCategory.GENERAL -> LineIcon.Glyph.SHOP
     }
 
-    // ---- step 2: language --------------------------------------------------
+    // ---- step 3: language --------------------------------------------------
 
     /**
      * Two painted doors, one per language. Each is captioned in its own
@@ -322,6 +375,7 @@ class OnboardingActivity : Activity() {
         chosenLanguage = language
         val category = chosenCategory ?: ShopCategory.GENERAL
 
+        if (chosenName.isNotBlank()) ShopSettings.setName(this, chosenName)
         ShopSettings.setCategory(this, category)
         ShopSettings.setLanguage(this, language)
         scope.launch { ShopSettings.persist(this@OnboardingActivity) }
@@ -336,6 +390,6 @@ class OnboardingActivity : Activity() {
     }
 
     private companion object {
-        const val TOTAL_STEPS = 2
+        const val TOTAL_STEPS = 3
     }
 }

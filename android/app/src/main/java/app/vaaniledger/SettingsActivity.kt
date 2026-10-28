@@ -286,8 +286,8 @@ class SettingsActivity : Activity() {
         val en = ShopSettings.language(this) == AppLanguage.EN
         textDialog(
             "UPI ID",
-            if (en) "Example: sharmakirana@okaxis\nReminders will carry a link your customer taps to pay."
-            else "उदाहरण: sharmakirana@okaxis\nयाद-संदेश में लिंक जाएगा, ग्राहक टैप करके भुगतान कर सकेगा।",
+            if (en) "Example: yourshop@okaxis\nReminders will carry a link your customer taps to pay."
+            else "उदाहरण: yourshop@okaxis\nयाद-संदेश में लिंक जाएगा, ग्राहक टैप करके भुगतान कर सकेगा।",
             ShopSettings.upiId(this).orEmpty(),
             android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
         ) { value ->

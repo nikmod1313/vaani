@@ -19,7 +19,12 @@ import android.content.Context
 object ShopSettings {
 
     const val ID = "sharma-kirana"
-    const val NAME = "Sharma Kirana Store"
+    /**
+     * Only a fallback: onboarding asks every shop for its own name, so this
+     * shows only if that step was somehow skipped. Neutral on purpose -- a
+     * real person's shop name here would appear on a stranger's reminders.
+     */
+    const val NAME = "Meri Dukaan"
 
     private const val PREFS = "vaani_shop"
     private const val KEY_CATEGORY = "category"
