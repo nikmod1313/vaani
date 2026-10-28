@@ -75,7 +75,11 @@ run_serve() {
     PY="$VENV/bin/python"
   fi
 
+  # Announcing vaani.local is optional; fetch it once if a venv predates it.
+  $PY -c 'import zeroconf' 2>/dev/null || "$PY" -m pip install --quiet --disable-pip-version-check zeroconf 2>/dev/null || true
+
   printf '\n   %sAPI%s      http://localhost:8000\n' "$B" "$X"
+  printf '   %sWi-Fi%s    http://vaani.local:8000   %s← open this on any computer on the same Wi-Fi%s\n' "$B" "$X" "$DIM" "$X"
   printf '   %sdocs%s     http://localhost:8000/docs   %s← the contract, browsable%s\n' "$B" "$X" "$DIM" "$X"
   printf '\n   %sTry it from another terminal:%s\n\n' "$DIM" "$X"
   cat <<'EOF'
@@ -85,7 +89,9 @@ run_serve() {
 EOF
   printf '\n   %sCtrl+C to stop.%s\n\n' "$DIM" "$X"
 
-  exec "$PY" -m uvicorn app.main:app --reload --port 8000
+  # 0.0.0.0, not localhost: the phone and other computers on the Wi-Fi
+  # must be able to reach it. Nothing outside the Wi-Fi can.
+  exec "$PY" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 }
 
 # --------------------------------------------------------------------------

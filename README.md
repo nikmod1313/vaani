@@ -12,8 +12,13 @@ No WhatsApp Business API anywhere on the critical path.
 
 **See the dashboard:** `./run.sh dashboard`, then open <http://localhost:8000>.
 
+**On the shop's Wi-Fi** the server announces itself, so any computer there can
+open <http://vaani.local:8000> instead of an IP address.
+
 **Connect the phone to it:** press *Connect phone* on the dashboard; on the
 phone open *Settings → Connect a computer* and type the six-digit code. The
+phone finds the computer on the Wi-Fi by itself, and *Settings → Your
+dashboard* shares the address with anyone who needs it. The
 dashboard then shows that phone's khata, and entries, deletions and the price
 list flow both ways on each sync. Pairing chooses which shop a browser shows;
 it is not a login, so run the server on the shop's own Wi-Fi.

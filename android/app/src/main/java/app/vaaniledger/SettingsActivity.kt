@@ -133,6 +133,11 @@ class SettingsActivity : Activity() {
                 if (en) "Type the code shown on the dashboard" else "डैशबोर्ड पर दिखा कोड डालिए",
             ) { pairComputer() },
             settingRow(
+                LineIcon.Glyph.GLOBE, if (en) "Your dashboard" else "आपका डैशबोर्ड",
+                if (en) "vaani.local:8000 — open it on a computer on this Wi-Fi. Tap to share."
+                else "vaani.local:8000 — इसी Wi-Fi के कंप्यूटर पर खोलिए। भेजने के लिए टैप करें।",
+            ) { shareDashboard() },
+            settingRow(
                 LineIcon.Glyph.CHAT, if (en) "What Vaani can read" else "Vaani क्या पढ़ सकती है",
                 if (en) "What works in a chat, and what to enter by hand" else "चैट में क्या चलता है, क्या हाथ से भरें",
             ) { showCapabilities() },
@@ -448,25 +453,49 @@ class SettingsActivity : Activity() {
             ServerSettings.baseUrl(this), "http://192.168.1.42:8000/",
             android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI,
         )
+        // The phone looks for the computer itself; the address box is only a
+        // fallback, folded away until someone asks for it.
+        val found = text(if (en) "Looking for your computer on this Wi-Fi…" else "इस Wi-Fi पर आपका कंप्यूटर ढूँढ रहे हैं…", 13f, muted).apply {
+            setPadding(0, dp(14), 0, dp(4))
+        }
+        val manual = text(if (en) "Enter the address myself" else "पता ख़ुद डालें", 13f, Theme.primary, Type.medium(this)).apply {
+            setPadding(0, dp(8), 0, dp(6))
+        }
+        address.visibility = View.GONE
+        manual.setOnClickListener { address.visibility = View.VISIBLE; manual.visibility = View.GONE }
+        val finder = app.vaaniledger.net.ServerFinder(this) { url, name ->
+            address.setText(url)
+            found.text = if (en) "✓ Found $name on this Wi-Fi" else "✓ इस Wi-Fi पर $name मिल गया"
+            found.setTextColor(Theme.good)
+        }
+        // Not found in a few seconds: say so, and open the address box.
+        found.postDelayed({
+            if (found.text.startsWith("✓")) return@postDelayed
+            found.text = if (en) "Couldn't find it. Is the computer on the same Wi-Fi? You can type the address shown on the dashboard."
+            else "नहीं मिला। क्या कंप्यूटर इसी Wi-Fi पर है? डैशबोर्ड पर लिखा पता डाल सकते हैं।"
+            address.visibility = View.VISIBLE
+            manual.visibility = View.GONE
+        }, 6000)
         val holder = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(6), dp(22), 0)
             addView(code)
-            addView(text(if (en) "Dashboard address (shown under the code)" else "डैशबोर्ड का पता (कोड के नीचे लिखा है)", 12.5f, muted).apply {
-                setPadding(0, dp(14), 0, dp(6))
-            })
+            addView(found)
+            addView(manual)
             addView(address)
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (en) "Connect a computer" else "कंप्यूटर से जोड़ें")
             .setMessage(
-                if (en) "On the computer, open the dashboard. It shows a code — type it here. Phone and computer must be on the same Wi-Fi."
-                else "कंप्यूटर पर डैशबोर्ड खोलिए। वहाँ एक कोड दिखेगा — उसे यहाँ लिखिए। फ़ोन और कंप्यूटर एक ही Wi-Fi पर हों।"
+                if (en) "On the computer, open vaani.local:8000 and press Connect phone. Type the code it shows. Phone and computer must be on the same Wi-Fi."
+                else "कंप्यूटर पर vaani.local:8000 खोलिए और Connect phone दबाइए। जो कोड दिखे, यहाँ लिखिए। फ़ोन और कंप्यूटर एक ही Wi-Fi पर हों।"
             )
             .setView(holder)
             .setPositiveButton(if (en) "Connect" else "जोड़ें", null)
             .setNegativeButton(if (en) "Cancel" else "रहने दें", null)
             .create()
+        dialog.setOnDismissListener { finder.stop() }
+        finder.start()
         dialog.setOnShowListener {
             val button = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
             button.setOnClickListener {
@@ -509,6 +538,27 @@ class SettingsActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    /**
+     * Send someone the dashboard address. The easy name first; the IP the
+     * phone is connected to as well, for a computer whose browser cannot
+     * open ".local" names (some Android and older Windows ones).
+     */
+    private fun shareDashboard() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        val ip = ServerSettings.baseUrl(this).takeIf { ServerSettings.isCustom(this) }
+        val body = buildString {
+            append(if (en) "Vaani dashboard for ${ShopSettings.name(this@SettingsActivity)}:\n" else "${ShopSettings.name(this@SettingsActivity)} का Vaani डैशबोर्ड:\n")
+            append("http://vaani.local:8000\n")
+            if (ip != null) append(if (en) "If that doesn't open: $ip\n" else "न खुले तो: $ip\n")
+            append(if (en) "Open it on a computer on the shop's Wi-Fi, then press Connect phone."
+            else "दुकान के Wi-Fi वाले कंप्यूटर पर खोलिए, फिर Connect phone दबाइए।")
+        }
+        startActivity(Intent.createChooser(
+            Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, body),
+            if (en) "Send the dashboard address" else "डैशबोर्ड का पता भेजें",
+        ))
     }
 
     private fun exportKhata() {

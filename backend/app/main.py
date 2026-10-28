@@ -15,6 +15,7 @@ degraded numbers as full ones.
 from __future__ import annotations
 
 import hashlib
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -36,6 +37,7 @@ from .extraction.whatsapp import (
     ingest_conversation,
     parse_export,
 )
+from . import discovery
 from .store import LedgerStore, Transaction
 from .summary import SUPPORTED, compose
 from .tts import SarvamTTS
@@ -625,15 +627,17 @@ PAIRS: dict[str, dict] = {}
 
 def _lan_address(port: int) -> str:
     """This machine's address on the local network, for the phone to type."""
-    import socket
+    return f"http://{discovery.lan_ip()}:{port}/"
 
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("10.255.255.255", 1))   # no packet is sent
-            ip = s.getsockname()[0]
-    except OSError:
-        ip = "127.0.0.1"
-    return f"http://{ip}:{port}/"
+
+@app.on_event("startup")
+async def _announce() -> None:
+    await discovery.start(int(os.environ.get("VAANI_PORT", "8000")))
+
+
+@app.on_event("shutdown")
+async def _unannounce() -> None:
+    await discovery.stop()
 
 
 def _expire_pairs() -> None:
@@ -656,6 +660,8 @@ def pair_new(request: Request) -> dict:
         "code": code,
         "expires_in": int(PAIR_TTL.total_seconds()),
         "phone_url": _lan_address(request.url.port or 8000),
+        # The easy name, when the network announcement is running.
+        "local_name": f"http://{discovery.HOSTNAME}:{request.url.port or 8000}/" if discovery.announced() else None,
     }
 
 

@@ -18,3 +18,4 @@ psycopg[binary]>=3.2
 
 # Dev
 pytest>=8.3
+zeroconf>=0.130  # optional: announces vaani.local on the shop's Wi-Fi

@@ -371,10 +371,11 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
       <div class="code" id="pairCode">······</div>
       <ol class="steps">
         <li>On the phone, open <b>Vaani → Settings → Connect a computer</b>.</li>
-        <li>Type this code. Address: <span class="addr" id="pairAddr">…</span></li>
+        <li>Type this code. The phone finds this computer on the Wi-Fi by itself.</li>
         <li>This page opens your shop's khata by itself.</li>
       </ol>
       <div class="note" id="pairNote">Same Wi-Fi for both. The code lasts 10 minutes.</div>
+      <div class="note">Phone can't find it? Tap <b>Enter the address myself</b> and type <span class="addr" id="pairAddr">…</span></div>
     </div>
   </dialog>
 
@@ -881,7 +882,8 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   $("connect").addEventListener("click", function () {
     if (SHOP) return;   // already connected; Disconnect is beside it
     $("pairCode").textContent = "······";
-    $("pairNote").textContent = "Same Wi-Fi for both. The code lasts 10 minutes.";
+    $("pairNote").textContent = "Same Wi-Fi for both. The code lasts 10 minutes." +
+      (location.hostname === "vaani.local" ? "" : " Others on this Wi-Fi can open vaani.local:8000.");
     $("dlgConnect").showModal();
     api("/pair/new", { method: "POST" }).then(function (p) {
       $("pairCode").textContent = p.code;
