@@ -109,6 +109,14 @@ class SettingsActivity : Activity() {
                 else "नहीं डाला — याद-संदेश में पेमेंट लिंक नहीं जाएगा",
             ) { editUpiId() },
             settingRow(
+                LineIcon.Glyph.BOOK, if (en) "Items & prices" else "सामान और दाम",
+                app.vaaniledger.data.Catalogue.items(this).size.let { n ->
+                    if (n == 0) (if (en) "Add yours — Vaani then reads them in chats and fills the price"
+                    else "अपना सामान डालिए — Vaani चैट में पहचानेगी और दाम भरेगी")
+                    else (if (en) "$n items" else "$n चीज़ें")
+                },
+            ) { editCatalogue() },
+            settingRow(
                 LineIcon.Glyph.SHOP, if (en) "Shop category" else "दुकान की श्रेणी",
                 ShopSettings.category(this).labelIn(lang),
             ) { chooseCategory() },
@@ -116,6 +124,18 @@ class SettingsActivity : Activity() {
                 LineIcon.Glyph.GLOBE, if (en) "Language" else "भाषा",
                 lang.displayName,
             ) { chooseLanguage() },
+        ))
+
+        root.addView(sectionHeading(if (en) "Chats & computer" else "चैट और कंप्यूटर"))
+        root.addView(group(
+            settingRow(
+                LineIcon.Glyph.SERVER, if (en) "Connect a computer" else "कंप्यूटर से जोड़ें",
+                if (en) "Type the code shown on the dashboard" else "डैशबोर्ड पर दिखा कोड डालिए",
+            ) { pairComputer() },
+            settingRow(
+                LineIcon.Glyph.CHAT, if (en) "What Vaani can read" else "Vaani क्या पढ़ सकती है",
+                if (en) "What works in a chat, and what to enter by hand" else "चैट में क्या चलता है, क्या हाथ से भरें",
+            ) { showCapabilities() },
         ))
 
         root.addView(sectionHeading(if (en) "Backup" else "खाते का बैकअप"))
@@ -304,6 +324,191 @@ class SettingsActivity : Activity() {
                 }
             }
         }
+    }
+
+    /**
+     * The price list, as one box of lines. A shopkeeper already keeps this
+     * list in a notebook; copying it line for line is faster than any form.
+     */
+    private fun editCatalogue() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        val input = EditText(this).apply {
+            setText(app.vaaniledger.data.Catalogue.format(app.vaaniledger.data.Catalogue.items(this@SettingsActivity)))
+            hint = if (en) "muslin kurti 450\nsugar 45/kg\ndolo 650, 30" else "मलमल कुर्ती 450\nचीनी 45/kg\nडोलो 650, 30"
+            minLines = 8
+            maxLines = 14
+            gravity = Gravity.TOP or Gravity.START
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setTextColor(ink)
+            typeface = Type.body(this@SettingsActivity)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Theme.subtle)
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), line)
+            }
+        }
+        val holder = android.widget.FrameLayout(this).apply {
+            setPadding(dp(22), dp(6), dp(22), 0)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (en) "Items & prices" else "सामान और दाम")
+            .setMessage(
+                if (en) "One item per line, name then price. Vaani will recognise these names in chats — even unusual ones — and fill the bill when a customer doesn't say the total."
+                else "हर लाइन में एक चीज़: नाम, फिर दाम। Vaani चैट में ये नाम पहचानेगी — अनोखे नाम भी — और ग्राहक कुल न बताए तो बिल ख़ुद भरेगी।"
+            )
+            .setView(holder)
+            .setPositiveButton(if (en) "Save" else "सेव करें") { _, _ ->
+                val items = app.vaaniledger.data.Catalogue.parse(input.text.toString())
+                app.vaaniledger.data.Catalogue.save(this, items)
+                app.vaaniledger.sync.SyncWorker.syncNow(this, ShopSettings.ID, ShopSettings.name(this))
+                Toast.makeText(
+                    this, if (en) "${items.size} items saved" else "${items.size} चीज़ें सेव हुईं", Toast.LENGTH_SHORT,
+                ).show()
+                render()
+            }
+            .setNegativeButton(if (en) "Cancel" else "रहने दें", null)
+            .show()
+    }
+
+    /** Honest limits, so a missed order is a known case rather than a mystery. */
+    private fun showCapabilities() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        val body = if (en) """
+            READS WELL
+            • Orders spread over several messages — "2 kurti", then "blue wali", then "kitna hua?"
+            • Hindi, English, Hinglish and Devanagari, number words too ("dhai sau", "ढाई सौ")
+            • Payments: "paid 500", "UPI kar diya", "kal dunga"
+            • Prices you quoted in your own replies
+            • Any item on your price list, even one letter misspelt
+            • Several days of chat at once — each day is its own order
+            • Skips what was already booked, your own reminders, and date lines
+
+            CAN'T READ
+            • Photos, voice notes, stickers or PDFs of a bill — enter those by hand or use the mic
+            • Messages scrolled off screen — scroll up and tap again to read more
+            • Group chats with several customers
+            • A total nobody said and an item not on your price list
+
+            TIP: put your items and prices in Settings → Items & prices.
+        """.trimIndent() else """
+            अच्छे से पढ़ती है
+            • कई संदेशों में बँटा ऑर्डर — "2 कुर्ती", फिर "नीली वाली", फिर "कितना हुआ?"
+            • हिंदी, अंग्रेज़ी, हिंग्लिश और देवनागरी, शब्दों में गिनती भी ("ढाई सौ")
+            • भुगतान: "500 दे दिए", "UPI कर दिया", "कल दूँगा"
+            • आपके जवाब में बताए दाम
+            • आपकी सूची का हर सामान, एक अक्षर ग़लत हो तो भी
+            • कई दिनों की चैट एक साथ — हर दिन का अलग ऑर्डर
+            • जो पहले लिखा जा चुका, आपके याद-संदेश और तारीख़ की लाइनें छोड़ देती है
+
+            नहीं पढ़ पाती
+            • फ़ोटो, वॉइस नोट, स्टिकर या बिल की PDF — ये हाथ से या माइक से डालिए
+            • स्क्रीन से ऊपर निकल चुके संदेश — ऊपर स्क्रॉल करके फिर टैप करें
+            • कई ग्राहकों वाले ग्रुप
+            • जिसका कुल किसी ने नहीं बताया और जो सामान सूची में नहीं
+
+            सुझाव: सेटिंग्स → सामान और दाम में अपनी सूची डालिए।
+        """.trimIndent()
+        AlertDialog.Builder(this)
+            .setTitle(if (en) "What Vaani can read" else "Vaani क्या पढ़ सकती है")
+            .setMessage(body)
+            .setPositiveButton(if (en) "Got it" else "ठीक है", null)
+            .setNeutralButton(if (en) "Add prices" else "दाम डालें") { _, _ -> editCatalogue() }
+            .show()
+    }
+
+    /**
+     * Pair with the dashboard: the computer shows a code, the phone types it.
+     * The phone already knows the server, so the code is all it needs -- and
+     * the address is offered here too, since pairing is when it gets set.
+     */
+    private fun pairComputer() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        fun field(value: String, hintText: String, type: Int) = EditText(this).apply {
+            setText(value)
+            hint = hintText
+            inputType = type
+            setTextColor(ink)
+            typeface = Type.body(this@SettingsActivity)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Theme.subtle)
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), line)
+            }
+        }
+        val code = field("", if (en) "6-digit code" else "6 अंकों का कोड", android.text.InputType.TYPE_CLASS_NUMBER).apply {
+            textSize = 24f
+            letterSpacing = 0.3f
+            gravity = Gravity.CENTER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(6))
+        }
+        val address = field(
+            ServerSettings.baseUrl(this), "http://192.168.1.42:8000/",
+            android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI,
+        )
+        val holder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(6), dp(22), 0)
+            addView(code)
+            addView(text(if (en) "Dashboard address (shown under the code)" else "डैशबोर्ड का पता (कोड के नीचे लिखा है)", 12.5f, muted).apply {
+                setPadding(0, dp(14), 0, dp(6))
+            })
+            addView(address)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (en) "Connect a computer" else "कंप्यूटर से जोड़ें")
+            .setMessage(
+                if (en) "On the computer, open the dashboard. It shows a code — type it here. Phone and computer must be on the same Wi-Fi."
+                else "कंप्यूटर पर डैशबोर्ड खोलिए। वहाँ एक कोड दिखेगा — उसे यहाँ लिखिए। फ़ोन और कंप्यूटर एक ही Wi-Fi पर हों।"
+            )
+            .setView(holder)
+            .setPositiveButton(if (en) "Connect" else "जोड़ें", null)
+            .setNegativeButton(if (en) "Cancel" else "रहने दें", null)
+            .create()
+        dialog.setOnShowListener {
+            val button = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            button.setOnClickListener {
+                val digits = code.text.toString().trim()
+                if (digits.length != 6) { code.error = if (en) "6 digits" else "6 अंक"; return@setOnClickListener }
+                address.text.toString().trim().takeIf { it.isNotBlank() }?.let { ServerSettings.setBaseUrl(this, it) }
+                button.isEnabled = false
+                scope.launch {
+                    val result = runCatching {
+                        app.vaaniledger.net.ApiClient.api(this@SettingsActivity).pairClaim(
+                            app.vaaniledger.net.PairClaim(
+                                code = digits,
+                                shopId = ShopSettings.ID,
+                                shopName = ShopSettings.name(this@SettingsActivity),
+                                shopCategory = ShopSettings.category(this@SettingsActivity).wire,
+                            )
+                        )
+                    }
+                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        button.isEnabled = true
+                        val ok = result.getOrNull()
+                        when {
+                            ok?.ok == true -> {
+                                dialog.dismiss()
+                                // Everything on the phone goes up now, so the
+                                // dashboard opens on this shop's real khata.
+                                app.vaaniledger.sync.SyncWorker.syncNow(this@SettingsActivity, ShopSettings.ID, ShopSettings.name(this@SettingsActivity))
+                                Toast.makeText(this@SettingsActivity,
+                                    if (en) "Connected — the dashboard is opening your khata" else "जुड़ गया — डैशबोर्ड पर आपका खाता खुल रहा है",
+                                    Toast.LENGTH_LONG).show()
+                                render()
+                            }
+                            ok != null -> code.error = ok.message ?: (if (en) "Wrong or expired code" else "कोड ग़लत है या पुराना हो गया")
+                            else -> Toast.makeText(this@SettingsActivity,
+                                if (en) "Can't reach the computer — check the address and the Wi-Fi" else "कंप्यूटर तक नहीं पहुँच पाए — पता और Wi-Fi जाँचिए",
+                                Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun exportKhata() {

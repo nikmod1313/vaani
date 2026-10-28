@@ -468,6 +468,7 @@ class OverlayService : Service() {
             // Both sides go in. The shopkeeper's own replies carry the quoted
             // rate, and dropping them was why a price stated by the shop
             // never reached the entry it belonged to.
+            val catalogue = app.vaaniledger.data.Catalogue.items(this@OverlayService)
             val seen = db.cursors().byChat(chatId)?.hashes ?: emptySet()
             val fresh = messages
                 .filter { it.hash !in seen }
@@ -504,6 +505,9 @@ class OverlayService : Service() {
                         it.toExtraction(known, category)
                     }
                 }
+                // The shop's own price list names and prices what the
+                // built-in vocabulary cannot.
+                .map { app.vaaniledger.extract.CatalogueMatch.enrich(it, catalogue) }
             // An order the ledger already holds is marked seen and not offered
             // again, so the next capture of this chat stays quiet too.
             val (booked, orders) = resolved.partition {
@@ -577,12 +581,12 @@ class OverlayService : Service() {
             // suite, so a shop counter with no signal gets the amount, the
             // mode and the items filled in -- and a shop WITH signal no
             // longer waits on a round trip to get the same result.
-            val result = OfflineExtractor.extract(
+            val result = app.vaaniledger.extract.CatalogueMatch.enrich(OfflineExtractor.extract(
                 text = text,
                 knownCustomers = known,
                 senderName = senderName,
                 category = ShopSettings.category(this@OverlayService),
-            )
+            ), app.vaaniledger.data.Catalogue.items(this@OverlayService))
 
             if (ReviewQueue.alreadyBooked(this@OverlayService, result, senderName)) {
                 pendingSource?.let { (chat, hashes) -> ReviewQueue.recordSeen(this@OverlayService, chat, hashes) }

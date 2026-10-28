@@ -303,7 +303,29 @@ data class Health(
 )
 
 
+/** The phone typing the code the dashboard shows. */
+@Serializable
+data class PairClaim(
+    val code: String,
+    @SerialName("shop_id") val shopId: String,
+    @SerialName("shop_name") val shopName: String? = null,
+    @SerialName("shop_category") val shopCategory: String? = null,
+)
+
+@Serializable
+data class PairResult(val ok: Boolean, val message: String? = null)
+
 interface VaaniApi {
+
+    @POST("pair/claim")
+    suspend fun pairClaim(@Body request: PairClaim): PairResult
+
+    /** Last writer wins; the reply is whichever list is newer. */
+    @retrofit2.http.PUT("shops/{shop}/catalogue")
+    suspend fun putCatalogue(
+        @retrofit2.http.Path("shop") shopId: String,
+        @Body catalogue: app.vaaniledger.data.CataloguePayload,
+    ): app.vaaniledger.data.CataloguePayload
 
     @GET("health")
     suspend fun health(): Health

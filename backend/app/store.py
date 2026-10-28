@@ -22,6 +22,7 @@ import random
 import sqlite3
 import uuid
 from contextlib import contextmanager
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -59,6 +60,14 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
     deleted      INTEGER NOT NULL DEFAULT 0
+);
+
+-- The shop's price list, as the phone keeps it: one JSON list, last writer
+-- wins by updated_at (epoch millis, the phone's clock or the dashboard's).
+CREATE TABLE IF NOT EXISTS catalogues (
+    shop_id     TEXT PRIMARY KEY,
+    items       TEXT NOT NULL DEFAULT '[]',
+    updated_at  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS ix_tx_shop_time
@@ -285,13 +294,94 @@ class LedgerStore:
         return len(transactions) - duplicates, duplicates
 
     def changed_since(self, shop_id: str, since: str | None) -> list[dict]:
-        sql = "SELECT * FROM transactions WHERE shop_id = ?"
+        # The customer's name rides along: a phone pulling a dashboard entry
+        # has no other way to know whose khata it belongs to.
+        sql = ("SELECT t.*, c.name AS customer_name FROM transactions t "
+               "LEFT JOIN customers c ON c.id = t.customer_id WHERE t.shop_id = ?")
         params: list = [shop_id]
         if since:
-            sql += " AND updated_at > ?"
+            sql += " AND t.updated_at > ?"
             params.append(since)
-        sql += " ORDER BY updated_at"
+        sql += " ORDER BY t.updated_at"
         return [dict(r) for r in self._conn.execute(sql, params)]
+
+    def transactions(
+        self,
+        shop_id: str,
+        q: str = "",
+        direction: str | None = None,
+        customer: str | None = None,
+        limit: int = 200,
+    ) -> list[dict]:
+        """The dashboard's searchable khata, newest first."""
+        sql = (
+            "SELECT t.id, t.amount, t.mode, t.direction, t.items, t.source, "
+            "t.occurred_at, c.name AS customer_name FROM transactions t "
+            "LEFT JOIN customers c ON c.id = t.customer_id "
+            f"WHERE t.shop_id = ? AND t.{self._live()}"
+        )
+        params: list = [shop_id]
+        if direction in ("sale", "payment"):
+            sql += " AND t.direction = ?"
+            params.append(direction)
+        if customer:
+            sql += " AND LOWER(c.name) = LOWER(?)"
+            params.append(customer)
+        if q.strip():
+            sql += " AND (LOWER(COALESCE(c.name, '')) LIKE ? OR LOWER(t.items) LIKE ? OR CAST(t.amount AS TEXT) LIKE ?)"
+            like = f"%{q.strip().lower()}%"
+            params += [like, like, like]
+        sql += " ORDER BY t.occurred_at DESC LIMIT ?"
+        params.append(max(1, min(limit, 1000)))
+        return [dict(r) for r in self._conn.execute(sql, params)]
+
+    def top_items(self, shop_id: str, days: int = 30, limit: int = 10) -> list[dict]:
+        """What sold, by how often it appears on a bill. Labels carry a trailing quantity ("kurti 2"), stripped here."""
+        since = (date.today() - timedelta(days=days - 1)).isoformat()
+        counts: dict[str, dict] = {}
+        for row in self._conn.execute(
+            f"SELECT items FROM transactions WHERE shop_id = ? AND {self._live()} "
+            "AND direction = 'sale' AND items != '' AND date(occurred_at) >= ?",
+            (shop_id, since),
+        ):
+            for label in row["items"].split(","):
+                parts = label.strip().rsplit(" ", 1)
+                qty = 1.0
+                name = label.strip()
+                if len(parts) == 2:
+                    num = "".join(ch for ch in parts[1] if ch.isdigit() or ch == ".")
+                    if num and parts[1][0].isdigit():
+                        name, qty = parts[0], float(num) if num.count(".") <= 1 else 1.0
+                if not name:
+                    continue
+                key = name.lower()
+                entry = counts.setdefault(key, {"name": name, "bills": 0, "quantity": 0.0})
+                entry["bills"] += 1
+                entry["quantity"] += qty
+        ranked = sorted(counts.values(), key=lambda e: (-e["bills"], e["name"]))
+        return ranked[:limit]
+
+    def catalogue(self, shop_id: str) -> dict:
+        row = self._conn.execute(
+            "SELECT items, updated_at FROM catalogues WHERE shop_id = ?", (shop_id,)
+        ).fetchone()
+        if not row:
+            return {"items": [], "updated_at": 0}
+        return {"items": json.loads(row["items"]), "updated_at": row["updated_at"]}
+
+    def put_catalogue(self, shop_id: str, items: list[dict], updated_at: int) -> dict:
+        """Keep the newer list. Returns whichever one won, for the caller to adopt."""
+        current = self.catalogue(shop_id)
+        if updated_at > current["updated_at"]:
+            self._ensure_shop(shop_id)
+            with self._tx() as conn:
+                conn.execute(
+                    "INSERT INTO catalogues (shop_id, items, updated_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(shop_id) DO UPDATE SET items = excluded.items, updated_at = excluded.updated_at",
+                    (shop_id, json.dumps(items, ensure_ascii=False), updated_at),
+                )
+            return {"items": items, "updated_at": updated_at}
+        return current
 
     def soft_delete(self, tx_id: str) -> None:
         """Undo. Never a hard delete -- the audit trail is the point."""
@@ -441,7 +531,7 @@ class LedgerStore:
             })
         return out
 
-    def summary(self, shop_id: str) -> dict:
+    def summary(self, shop_id: str, days: int = 14) -> dict:
         """Everything the dashboard and the spoken summary both read from."""
         totals = self.day_totals(shop_id)
         balances = self.outstanding(shop_id)
@@ -455,7 +545,7 @@ class LedgerStore:
             "total_outstanding": round(sum(b["outstanding"] for b in balances), 2),
             "overdue": [b for b in balances if b["days_overdue"] > 30],
             "customers": balances,
-            "series": self.series(shop_id),
+            "series": self.series(shop_id, days),
         }
 
     # ------------------------------------------------------------------

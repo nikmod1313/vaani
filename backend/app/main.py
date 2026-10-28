@@ -15,10 +15,10 @@ degraded numbers as full ones.
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -516,11 +516,11 @@ def sync(req: SyncRequest) -> dict:
 
 
 @app.get("/shops/{shop_id}/summary")
-def shop_summary(shop_id: str) -> dict:
-    """KPIs, the 14-day series, and per-customer balances."""
+def shop_summary(shop_id: str, days: int = 14) -> dict:
+    """KPIs, the daily series (14 days unless asked), and per-customer balances."""
     if not STORE.get_shop(shop_id):
         raise HTTPException(404, f"unknown shop {shop_id!r}")
-    return STORE.summary(shop_id)
+    return STORE.summary(shop_id, max(7, min(days, 365)))
 
 
 @app.get("/summary/narrate")
@@ -605,6 +605,166 @@ def add_correction(req: CorrectionRequest) -> dict:
 def seed(shop_id: str, days: int = 90) -> dict:
     """Load demo data. Never present on an empty database."""
     return STORE.seed(shop_id, days=days)
+
+
+# ---------------------------------------------------------------------------
+# Pairing: the dashboard shows a code, the phone types it.
+# ---------------------------------------------------------------------------
+#
+# This picks WHICH shop a browser shows; it is not a login. Anyone on the
+# same network who can reach this server can read it either way -- run it on
+# the shop's own Wi-Fi, not on the open internet.
+
+PAIR_TTL = timedelta(minutes=10)
+PAIRS: dict[str, dict] = {}
+
+
+def _lan_address(port: int) -> str:
+    """This machine's address on the local network, for the phone to type."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))   # no packet is sent
+            ip = s.getsockname()[0]
+    except OSError:
+        ip = "127.0.0.1"
+    return f"http://{ip}:{port}/"
+
+
+def _expire_pairs() -> None:
+    now = datetime.now()
+    for code in [c for c, p in PAIRS.items() if now - p["created"] > PAIR_TTL]:
+        del PAIRS[code]
+
+
+@app.post("/pair/new")
+def pair_new(request: Request) -> dict:
+    """A fresh six-digit code for this browser to show."""
+    import secrets
+
+    _expire_pairs()
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    while code in PAIRS:
+        code = f"{secrets.randbelow(1_000_000):06d}"
+    PAIRS[code] = {"created": datetime.now(), "shop_id": None}
+    return {
+        "code": code,
+        "expires_in": int(PAIR_TTL.total_seconds()),
+        "phone_url": _lan_address(request.url.port or 8000),
+    }
+
+
+@app.get("/pair/{code}")
+def pair_status(code: str) -> dict:
+    """Polled by the dashboard until the phone has typed the code."""
+    _expire_pairs()
+    pair = PAIRS.get(code)
+    if pair is None:
+        return {"status": "expired"}
+    if pair["shop_id"] is None:
+        return {"status": "waiting"}
+    shop = STORE.get_shop(pair["shop_id"]) or {}
+    return {"status": "paired", "shop_id": pair["shop_id"], "shop_name": shop.get("name")}
+
+
+class PairClaim(BaseModel):
+    code: str
+    shop_id: str
+    shop_name: str | None = None
+    shop_category: str | None = None
+
+
+@app.post("/pair/claim")
+def pair_claim(req: PairClaim) -> dict:
+    _expire_pairs()
+    pair = PAIRS.get(req.code.strip())
+    if pair is None:
+        return {"ok": False, "message": "Wrong or expired code"}
+    STORE.create_shop(
+        req.shop_id,
+        req.shop_name or req.shop_id,
+        category=Category.parse(req.shop_category).value if req.shop_category else None,
+    )
+    pair["shop_id"] = req.shop_id
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# The dashboard's working surface: khata, price list, entries.
+# ---------------------------------------------------------------------------
+
+
+def _shop_or_404(shop_id: str) -> None:
+    if not STORE.get_shop(shop_id):
+        raise HTTPException(404, f"unknown shop {shop_id!r}")
+
+
+@app.get("/shops/{shop_id}/transactions")
+def shop_transactions(
+    shop_id: str, q: str = "", direction: str | None = None,
+    customer: str | None = None, limit: int = 200,
+) -> dict:
+    _shop_or_404(shop_id)
+    return {"transactions": STORE.transactions(shop_id, q, direction, customer, limit)}
+
+
+class DashboardEntry(BaseModel):
+    customer_name: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+    mode: str = "udhaar"
+    direction: str = "sale"
+    items: list[str] = []
+    occurred_at: str | None = None
+
+
+@app.post("/shops/{shop_id}/transactions")
+def add_transaction(shop_id: str, entry: DashboardEntry) -> dict:
+    """An entry typed at the computer. The phone pulls it down on its next sync."""
+    _shop_or_404(shop_id)
+    if entry.direction not in ("sale", "payment") or entry.mode not in ("cash", "upi", "udhaar"):
+        raise HTTPException(422, "direction must be sale|payment, mode cash|upi|udhaar")
+    tx = Transaction(
+        shop_id=shop_id, amount=entry.amount, mode=entry.mode, direction=entry.direction,
+        customer_name=entry.customer_name.strip(), items=[i.strip() for i in entry.items if i.strip()],
+        source="dashboard", confidence=1.0, occurred_at=entry.occurred_at or "",
+    )
+    return {"id": STORE.save(tx)}
+
+
+@app.delete("/transactions/{tx_id}")
+def delete_transaction(tx_id: str) -> dict:
+    """Soft delete -- the phone hides it too on its next sync."""
+    STORE.soft_delete(tx_id)
+    return {"ok": True}
+
+
+@app.get("/shops/{shop_id}/items")
+def shop_items(shop_id: str, days: int = 30) -> dict:
+    _shop_or_404(shop_id)
+    return {"items": STORE.top_items(shop_id, days)}
+
+
+class CatalogueItem(BaseModel):
+    name: str
+    price: float | None = None
+    unit: str | None = None
+
+
+class CataloguePayload(BaseModel):
+    items: list[CatalogueItem] = []
+    updated_at: int = 0
+
+
+@app.get("/shops/{shop_id}/catalogue")
+def get_catalogue(shop_id: str) -> dict:
+    return STORE.catalogue(shop_id)
+
+
+@app.put("/shops/{shop_id}/catalogue")
+def put_catalogue(shop_id: str, body: CataloguePayload) -> dict:
+    """Last writer wins; the reply is whichever list is newer."""
+    return STORE.put_catalogue(shop_id, [i.model_dump() for i in body.items], body.updated_at)
 
 
 # --------------------------------------------------------------------------

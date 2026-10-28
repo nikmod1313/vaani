@@ -12,6 +12,13 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import app.vaaniledger.data.LedgerDatabase
+import app.vaaniledger.data.ShopSettings
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import app.vaaniledger.data.SyncState
 import app.vaaniledger.data.TransactionEntity
 import app.vaaniledger.net.ApiClient
@@ -72,6 +79,8 @@ class SyncWorker(
                 )
             }
 
+            pullDashboardEntries(response.transactions)
+            syncCatalogue(shopId)
             pushCorrections(shopId)
             Result.success()
         } catch (e: Exception) {
@@ -79,6 +88,60 @@ class SyncWorker(
             // Retry with backoff. The rows stay PENDING and the offline badge
             // keeps showing them, which is the honest state.
             if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
+        }
+    }
+
+    /**
+     * Entries typed on the dashboard come down to the phone. Only those:
+     * every other row on the server came FROM a phone, and writing it back
+     * would race the shopkeeper's own edits. A dashboard deletion of a
+     * phone row comes down too, as the soft delete it is.
+     */
+    private suspend fun pullDashboardEntries(rows: List<kotlinx.serialization.json.JsonElement>) {
+        for (raw in rows) runCatching {
+            val o = raw.jsonObject
+            fun str(k: String) = o[k]?.jsonPrimitive?.contentOrNull
+            val id = str("id") ?: return@runCatching
+            val deleted = o["deleted"]?.jsonPrimitive?.let { it.booleanOrNull ?: (it.intOrNull == 1) } ?: false
+            val local = db.transactions().byId(id)
+            if (local != null) {
+                if (deleted && !local.deleted) db.transactions().upsert(local.copy(deleted = true, syncState = SyncState.SYNCED.name))
+                return@runCatching
+            }
+            if (str("source") != "dashboard" || deleted) return@runCatching
+            val name = str("customer_name")
+            val customer = name?.takeIf { it.isNotBlank() }?.let { db.customers().resolve(ShopSettings.ID, it) }
+            db.transactions().upsert(
+                TransactionEntity(
+                    id = id,
+                    shopId = ShopSettings.ID,
+                    customerId = customer?.id,
+                    customerName = customer?.name,
+                    amount = o["amount"]?.jsonPrimitive?.doubleOrNull ?: return@runCatching,
+                    mode = str("mode") ?: "udhaar",
+                    direction = str("direction") ?: "sale",
+                    items = str("items").orEmpty(),
+                    source = "dashboard",
+                    confidence = 1.0,
+                    occurredAt = runCatching {
+                        java.time.LocalDateTime.parse(str("occurred_at")!!.take(19))
+                            .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    }.getOrDefault(System.currentTimeMillis()),
+                    syncState = SyncState.SYNCED.name,
+                )
+            )
+        }.onFailure { android.util.Log.w("VaaniSync", "pull skipped a row: ${it.message}") }
+    }
+
+    /** Price list both ways; whichever side edited it last wins. */
+    private suspend fun syncCatalogue(shopId: String) = runCatching {
+        val local = app.vaaniledger.data.CataloguePayload(
+            items = app.vaaniledger.data.Catalogue.items(applicationContext),
+            updatedAt = app.vaaniledger.data.Catalogue.updatedAt(applicationContext),
+        )
+        val merged = api.putCatalogue(shopId, local)
+        if (merged.updatedAt > local.updatedAt) {
+            app.vaaniledger.data.Catalogue.save(applicationContext, merged.items, merged.updatedAt)
         }
     }
 

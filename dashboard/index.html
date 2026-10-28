@@ -144,6 +144,7 @@ tr:last-child td{border-bottom:0}
 th{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
 td{color:var(--ink-2)}
 td b{color:var(--ink);font-weight:600;display:block}
+td:first-child b{white-space:nowrap}
 td.num{text-align:right;font-family:var(--f-display);font-size:18px;font-variant-numeric:tabular-nums;color:var(--ink);white-space:nowrap}
 td.num.due{color:var(--warn)} td.num.clear{color:var(--good)}
 .flag{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:10px;
@@ -172,7 +173,52 @@ footer{text-align:center;margin-top:34px;color:var(--ink-3)}
 footer .sun{width:46px;height:46px;margin:0 auto;background:url(/assets/art_sun.webp) center/contain no-repeat}
 footer .name{font-family:var(--f-display);font-size:24px;color:var(--ink);margin-top:6px}
 footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
+/* controls inside cards */
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12.5px;font-weight:600;border:1px solid var(--rule);border-radius:14px;padding:2px 12px;color:var(--ink-3);background:transparent}
+.chip[aria-pressed="true"]{background:var(--night);border-color:var(--night);color:#F6EEDA}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#111C42}}
+:root[data-theme="dark"] .chip[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#111C42}
+.field{font:inherit;font-size:14.5px;color:var(--ink);background:var(--ground);border:1px solid var(--rule-strong);border-radius:6px;padding:7px 11px;min-width:0}
+.field:focus{outline:none;border-color:var(--gold)}
+.bar-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px 20px 4px}
+.bar-tools .field{flex:1;min-width:160px}
+tr.click{cursor:pointer} tr.click:hover td{background:var(--surface-2)}
+td.act{text-align:right;width:1%;white-space:nowrap}
+.x{color:var(--ink-3);font-size:18px;padding:0 6px;border-radius:4px}
+.x:hover{color:var(--cut);background:var(--cut-soft)}
+.pill{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:10px;padding:1px 8px;display:inline-block}
+.pill.sale{background:var(--warn-soft);color:var(--warn)} .pill.payment{background:var(--good-soft);color:var(--good)}
+.pill.dashboard{background:var(--indigo-soft);color:var(--indigo)}
+.items{padding:8px 20px 18px;display:flex;flex-direction:column;gap:9px}
+.item-row{display:grid;grid-template-columns:minmax(0,1fr) 64px;gap:10px;align-items:center;font-size:14px}
+.item-row .track{grid-column:1/-1;height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;margin-top:-4px}
+.item-row .track i{display:block;height:100%;background:var(--gold)}
+.item-row span:last-child{text-align:right;color:var(--ink-3);font-size:12.5px}
+.plist td{padding:6px 10px} .plist .field{width:100%}
+.plist-foot{display:flex;gap:8px;justify-content:space-between;align-items:center;padding:10px 20px 16px;flex-wrap:wrap}
+
+/* dialogs: the connect code, a new entry, one customer's page */
+dialog{border:1px solid var(--gold);border-radius:10px;background:var(--surface);color:var(--ink);padding:0;
+  width:min(520px,calc(100vw - 32px));max-height:calc(100vh - 48px);box-shadow:0 30px 80px -30px rgba(17,28,66,.7)}
+dialog::backdrop{background:rgba(17,28,66,.55)}
+.dlg-hd{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--rule)}
+.dlg-hd h2{font-family:var(--f-display);font-size:22px}
+.dlg-bd{padding:18px 20px 20px;display:flex;flex-direction:column;gap:12px}
+.dlg-bd label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.code{font-family:var(--f-display);font-size:54px;letter-spacing:.22em;text-align:center;color:var(--indigo);padding:8px 0 0;font-variant-numeric:tabular-nums}
+.steps{margin:0;padding-left:20px;color:var(--ink-2);font-size:14.5px}
+.steps b{color:var(--ink)}
+.addr{font-family:var(--f-body);font-weight:700;background:var(--surface-2);border-radius:4px;padding:1px 6px;user-select:all}
+.balance{font-family:var(--f-display);font-size:38px;line-height:1.1}
+.err{color:var(--cut);font-size:13px;min-height:1em}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--night);color:#F6EEDA;padding:10px 18px;border-radius:20px;font-size:14px;z-index:9;box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+.paired{display:inline-flex;align-items:center;gap:6px}
+
 @media (max-width:560px){
+  .two{grid-template-columns:1fr}
+  .code{font-size:40px}
   .wrap{padding:0 16px 48px}
   header{padding:22px 20px 20px}
   h1{font-size:28px}
@@ -196,6 +242,8 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
         <option value="en-IN">English</option>
         <option value="mr-IN">मराठी</option>
       </select>
+      <button class="btn" id="connect">Connect phone</button>
+      <button class="btn" id="newEntry">+ New entry</button>
       <button class="btn" id="csv">Export CSV</button>
       <button class="btn" id="refresh">Refresh</button>
       <button class="btn primary" id="seed">Load demo data</button>
@@ -216,8 +264,13 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
     <div class="grid">
       <div class="card">
         <div class="card-hd">
-          <h2>Last 14 days</h2>
-          <span class="meta">Cash + UPI vs udhaar</span>
+          <h2 id="chartTitle">Last 14 days</h2>
+          <div class="chips" id="range" role="group" aria-label="Range">
+            <button class="chip" data-days="7" aria-pressed="false">7d</button>
+            <button class="chip" data-days="14" aria-pressed="true">14d</button>
+            <button class="chip" data-days="30" aria-pressed="false">30d</button>
+            <button class="chip" data-days="90" aria-pressed="false">90d</button>
+          </div>
         </div>
         <div class="chart-wrap"><svg class="chart" id="chart" role="img" aria-label="Daily sales"></svg></div>
         <div class="legend">
@@ -247,6 +300,14 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
         <h2>Udhaar khata</h2>
         <span class="meta" id="custMeta"></span>
       </div>
+      <div class="bar-tools">
+        <input class="field" id="custSearch" type="search" placeholder="Find a customer…" aria-label="Find a customer">
+        <div class="chips" id="custFilter" role="group" aria-label="Show">
+          <button class="chip" data-f="all" aria-pressed="true">All</button>
+          <button class="chip" data-f="owing" aria-pressed="false">Owing</button>
+          <button class="chip" data-f="overdue" aria-pressed="false">Overdue</button>
+        </div>
+      </div>
       <div class="tscroll">
         <table>
           <thead><tr><th>Grahak</th><th style="text-align:right">Baaki</th></tr></thead>
@@ -254,7 +315,109 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
         </table>
       </div>
     </div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-hd">
+        <h2>Every entry</h2>
+        <span class="meta" id="txMeta"></span>
+      </div>
+      <div class="bar-tools">
+        <input class="field" id="txSearch" type="search" placeholder="Search name, item or amount…" aria-label="Search entries">
+        <div class="chips" id="txFilter" role="group" aria-label="Type">
+          <button class="chip" data-d="" aria-pressed="true">All</button>
+          <button class="chip" data-d="sale" aria-pressed="false">Sales</button>
+          <button class="chip" data-d="payment" aria-pressed="false">Payments</button>
+        </div>
+      </div>
+      <div class="tscroll">
+        <table>
+          <thead><tr><th>When</th><th>Grahak</th><th>Items</th><th style="text-align:right">Amount</th><th></th></tr></thead>
+          <tbody id="txs"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-hd">
+          <h2>Price list</h2>
+          <span class="meta">The phone reads these names in chats and prices orders from them</span>
+        </div>
+        <div class="tscroll">
+          <table class="plist">
+            <thead><tr><th>Item</th><th style="width:110px">Price ₹</th><th style="width:90px">Per</th><th></th></tr></thead>
+            <tbody id="plist"></tbody>
+          </table>
+        </div>
+        <div class="plist-foot">
+          <button class="btn" id="plAdd">+ Add item</button>
+          <span class="note" id="plNote"></span>
+          <button class="btn primary" id="plSave">Save to phone</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <h2>What sells</h2>
+          <span class="meta">Last 30 days, by bills</span>
+        </div>
+        <div class="items" id="topItems"></div>
+      </div>
+    </div>
   </div>
+
+  <dialog id="dlgConnect">
+    <div class="dlg-hd"><h2>Connect your phone</h2><button class="x" data-close aria-label="Close">×</button></div>
+    <div class="dlg-bd">
+      <div class="code" id="pairCode">······</div>
+      <ol class="steps">
+        <li>On the phone, open <b>Vaani → Settings → Connect a computer</b>.</li>
+        <li>Type this code. Address: <span class="addr" id="pairAddr">…</span></li>
+        <li>This page opens your shop's khata by itself.</li>
+      </ol>
+      <div class="note" id="pairNote">Same Wi-Fi for both. The code lasts 10 minutes.</div>
+    </div>
+  </dialog>
+
+  <dialog id="dlgEntry">
+    <form method="dialog" id="entryForm">
+      <div class="dlg-hd"><h2 id="entryTitle">New entry</h2><button type="button" class="x" data-close aria-label="Close">×</button></div>
+      <div class="dlg-bd">
+        <label>Grahak<input class="field" name="customer" list="custList" required autocomplete="off"></label>
+        <datalist id="custList"></datalist>
+        <div class="two">
+          <label>Amount ₹<input class="field" name="amount" type="number" min="1" step="1" required></label>
+          <label>Type
+            <select class="field" name="direction"><option value="sale">Sale</option><option value="payment">Payment received</option></select>
+          </label>
+        </div>
+        <div class="two">
+          <label>Mode
+            <select class="field" name="mode"><option value="udhaar">Udhaar</option><option value="cash">Cash</option><option value="upi">UPI</option></select>
+          </label>
+          <label>Date<input class="field" name="date" type="date"></label>
+        </div>
+        <label>Items (comma separated)<input class="field" name="items" list="itemList" placeholder="muslin kurti 2, dupatta 1"></label>
+        <datalist id="itemList"></datalist>
+        <div class="err" id="entryErr"></div>
+        <button class="btn primary" type="submit">Save entry</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgCustomer">
+    <div class="dlg-hd"><h2 id="custName"></h2><button class="x" data-close aria-label="Close">×</button></div>
+    <div class="dlg-bd">
+      <div><div class="eyebrow" style="color:var(--gold)">Baaki</div><div class="balance" id="custBal"></div></div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" id="custPay">Record payment</button>
+        <button class="btn" id="custSale">Add sale</button>
+        <a class="btn" id="custRemind" target="_blank" rel="noopener">Remind on WhatsApp</a>
+      </div>
+      <div class="tscroll" style="max-height:320px;overflow-y:auto;padding:0">
+        <table><tbody id="custTx"></tbody></table>
+      </div>
+    </div>
+  </dialog>
 
   <footer>
     <div class="sun" aria-hidden="true"></div>
@@ -269,10 +432,30 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
 
   // Same-origin when served by FastAPI; override with ?api= for a split deploy.
   var API = new URLSearchParams(location.search).get("api") || "";
-  var SHOP = new URLSearchParams(location.search).get("shop") || "sharma-kirana";
+  // Which shop: the URL first, then the phone this browser was paired with,
+  // then the demo shop.
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var SHOP = new URLSearchParams(location.search).get("shop") || store.get("vaani.shop") || "sharma-kirana";
 
   var $ = function (id) { return document.getElementById(id); };
-  var state = { summary: null, health: null };
+  var state = { summary: null, health: null, days: 14, custFilter: "all", txDir: "", catalogue: [] };
+
+  // Names and items arrive from chats: never trust them as HTML.
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function toast(text) {
+    var t = document.createElement("div");
+    t.className = "toast"; t.textContent = text;
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+  function shopPath(rest) { return "/shops/" + encodeURIComponent(SHOP) + rest; }
 
   function rupees(n) {
     return "₹" + Math.round(n || 0).toLocaleString("en-IN");
@@ -368,14 +551,26 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
   }
 
   // ------------------------------------------------------------- customers
-  function renderCustomers(list) {
-    var owing = list.filter(function (c) { return c.outstanding > 0; });
-    $("custMeta").textContent = list.length + " grahak · " + owing.length + " owing";
+  function renderCustomers(all) {
+    var owing = all.filter(function (c) { return c.outstanding > 0; });
+    $("custMeta").textContent = all.length + " grahak · " + owing.length + " owing";
+    $("custList").innerHTML = all.map(function (c) { return '<option value="' + esc(c.name) + '">'; }).join("");
 
+    var q = $("custSearch").value.trim().toLowerCase();
+    var list = all.filter(function (c) {
+      if (q && c.name.toLowerCase().indexOf(q) === -1) return false;
+      if (state.custFilter === "owing") return c.outstanding > 0;
+      if (state.custFilter === "overdue") return c.days_overdue > 30 && c.outstanding > 0;
+      return true;
+    });
+    if (!list.length) {
+      $("customers").innerHTML = '<tr><td colspan="2" class="sub">Nobody matches.</td></tr>';
+      return;
+    }
     $("customers").innerHTML = list.map(function (c) {
       var overdue = c.days_overdue > 30;
       var when = c.last_activity ? c.last_activity.slice(0, 10) : "—";
-      return "<tr><td><b>" + c.name + "</b>" +
+      return '<tr class="click" tabindex="0" data-name="' + esc(c.name) + '"><td><b>' + esc(c.name) + "</b>" +
              '<span class="sub">' + when + "</span>" +
              (overdue ? '<span class="flag">' + c.days_overdue + " din</span>" : "") +
              '</td><td class="num ' + (c.outstanding > 0 ? "due" : "clear") + '">' +
@@ -463,12 +658,253 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
   $("seedEmpty").addEventListener("click", seed);
   $("refresh").addEventListener("click", function () { load(); });
 
-  function load() {
+  // ------------------------------------------------------------- entries
+  var txTimer = null;
+  function loadTx() {
+    var p = "?limit=200&q=" + encodeURIComponent($("txSearch").value.trim()) +
+            (state.txDir ? "&direction=" + state.txDir : "");
+    return api(shopPath("/transactions" + p)).then(function (r) {
+      var rows = r.transactions;
+      $("txMeta").textContent = rows.length + (rows.length === 200 ? "+" : "") + " shown";
+      $("txs").innerHTML = rows.length ? rows.map(txRow).join("") :
+        '<tr><td colspan="5" class="sub">No entries match.</td></tr>';
+    }).catch(function () { $("txs").innerHTML = ""; });
+  }
+  function txRow(t, compact) {
+    var signed = (t.direction === "payment" ? "−" : "") + rupees(t.amount);
+    return "<tr><td><b>" + esc(t.occurred_at.slice(0, 10)) + '</b><span class="sub">' + esc(t.occurred_at.slice(11, 16)) + "</span></td>" +
+      (compact ? "" : "<td><b>" + esc(t.customer_name || "—") + "</b></td>") +
+      "<td>" + esc((t.items || "").split(",").join(", ") || "—") +
+      '<div><span class="pill ' + t.direction + '">' + (t.direction === "payment" ? "paid" : t.mode) + "</span>" +
+      (t.source === "dashboard" ? ' <span class="pill dashboard">computer</span>' : "") + "</div></td>" +
+      '<td class="num ' + (t.direction === "payment" ? "clear" : "due") + '">' + signed + "</td>" +
+      '<td class="act"><button class="x" data-del="' + esc(t.id) + '" title="Delete entry" aria-label="Delete entry">×</button></td></tr>';
+  }
+  $("txSearch").addEventListener("input", function () { clearTimeout(txTimer); txTimer = setTimeout(loadTx, 220); });
+  chipGroup("txFilter", function (b) { state.txDir = b.dataset.d; loadTx(); });
+
+  document.addEventListener("click", function (e) {
+    var del = e.target.closest("[data-del]");
+    if (!del) return;
+    if (!confirm("Delete this entry? The phone removes it too on its next sync.")) return;
+    api("/transactions/" + encodeURIComponent(del.dataset.del), { method: "DELETE" })
+      .then(function () { toast("Entry deleted"); refreshAll(); });
+  });
+
+  function chipGroup(id, onPick) {
+    $(id).addEventListener("click", function (e) {
+      var b = e.target.closest(".chip");
+      if (!b) return;
+      Array.prototype.forEach.call($(id).children, function (c) { c.setAttribute("aria-pressed", c === b ? "true" : "false"); });
+      onPick(b);
+    });
+  }
+
+  // ------------------------------------------------------------- customer page
+  var current = null;
+  function openCustomer(name) {
+    var c = (state.summary.customers || []).filter(function (x) { return x.name === name; })[0] || { name: name, outstanding: 0 };
+    current = c;
+    $("custName").textContent = c.name;
+    $("custBal").textContent = rupees(c.outstanding);
+    $("custBal").style.color = c.outstanding > 0 ? "var(--warn)" : "var(--good)";
+    var shop = (state.summary.shop && state.summary.shop.name) || "";
+    var msg = "Namaste " + c.name + " ji 🙏 " + shop + " — aapke " + rupees(c.outstanding) + " baaki hain. Dhanyavaad!";
+    $("custRemind").href = "https://wa.me/?text=" + encodeURIComponent(msg);
+    $("custRemind").classList.toggle("hidden", !(c.outstanding > 0));
+    $("custTx").innerHTML = '<tr><td class="sub">Loading…</td></tr>';
+    $("dlgCustomer").showModal();
+    api(shopPath("/transactions?limit=500&customer=" + encodeURIComponent(c.name))).then(function (r) {
+      $("custTx").innerHTML = r.transactions.length ? r.transactions.map(function (t) { return txRow(t, true); }).join("") :
+        '<tr><td class="sub">No entries yet.</td></tr>';
+    });
+  }
+  $("customers").addEventListener("click", function (e) {
+    var tr = e.target.closest("tr[data-name]");
+    if (tr) openCustomer(tr.dataset.name);
+  });
+  $("customers").addEventListener("keydown", function (e) {
+    var tr = e.target.closest("tr[data-name]");
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openCustomer(tr.dataset.name); }
+  });
+  $("custSearch").addEventListener("input", function () { if (state.summary) renderCustomers(state.summary.customers); });
+  chipGroup("custFilter", function (b) { state.custFilter = b.dataset.f; renderCustomers(state.summary.customers); });
+  $("custPay").addEventListener("click", function () {
+    $("dlgCustomer").close();
+    openEntry({ customer: current.name, direction: "payment", mode: "cash", amount: current.outstanding > 0 ? Math.round(current.outstanding) : "" });
+  });
+  $("custSale").addEventListener("click", function () {
+    $("dlgCustomer").close();
+    openEntry({ customer: current.name, direction: "sale", mode: "udhaar" });
+  });
+
+  // ------------------------------------------------------------- new entry
+  function openEntry(pre) {
+    var f = $("entryForm");
+    f.reset();
+    pre = pre || {};
+    f.customer.value = pre.customer || "";
+    f.amount.value = pre.amount || "";
+    f.direction.value = pre.direction || "sale";
+    f.mode.value = pre.mode || "udhaar";
+    f.date.value = new Date().toISOString().slice(0, 10);
+    $("entryTitle").textContent = pre.direction === "payment" ? "Payment received" : "New entry";
+    $("entryErr").textContent = "";
+    $("itemList").innerHTML = state.catalogue.map(function (i) { return '<option value="' + esc(i.name) + ' 1">'; }).join("");
+    $("dlgEntry").showModal();
+    (pre.customer ? f.amount : f.customer).focus();
+  }
+  $("newEntry").addEventListener("click", function () { openEntry(); });
+  // Typing a price-list item fills the amount when it is still empty.
+  $("entryForm").items.addEventListener("change", function () {
+    var f = $("entryForm");
+    if (f.amount.value) return;
+    var total = 0, all = true;
+    f.items.value.split(",").forEach(function (part) {
+      var m = part.trim().match(/^(.*?)(?:\s+(\d+(?:\.\d+)?))?$/);
+      if (!m || !m[1]) return;
+      var hit = state.catalogue.filter(function (i) { return i.name.toLowerCase() === m[1].trim().toLowerCase(); })[0];
+      if (hit && hit.price) total += hit.price * (m[2] ? parseFloat(m[2]) : 1); else all = false;
+    });
+    if (all && total > 0) f.amount.value = Math.round(total);
+  });
+  $("entryForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = e.target;
+    var body = {
+      customer_name: f.customer.value.trim(),
+      amount: parseFloat(f.amount.value),
+      direction: f.direction.value,
+      mode: f.direction.value === "payment" && f.mode.value === "udhaar" ? "cash" : f.mode.value,
+      items: f.items.value.split(",").map(function (s) { return s.trim(); }).filter(Boolean),
+      occurred_at: f.date.value && f.date.value !== new Date().toISOString().slice(0, 10) ? f.date.value + "T12:00:00" : null
+    };
+    if (!body.customer_name || !(body.amount > 0)) { $("entryErr").textContent = "A name and an amount above zero, please."; return; }
+    api(shopPath("/transactions"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+      .then(function () { $("dlgEntry").close(); toast("Saved — the phone gets it on its next sync"); refreshAll(); })
+      .catch(function (err) { $("entryErr").textContent = "Couldn't save: " + err.message; });
+  });
+
+  // ------------------------------------------------------------- price list
+  function renderCatalogue() {
+    var rows = state.catalogue;
+    $("plist").innerHTML = rows.length ? rows.map(function (i, k) {
+      return '<tr data-k="' + k + '"><td><input class="field" data-f="name" value="' + esc(i.name) + '" aria-label="Item"></td>' +
+        '<td><input class="field" data-f="price" type="number" min="0" step="any" value="' + esc(i.price == null ? "" : i.price) + '" aria-label="Price"></td>' +
+        '<td><input class="field" data-f="unit" value="' + esc(i.unit || "") + '" placeholder="piece" aria-label="Per"></td>' +
+        '<td class="act"><button class="x" data-rm="' + k + '" aria-label="Remove">×</button></td></tr>';
+    }).join("") : '<tr><td colspan="4" class="sub">No items yet. Add what you sell — e.g. "muslin kurti", 450.</td></tr>';
+  }
+  function readCatalogue() {
+    Array.prototype.forEach.call($("plist").querySelectorAll("tr[data-k]"), function (tr) {
+      var item = state.catalogue[+tr.dataset.k];
+      tr.querySelectorAll("input").forEach(function (inp) {
+        var v = inp.value.trim();
+        item[inp.dataset.f] = inp.dataset.f === "price" ? (v === "" ? null : parseFloat(v)) : (v || null);
+      });
+    });
+  }
+  function loadCatalogue() {
+    return api(shopPath("/catalogue")).then(function (c) {
+      state.catalogue = c.items || [];
+      $("plNote").textContent = c.updated_at ? "Updated " + new Date(c.updated_at).toLocaleString("en-IN") : "";
+      renderCatalogue();
+    }).catch(function () {});
+  }
+  $("plist").addEventListener("input", function () { state.plDirty = true; });
+  $("plAdd").addEventListener("click", function () {
+    state.plDirty = true;
+    readCatalogue();
+    state.catalogue.push({ name: "", price: null, unit: null });
+    renderCatalogue();
+    var inputs = $("plist").querySelectorAll('input[data-f="name"]');
+    inputs[inputs.length - 1].focus();
+  });
+  $("plist").addEventListener("click", function (e) {
+    var rm = e.target.closest("[data-rm]");
+    if (!rm) return;
+    readCatalogue();
+    state.catalogue.splice(+rm.dataset.rm, 1);
+    renderCatalogue();
+  });
+  $("plSave").addEventListener("click", function () {
+    readCatalogue();
+    var items = state.catalogue.filter(function (i) { return i.name; });
+    api(shopPath("/catalogue"), { method: "PUT", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ items: items, updated_at: Date.now() }) })
+      .then(function () { state.plDirty = false; toast(items.length + " items saved — the phone picks them up on its next sync"); loadCatalogue(); })
+      .catch(function (e) { toast("Couldn't save: " + e.message); });
+  });
+
+  // ------------------------------------------------------------- top items
+  function loadTopItems() {
+    return api(shopPath("/items?days=30")).then(function (r) {
+      var rows = r.items;
+      var max = rows.length ? rows[0].bills : 1;
+      $("topItems").innerHTML = rows.length ? rows.map(function (i) {
+        return '<div class="item-row"><span>' + esc(i.name) + "</span><span>" + i.bills + " bills</span>" +
+          '<div class="track"><i style="width:' + Math.round(i.bills / max * 100) + '%"></i></div></div>';
+      }).join("") : '<div class="sub">No items on bills yet.</div>';
+    }).catch(function () { $("topItems").innerHTML = ""; });
+  }
+
+  // ------------------------------------------------------------- range
+  chipGroup("range", function (b) {
+    state.days = +b.dataset.days;
+    $("chartTitle").textContent = "Last " + state.days + " days";
+    load();
+  });
+
+  // ------------------------------------------------------------- pairing
+  var pairTimer = null;
+  function renderPaired() {
+    var paired = store.get("vaani.shop");
+    $("connect").innerHTML = paired && paired === SHOP
+      ? '<span class="paired"><span class="dot"></span>Phone connected</span>' : "Connect phone";
+  }
+  $("connect").addEventListener("click", function () {
+    $("pairCode").textContent = "······";
+    $("pairNote").textContent = "Same Wi-Fi for both. The code lasts 10 minutes.";
+    $("dlgConnect").showModal();
+    api("/pair/new", { method: "POST" }).then(function (p) {
+      $("pairCode").textContent = p.code;
+      $("pairAddr").textContent = p.phone_url;
+      clearInterval(pairTimer);
+      pairTimer = setInterval(function () {
+        api("/pair/" + p.code).then(function (st) {
+          if (st.status === "paired") {
+            clearInterval(pairTimer);
+            SHOP = st.shop_id;
+            store.set("vaani.shop", SHOP);
+            history.replaceState(null, "", location.pathname);
+            $("dlgConnect").close();
+            toast("Connected to " + (st.shop_name || SHOP));
+            renderPaired();
+            // The phone's sync lands a moment after the pairing does.
+            load(); setTimeout(load, 4000);
+          } else if (st.status === "expired") {
+            clearInterval(pairTimer);
+            $("pairNote").textContent = "That code expired — close and press Connect phone again.";
+          }
+        });
+      }, 2000);
+    }).catch(function () { $("pairNote").textContent = "Couldn't reach the server."; });
+  });
+  $("dlgConnect").addEventListener("close", function () { clearInterval(pairTimer); });
+
+  document.addEventListener("click", function (e) {
+    var c = e.target.closest("[data-close]");
+    if (c) c.closest("dialog").close();
+  });
+
+  function refreshAll() { load(); }
+
+  function load(quiet) {
     return api("/health")
       .then(function (h) { state.health = h; renderStatus(); })
       .catch(function () { state.health = null; renderStatus(); })
       .then(function () {
-        return api("/shops/" + encodeURIComponent(SHOP) + "/summary");
+        return api(shopPath("/summary?days=" + state.days));
       })
       .then(function (s) {
         state.summary = s;
@@ -479,7 +915,9 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
         renderKpis(s);
         renderChart(s.series);
         renderCustomers(s.customers);
-        return loadNarration();
+        loadTx(); loadTopItems();
+        if (!state.plDirty) loadCatalogue();
+        return quiet ? null : loadNarration();
       })
       .catch(function () {
         // A 404 here means the shop has no data yet, which is the normal
@@ -489,7 +927,16 @@ footer .tag{font-family:var(--f-display);font-style:italic;font-size:15px}
       });
   }
 
+  renderPaired();
   load();
+  // A paired dashboard keeps up with the counter on its own: the phone
+  // syncs as entries are made. Paused while a dialog is open or the tab is
+  // hidden, so it never pulls a form out from under someone typing.
+  setInterval(function () {
+    if (document.hidden || document.querySelector("dialog[open]")) return;
+    if (document.activeElement && document.activeElement.closest(".plist")) return;
+    if (state.summary) load(true);
+  }, 30000);
 })();
 </script>
 </body>

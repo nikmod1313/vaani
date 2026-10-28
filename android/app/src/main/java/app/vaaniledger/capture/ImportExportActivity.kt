@@ -174,6 +174,7 @@ class ImportExportActivity : Activity() {
             val turns = ExportParser.toTurns(fresh, customer, aliases)
             val orders = ConversationResolver.resolveAll(turns, customer, category)
                 .map { with(ConversationResolver) { it.toExtraction(known, category) } }
+                .map { app.vaaniledger.extract.CatalogueMatch.enrich(it, app.vaaniledger.data.Catalogue.items(this@ImportExportActivity)) }
 
             android.util.Log.i(
                 TAG,

@@ -12,6 +12,18 @@ No WhatsApp Business API anywhere on the critical path.
 
 **See the dashboard:** `./run.sh dashboard`, then open <http://localhost:8000>.
 
+**Connect the phone to it:** press *Connect phone* on the dashboard; on the
+phone open *Settings → Connect a computer* and type the six-digit code. The
+dashboard then shows that phone's khata, and entries, deletions and the price
+list flow both ways on each sync. Pairing chooses which shop a browser shows;
+it is not a login, so run the server on the shop's own Wi-Fi.
+
+**Price list:** *Settings → Items & prices* on the phone (or the dashboard's
+Price list card) takes one item per line — `muslin kurti 450`. Every name on
+it is read as an item in chats, even one the built-in vocabulary has never
+seen or one letter misspelt, and an order with no stated total is priced from
+it and sent to the confirm sheet rather than booked automatically.
+
 ---
 
 ## Status

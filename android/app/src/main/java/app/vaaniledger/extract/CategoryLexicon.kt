@@ -338,8 +338,33 @@ object CategoryLexicon {
      * only makes it sharper.
      */
     fun itemsFor(category: ShopCategory): Set<String> =
-        if (category == ShopCategory.GENERAL) allKnownItems()
-        else (BY_CATEGORY[category] ?: emptySet()) + GENERAL_FLOOR
+        (if (category == ShopCategory.GENERAL) allKnownItems()
+        else (BY_CATEGORY[category] ?: emptySet()) + GENERAL_FLOOR) + shopItems
+
+    // The shop's own price list, installed by Catalogue. Empty in tests and
+    // on the server, so the parity suite sees the built-in vocabulary only.
+    @Volatile private var shopItems: Set<String> = emptySet()
+    @Volatile private var shopModifiers: Set<String> = emptySet()
+
+    /**
+     * Learn the shop's own item names. In "muslin kurti" the last word is
+     * the item and the words before it describe it, which is how the
+     * engine already reads "blue kurti"; a trailing number ("dolo 650") is
+     * part of the name, not the noun.
+     */
+    fun useShopVocabulary(names: Collection<String>) {
+        val items = mutableSetOf<String>()
+        val mods = mutableSetOf<String>()
+        for (name in names) {
+            val words = name.lowercase().split(Regex("""[^\p{L}\p{M}\p{N}]+"""))
+                .filter { w -> w.isNotBlank() && w.any { it.isLetter() } }
+            val head = words.lastOrNull() ?: continue
+            items += head
+            mods += words.dropLast(1)
+        }
+        shopItems = items
+        shopModifiers = mods
+    }
 
     /**
      * Adjectives that attach to the item that follows them.
@@ -350,8 +375,8 @@ object CategoryLexicon {
      * and a shopkeeper reading that back cannot tell which kurti.
      */
     fun modifiersFor(category: ShopCategory): Set<String> =
-        if (category == ShopCategory.GENERAL) allKnownModifiers()
-        else MODIFIERS[category] ?: emptySet()
+        (if (category == ShopCategory.GENERAL) allKnownModifiers()
+        else MODIFIERS[category] ?: emptySet()) + shopModifiers
 
     /** Category-specific units, merged over the shared table by the caller. */
     fun unitsFor(category: ShopCategory): Map<String, String> =
