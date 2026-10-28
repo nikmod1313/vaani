@@ -134,8 +134,8 @@ class SettingsActivity : Activity() {
             ) { pairComputer() },
             settingRow(
                 LineIcon.Glyph.GLOBE, if (en) "Your dashboard" else "आपका डैशबोर्ड",
-                if (en) "vaani.local:8000 — open it on a computer on this Wi-Fi. Tap to share."
-                else "vaani.local:8000 — इसी Wi-Fi के कंप्यूटर पर खोलिए। भेजने के लिए टैप करें।",
+                if (en) "http://vaani.local:8000 — open it on a computer on this Wi-Fi. Tap to share."
+                else "http://vaani.local:8000 — इसी Wi-Fi के कंप्यूटर पर खोलिए। भेजने के लिए टैप करें।",
             ) { shareDashboard() },
             settingRow(
                 LineIcon.Glyph.CHAT, if (en) "What Vaani can read" else "Vaani क्या पढ़ सकती है",
@@ -487,8 +487,8 @@ class SettingsActivity : Activity() {
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (en) "Connect a computer" else "कंप्यूटर से जोड़ें")
             .setMessage(
-                if (en) "On the computer, open vaani.local:8000 and press Connect phone. Type the code it shows. Phone and computer must be on the same Wi-Fi."
-                else "कंप्यूटर पर vaani.local:8000 खोलिए और Connect phone दबाइए। जो कोड दिखे, यहाँ लिखिए। फ़ोन और कंप्यूटर एक ही Wi-Fi पर हों।"
+                if (en) "On the computer, open http://vaani.local:8000 and press Connect phone. Type the code it shows. Phone and computer must be on the same Wi-Fi."
+                else "कंप्यूटर पर http://vaani.local:8000 खोलिए और Connect phone दबाइए। जो कोड दिखे, यहाँ लिखिए। फ़ोन और कंप्यूटर एक ही Wi-Fi पर हों।"
             )
             .setView(holder)
             .setPositiveButton(if (en) "Connect" else "जोड़ें", null)

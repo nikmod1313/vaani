@@ -883,7 +883,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
     if (SHOP) return;   // already connected; Disconnect is beside it
     $("pairCode").textContent = "······";
     $("pairNote").textContent = "Same Wi-Fi for both. The code lasts 10 minutes." +
-      (location.hostname === "vaani.local" ? "" : " Others on this Wi-Fi can open vaani.local:8000.");
+      (location.hostname === "vaani.local" ? "" : " Others on this Wi-Fi can open http://vaani.local:8000.");
     $("dlgConnect").showModal();
     api("/pair/new", { method: "POST" }).then(function (p) {
       $("pairCode").textContent = p.code;
