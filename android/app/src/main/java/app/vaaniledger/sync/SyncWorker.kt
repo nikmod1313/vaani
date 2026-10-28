@@ -58,7 +58,8 @@ class SyncWorker(
 
     override suspend fun doWork(): Result {
         val shopId = inputData.getString(KEY_SHOP_ID) ?: return Result.failure()
-        val pending = db.transactions().pending()
+        val full = inputData.getBoolean(KEY_FULL, false)
+        val pending = if (full) db.transactions().everything(shopId) else db.transactions().pending()
 
         return try {
             val response = api.sync(
@@ -67,6 +68,7 @@ class SyncWorker(
                     shopName = inputData.getString(KEY_SHOP_NAME),
                     since = null,
                     transactions = pending.map { it.toPayload() },
+                    full = full,
                 )
             )
 
@@ -159,6 +161,7 @@ class SyncWorker(
     companion object {
         const val KEY_SHOP_ID = "shop_id"
         const val KEY_SHOP_NAME = "shop_name"
+        const val KEY_FULL = "full"
         private const val MAX_ATTEMPTS = 5
         private const val UNIQUE_PERIODIC = "vaani-sync-periodic"
         private const val UNIQUE_NOW = "vaani-sync-now"
@@ -182,6 +185,21 @@ class SyncWorker(
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
+        }
+
+        /**
+         * Send the whole khata and make the server match it. Its own unique
+         * name, so an ordinary sync queued right after cannot replace it.
+         */
+        fun syncFull(context: Context, shopId: String, shopName: String? = null) {
+            val request = OneTimeWorkRequestBuilder<SyncWorker>()
+                .setConstraints(constraints)
+                .setInputData(
+                    androidx.work.workDataOf(KEY_SHOP_ID to shopId, KEY_SHOP_NAME to shopName, KEY_FULL to true)
+                )
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork("vaani-sync-full", ExistingWorkPolicy.REPLACE, request)
         }
 
         /** Safety net for entries logged while the phone had no signal. */

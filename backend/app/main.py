@@ -156,6 +156,8 @@ class SyncRequest(BaseModel):
     shop_category: str | None = None
     since: datetime | None = None
     transactions: list[TransactionModel] = Field(default_factory=list)
+    # The phone's whole khata: the server keeps nothing else for this shop.
+    full: bool = False
 
 
 class CorrectionRequest(BaseModel):
@@ -506,11 +508,13 @@ def sync(req: SyncRequest) -> dict:
         for t in req.transactions
     ]
     accepted, duplicates = STORE.save_many(incoming)
+    removed = STORE.keep_only(req.shop_id, {t.id for t in incoming}) if req.full else 0
 
     since = req.since.isoformat(timespec="seconds") if req.since else None
     return {
         "accepted": accepted,
         "duplicates": duplicates,
+        "removed": removed,
         "transactions": STORE.changed_since(req.shop_id, since),
     }
 

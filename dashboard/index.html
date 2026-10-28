@@ -254,7 +254,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   <div class="rule" aria-hidden="true"><i></i></div>
 
   <div id="empty" class="msg hidden">
-    <div>No shop data yet.</div>
+    <div>No entries from your phone yet.<br><span class="sub">Connect the phone, or look around with demo data.</span></div>
     <button class="btn primary" id="seedEmpty">Load demo data</button>
   </div>
 
@@ -644,13 +644,25 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   });
 
   // -------------------------------------------------------------- load
+  // Demo data lives in its own shop. Seeded into the phone's shop it was
+  // added to the real khata, and every figure the dashboard showed was the
+  // phone's entries plus three months of invented ones.
+  var DEMO = "demo";
+  var HOME = store.get("vaani.shop") || "sharma-kirana";
+  function seedLabel() {
+    var label = SHOP === DEMO ? "Back to my shop" : "View demo data";
+    [$("seed"), $("seedEmpty")].forEach(function (b) { if (b) b.textContent = label; });
+  }
   function seed() {
+    if (SHOP === DEMO) { SHOP = HOME; seedLabel(); renderPaired(); return load(); }
     var btns = [$("seed"), $("seedEmpty")];
     btns.forEach(function (b) { if (b) { b.disabled = true; b.textContent = "Loading…"; } });
-    return api("/shops/" + encodeURIComponent(SHOP) + "/seed?days=90", { method: "POST" })
-      .then(load)
+    return api("/shops/" + DEMO + "/summary").catch(function () {
+      return api("/shops/" + DEMO + "/seed?days=90", { method: "POST" });
+    }).then(function () { SHOP = DEMO; renderPaired(); return load(); })
       .finally(function () {
-        btns.forEach(function (b) { if (b) { b.disabled = false; b.textContent = "Load demo data"; } });
+        btns.forEach(function (b) { if (b) b.disabled = false; });
+        seedLabel();
       });
   }
 
@@ -861,6 +873,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
     var paired = store.get("vaani.shop");
     $("connect").innerHTML = paired && paired === SHOP
       ? '<span class="paired"><span class="dot"></span>Phone connected</span>' : "Connect phone";
+    $("connect").classList.toggle("hidden", SHOP === DEMO);
   }
   $("connect").addEventListener("click", function () {
     $("pairCode").textContent = "······";
@@ -874,8 +887,9 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
         api("/pair/" + p.code).then(function (st) {
           if (st.status === "paired") {
             clearInterval(pairTimer);
-            SHOP = st.shop_id;
+            SHOP = HOME = st.shop_id;
             store.set("vaani.shop", SHOP);
+            seedLabel();
             history.replaceState(null, "", location.pathname);
             $("dlgConnect").close();
             toast("Connected to " + (st.shop_name || SHOP));
@@ -910,7 +924,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
         state.summary = s;
         $("empty").classList.add("hidden");
         $("main").classList.remove("hidden");
-        $("shopName").childNodes[0].nodeValue = (s.shop && s.shop.name) || SHOP;
+        $("shopName").childNodes[0].nodeValue = SHOP === DEMO ? "Demo shop" : (s.shop && s.shop.name) || SHOP;
         $("shopMeta").textContent = new Date().toDateString().toUpperCase();
         renderKpis(s);
         renderChart(s.series);
@@ -928,6 +942,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   }
 
   renderPaired();
+  seedLabel();
   load();
   // A paired dashboard keeps up with the counter on its own: the phone
   // syncs as entries are made. Paused while a dialog is open or the tab is

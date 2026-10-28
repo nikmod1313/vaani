@@ -166,6 +166,10 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE sync_state != 'SYNCED' ORDER BY created_at")
     suspend fun pending(): List<TransactionEntity>
 
+    /** Every row, deleted ones too -- the full copy a newly paired computer gets. */
+    @Query("SELECT * FROM transactions WHERE shop_id = :shopId ORDER BY created_at")
+    suspend fun everything(shopId: String): List<TransactionEntity>
+
     /** Drives the visible offline queue badge. */
     @Query("SELECT COUNT(*) FROM transactions WHERE sync_state != 'SYNCED'")
     fun pendingCount(): Flow<Int>

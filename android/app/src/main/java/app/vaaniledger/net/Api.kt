@@ -238,6 +238,12 @@ data class SyncRequest(
     @SerialName("shop_category") val shopCategory: String? = null,
     val since: String? = null,
     val transactions: List<TransactionPayload> = emptyList(),
+    /**
+     * These are ALL the phone's rows, and the server should hold nothing
+     * else for this shop. Sent on pairing, so the dashboard shows exactly
+     * the phone's khata -- not demo data or a previous phone's leftovers.
+     */
+    val full: Boolean = false,
 )
 
 @Serializable

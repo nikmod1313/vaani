@@ -63,6 +63,24 @@ class DashboardApiTest(unittest.TestCase):
         top = self.client.get("/shops/s1/items").json()["items"]
         self.assertEqual((top[0]["name"], top[0]["bills"], top[0]["quantity"]), ("kurti", 2, 5.0))
 
+    def test_a_full_sync_leaves_only_the_phones_rows(self):
+        """Demo rows under the phone's shop id were added to its real figures."""
+        main.STORE.seed("s1", days=10)
+        dash = self.client.post("/shops/s1/transactions", json={"customer_name": "R", "amount": 50}).json()["id"]
+        phone = {"id": "p1", "amount": 250, "mode": "udhaar", "customer_name": "Rahul", "occurred_at": "2026-10-28T10:00:00"}
+        reply = self.client.post("/sync", json={"shop_id": "s1", "transactions": [phone], "full": True}).json()
+        self.assertGreater(reply["removed"], 0)
+        left = {t["id"] for t in self.client.get("/shops/s1/transactions").json()["transactions"]}
+        # The phone's row, and the dashboard entry the phone has not pulled yet.
+        self.assertEqual(left, {"p1", dash})
+        self.assertEqual(self.client.get("/shops/s1/summary").json()["total_outstanding"], 300)
+
+    def test_an_ordinary_sync_removes_nothing(self):
+        main.STORE.seed("s1", days=3)
+        before = len(self.client.get("/shops/s1/transactions").json()["transactions"])
+        self.client.post("/sync", json={"shop_id": "s1", "transactions": []})
+        self.assertEqual(len(self.client.get("/shops/s1/transactions").json()["transactions"]), before)
+
 
 if __name__ == "__main__":
     unittest.main()

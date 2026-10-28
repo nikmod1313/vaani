@@ -493,7 +493,7 @@ class SettingsActivity : Activity() {
                                 dialog.dismiss()
                                 // Everything on the phone goes up now, so the
                                 // dashboard opens on this shop's real khata.
-                                app.vaaniledger.sync.SyncWorker.syncNow(this@SettingsActivity, ShopSettings.ID, ShopSettings.name(this@SettingsActivity))
+                                app.vaaniledger.sync.SyncWorker.syncFull(this@SettingsActivity, ShopSettings.ID, ShopSettings.name(this@SettingsActivity))
                                 Toast.makeText(this@SettingsActivity,
                                     if (en) "Connected — the dashboard is opening your khata" else "जुड़ गया — डैशबोर्ड पर आपका खाता खुल रहा है",
                                     Toast.LENGTH_LONG).show()

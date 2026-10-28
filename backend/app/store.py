@@ -383,6 +383,29 @@ class LedgerStore:
             return {"items": items, "updated_at": updated_at}
         return current
 
+    def keep_only(self, shop_id: str, ids: set[str]) -> int:
+        """
+        Make this shop hold exactly these rows (plus dashboard entries the
+        phone has not pulled yet). Soft, like every delete here.
+
+        Without it a phone paired to a server that already had rows under
+        its shop id -- demo data, an old test phone -- showed the sum of
+        both, and every figure on the dashboard was wrong.
+        """
+        now = datetime.now().isoformat(timespec="seconds")
+        stale = [
+            r["id"] for r in self._conn.execute(
+                f"SELECT id FROM transactions WHERE shop_id = ? AND {self._live()} AND source != 'dashboard'",
+                (shop_id,),
+            ) if r["id"] not in ids
+        ]
+        with self._tx() as conn:
+            conn.executemany(
+                "UPDATE transactions SET deleted = 1, updated_at = ? WHERE id = ?",
+                [(now, i) for i in stale],
+            )
+        return len(stale)
+
     def soft_delete(self, tx_id: str) -> None:
         """Undo. Never a hard delete -- the audit trail is the point."""
         with self._tx() as conn:
