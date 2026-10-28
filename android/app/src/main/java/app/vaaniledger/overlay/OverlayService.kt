@@ -469,10 +469,20 @@ class OverlayService : Service() {
             // rate, and dropping them was why a price stated by the shop
             // never reached the entry it belonged to.
             val seen = db.cursors().byChat(chatId)?.hashes ?: emptySet()
-            val turns = messages
+            val fresh = messages
                 .filter { it.hash !in seen }
                 // The shop's own reminders are not part of any order.
                 .filterNot { it.isOutgoing && app.vaaniledger.reminder.ReminderLinks.isReminder(it.text) }
+
+            // Every bubble on screen was booked or declined before: nothing
+            // new to offer. Falling through here used to re-read ALL of them
+            // and book the same order a second time.
+            if (fresh.isEmpty()) {
+                withContext(Dispatchers.Main) { toast(captureStrings().alreadyBooked) }
+                return@launch
+            }
+
+            val turns = fresh
                 .map {
                     app.vaaniledger.extract.ConversationResolver.Turn(
                         sender = if (it.isOutgoing) shopName() else customer,
@@ -487,18 +497,28 @@ class OverlayService : Service() {
                     )
                 }
 
-            val orders = app.vaaniledger.extract.ConversationResolver
+            val resolved = app.vaaniledger.extract.ConversationResolver
                 .resolveAll(turns, customer, category)
                 .map {
                     with(app.vaaniledger.extract.ConversationResolver) {
                         it.toExtraction(known, category)
                     }
                 }
-            android.util.Log.i(TAG, "screen: ${turns.size} new turn(s), ${orders.size} order(s)")
+            // An order the ledger already holds is marked seen and not offered
+            // again, so the next capture of this chat stays quiet too.
+            val (booked, orders) = resolved.partition {
+                ReviewQueue.alreadyBooked(this@OverlayService, it, customer)
+            }
+            booked.forEach { ReviewQueue.recordSeen(this@OverlayService, chatId, it.contentHashes) }
+            android.util.Log.i(TAG, "screen: ${turns.size} new turn(s), ${orders.size} order(s), ${booked.size} already booked")
 
             withContext(Dispatchers.Main) {
+                if (orders.isEmpty() && booked.isNotEmpty()) {
+                    toast(captureStrings().alreadyBooked)
+                    return@withContext
+                }
                 if (orders.isEmpty()) {
-                    extractAndConfirm(messages, customer)
+                    extractAndConfirm(fresh, customer, chatId)
                     return@withContext
                 }
 
@@ -522,12 +542,14 @@ class OverlayService : Service() {
     private fun extractAndConfirm(
         messages: List<app.vaaniledger.capture.LedgerAccessibilityService.CapturedMessage>,
         senderName: String?,
+        chatId: String? = null,
     ) {
         // Incoming messages only: what the shopkeeper sent is not an order
         // placed with him. Consecutive ones join, because an order routinely
         // arrives across three messages and means nothing split apart.
-        val text = messages.filter { !it.isOutgoing }
+        val incoming = messages.filter { !it.isOutgoing }
             .takeLast(MAX_MESSAGES_PER_CAPTURE)
+        val text = incoming
             .joinToString(" ") { it.text }
             .trim()
 
@@ -535,11 +557,17 @@ class OverlayService : Service() {
             toast(captureStrings().noOrderFound)
             return
         }
-        extractText(text, senderName)
+        // Remembered so saving this entry marks these bubbles as seen -- the
+        // quick sheet never did, so capturing the chat again booked it again.
+        extractText(text, senderName, chatId?.let { it to messages.map { m -> m.hash } })
     }
 
+    /** Where the entry on the confirm sheet came from: a chat and its bubbles. */
+    private var pendingSource: Pair<String, List<String>>? = null
+
     /** Extract any text — chat capture and voice both land here. */
-    private fun extractText(text: String, senderName: String?) {
+    private fun extractText(text: String, senderName: String?, source: Pair<String, List<String>>? = null) {
+        pendingSource = source   // voice has none, and must not inherit a chat's
         scope.launch {
             val db = LedgerDatabase.get(this@OverlayService)
             val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
@@ -556,6 +584,12 @@ class OverlayService : Service() {
                 category = ShopSettings.category(this@OverlayService),
             )
 
+            if (ReviewQueue.alreadyBooked(this@OverlayService, result, senderName)) {
+                pendingSource?.let { (chat, hashes) -> ReviewQueue.recordSeen(this@OverlayService, chat, hashes) }
+                pendingSource = null
+                withContext(Dispatchers.Main) { toast(captureStrings().alreadyBooked) }
+                return@launch
+            }
             withContext(Dispatchers.Main) { showConfirm(result) }
         }
     }
@@ -668,6 +702,7 @@ class OverlayService : Service() {
                 // not the prediction's stale structure.
                 db.analytics().clearItemsFor(row.id)
                 db.analytics().insertItems(LineItems.fromLabels(row))
+                markSourceSeen()
             }.onFailure { android.util.Log.e(TAG, "saveCorrected failed", it) }
 
             // The learning loop: what the engine said vs what the human said.
@@ -744,6 +779,7 @@ class OverlayService : Service() {
                 // analytics page as a product and not just a total.
                 db.analytics().clearItemsFor(row.id)
                 db.analytics().insertItems(LineItems.from(extraction, row))
+                markSourceSeen()
             }.onFailure {
                 android.util.Log.e(TAG, "save failed", it)
             }
@@ -756,6 +792,13 @@ class OverlayService : Service() {
             }
             SyncWorker.syncNow(this@OverlayService, SHOP_ID, shopName())
         }
+    }
+
+    /** After the transaction is written, never before -- see ReviewQueue.approve. */
+    private suspend fun markSourceSeen() {
+        val (chat, hashes) = pendingSource ?: return
+        pendingSource = null
+        ReviewQueue.recordSeen(this, chat, hashes)
     }
 
     private fun captureStrings() =

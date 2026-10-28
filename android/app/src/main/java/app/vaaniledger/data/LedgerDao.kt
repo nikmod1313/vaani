@@ -96,6 +96,29 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE dedupe_key = :key LIMIT 1")
     suspend fun byDedupeKey(key: String): TransactionEntity?
 
+    /**
+     * A live entry with the same customer, amount and direction near this
+     * moment -- the same order booked before, reached by another road.
+     *
+     * The message watermark misses it when the bubbles hash differently the
+     * second time (a time label cut off at the screen edge, a reply quoted
+     * into a new message) or when the first booking came from the quick
+     * confirm sheet. Asking the ledger itself is the last line.
+     */
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE shop_id = :shopId AND deleted = 0
+          AND LOWER(customer_name) = LOWER(:customerName)
+          AND ABS(amount - :amount) < 0.5 AND direction = :direction
+          AND occurred_at BETWEEN :from AND :to
+        LIMIT 1
+        """
+    )
+    suspend fun lookalike(
+        shopId: String, customerName: String, amount: Double, direction: String, from: Long, to: Long,
+    ): TransactionEntity?
+
     @Query(
         """
         SELECT * FROM transactions

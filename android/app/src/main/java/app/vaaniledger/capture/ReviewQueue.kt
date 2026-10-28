@@ -114,7 +114,7 @@ object ReviewQueue {
      * did not parse loses the entry, which is the one outcome worse than a
      * slightly wrong date.
      */
-    private fun parseTimestamp(value: String?): Long {
+    internal fun parseTimestamp(value: String?): Long {
         if (value.isNullOrBlank()) return System.currentTimeMillis()
         return runCatching {
             ISO.apply { timeZone = TimeZone.getDefault() }
@@ -186,6 +186,29 @@ object ReviewQueue {
         recordSeen(context, item.chatId, extraction.contentHashes, transaction.occurredAt)
         return transaction
     }
+
+    /**
+     * Is this order already in the khata?
+     *
+     * Same customer, same amount, same direction, within half a day of when
+     * it happened. Capturing the same chat twice must never book the same
+     * money twice -- a missed repeat order costs one manual entry, a double
+     * booking costs the shop's word with its customer.
+     */
+    suspend fun alreadyBooked(context: Context, extraction: Extraction, customerName: String?): Boolean {
+        val name = (extraction.customer ?: customerName)?.takeIf { it.isNotBlank() } ?: return false
+        val amount = extraction.amount?.takeIf { it > 0 } ?: return false
+        val db = LedgerDatabase.get(context)
+        // The stored name is the customer row's spelling, not the chat's.
+        val stored = db.customers().byName(ShopSettings.ID, name)?.name ?: name
+        val at = parseTimestamp(extraction.occurredAt)
+        val direction = extraction.direction.takeIf { it != "unknown" } ?: "sale"
+        return db.transactions().lookalike(
+            ShopSettings.ID, stored, amount, direction, at - HALF_DAY, at + HALF_DAY,
+        ) != null
+    }
+
+    private const val HALF_DAY = 12 * 60 * 60 * 1000L
 
     /**
      * Mark this order's messages as processed.
