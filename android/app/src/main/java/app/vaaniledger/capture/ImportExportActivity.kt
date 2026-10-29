@@ -175,6 +175,7 @@ class ImportExportActivity : Activity() {
             val orders = ConversationResolver.resolveAll(turns, customer, category)
                 .map { with(ConversationResolver) { it.toExtraction(known, category) } }
                 .map { app.vaaniledger.extract.CatalogueMatch.enrich(it, app.vaaniledger.data.Catalogue.items(this@ImportExportActivity)) }
+                .map { ReviewQueue.settleFromBalance(this@ImportExportActivity, it, it.customer) }
 
             android.util.Log.i(
                 TAG,

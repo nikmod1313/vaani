@@ -508,6 +508,8 @@ class OverlayService : Service() {
                 // The shop's own price list names and prices what the
                 // built-in vocabulary cannot.
                 .map { app.vaaniledger.extract.CatalogueMatch.enrich(it, catalogue) }
+                .let(ReviewQueue::foldLonePayments)
+                .map { ReviewQueue.settleFromBalance(this@OverlayService, it, customer) }
             // An order the ledger already holds is marked seen and not offered
             // again, so the next capture of this chat stays quiet too.
             val (booked, orders) = resolved.partition {
@@ -572,6 +574,8 @@ class OverlayService : Service() {
     /** Extract any text — chat capture and voice both land here. */
     private fun extractText(text: String, senderName: String?, source: Pair<String, List<String>>? = null) {
         pendingSource = source   // voice has none, and must not inherit a chat's
+        // Spoken, there is no sender: take the customer from the words.
+        val who = senderName ?: if (source == null) app.vaaniledger.extract.VoiceNames.customerIn(text) else null
         scope.launch {
             val db = LedgerDatabase.get(this@OverlayService)
             val known = runCatching { db.customers().names(SHOP_ID) }.getOrDefault(emptyList())
@@ -584,11 +588,11 @@ class OverlayService : Service() {
             val result = app.vaaniledger.extract.CatalogueMatch.enrich(OfflineExtractor.extract(
                 text = text,
                 knownCustomers = known,
-                senderName = senderName,
+                senderName = who,
                 category = ShopSettings.category(this@OverlayService),
             ), app.vaaniledger.data.Catalogue.items(this@OverlayService))
 
-            if (ReviewQueue.alreadyBooked(this@OverlayService, result, senderName)) {
+            if (ReviewQueue.alreadyBooked(this@OverlayService, result, who)) {
                 pendingSource?.let { (chat, hashes) -> ReviewQueue.recordSeen(this@OverlayService, chat, hashes) }
                 pendingSource = null
                 withContext(Dispatchers.Main) { toast(captureStrings().alreadyBooked) }

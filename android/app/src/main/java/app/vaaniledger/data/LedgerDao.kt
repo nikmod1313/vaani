@@ -110,6 +110,20 @@ interface TransactionDao {
         SELECT * FROM transactions
         WHERE shop_id = :shopId AND deleted = 0
           AND LOWER(customer_name) = LOWER(:customerName)
+          AND items = :items AND direction = :direction
+          AND occurred_at BETWEEN :from AND :to
+        LIMIT 1
+        """
+    )
+    suspend fun lookalikeItems(
+        shopId: String, customerName: String, items: String, direction: String, from: Long, to: Long,
+    ): TransactionEntity?
+
+    @Query(
+        """
+        SELECT * FROM transactions
+        WHERE shop_id = :shopId AND deleted = 0
+          AND LOWER(customer_name) = LOWER(:customerName)
           AND ABS(amount - :amount) < 0.5 AND direction = :direction
           AND occurred_at BETWEEN :from AND :to
         LIMIT 1

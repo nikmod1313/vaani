@@ -163,7 +163,10 @@ object ReviewQueue {
             customerId = customer?.id,
             customerName = customer?.name,
             amount = extraction.amount ?: 0.0,
-            mode = extraction.mode.takeIf { it != "unknown" } ?: "udhaar",
+            // A payment is never "on credit"; one that names no instrument
+            // was most likely handed over in cash.
+            mode = extraction.mode.takeIf { it != "unknown" }
+                ?: if (extraction.direction == "payment") "cash" else "udhaar",
             direction = extraction.direction.takeIf { it != "unknown" } ?: "sale",
             items = extraction.items.joinToString(","),
             source = "chat",
@@ -197,18 +200,80 @@ object ReviewQueue {
      */
     suspend fun alreadyBooked(context: Context, extraction: Extraction, customerName: String?): Boolean {
         val name = (extraction.customer ?: customerName)?.takeIf { it.isNotBlank() } ?: return false
-        val amount = extraction.amount?.takeIf { it > 0 } ?: return false
         val db = LedgerDatabase.get(context)
         // The stored name is the customer row's spelling, not the chat's.
         val stored = db.customers().byName(ShopSettings.ID, name)?.name ?: name
         val at = parseTimestamp(extraction.occurredAt)
         val direction = extraction.direction.takeIf { it != "unknown" } ?: "sale"
+        val amount = extraction.amount?.takeIf { it > 0 }
+        if (amount == null) {
+            // No price yet: the same items for the same person, booked once
+            // already, is the same order read again -- not a second one at Rs 0.
+            val items = extraction.items.joinToString(",")
+            if (items.isBlank()) return false
+            return db.transactions().lookalikeItems(
+                ShopSettings.ID, stored, items, direction, at - HALF_DAY, at + HALF_DAY,
+            ) != null
+        }
         return db.transactions().lookalike(
             ShopSettings.ID, stored, amount, direction, at - HALF_DAY, at + HALF_DAY,
         ) != null
     }
 
     private const val HALF_DAY = 12 * 60 * 60 * 1000L
+
+    /**
+     * "i have completed the payment", read later than the order it pays for.
+     *
+     * The order was booked on credit, approved, and its messages marked
+     * seen; the payment arrives alone, naming no amount, and used to reach
+     * the khata as a payment of nothing -- the credit stayed open. A payment
+     * with no figure from a customer who owes money is that money: it takes
+     * the outstanding balance, and the review card says so.
+     */
+    /**
+     * A payment with no figure, read in the same capture as the order before
+     * it, is how that order was paid -- one card, not two. Only after that
+     * does a lone payment fall to [settleFromBalance], so it never settles an
+     * older credit while paying for the order right above it.
+     */
+    fun foldLonePayments(orders: List<Extraction>): List<Extraction> {
+        val out = mutableListOf<Extraction>()
+        for (e in orders) {
+            val sale = out.lastOrNull { it.direction == "sale" }
+            if (e.direction == "payment" && e.amount == null && sale != null) {
+                val i = out.indexOf(sale)
+                out[i] = sale.copy(
+                    mode = if (e.mode != "unknown") e.mode
+                    else if (sale.mode in setOf("unknown", "udhaar")) "cash" else sale.mode,
+                    signals = sale.signals + "paid-on-order",
+                    contentHashes = (sale.contentHashes + e.contentHashes).distinct(),
+                )
+            } else out += e
+        }
+        return out
+    }
+
+    suspend fun settleFromBalance(context: Context, extraction: Extraction, customerName: String?): Extraction {
+        if (extraction.direction != "payment" || extraction.amount != null) return extraction
+        val name = (extraction.customer ?: customerName)?.takeIf { it.isNotBlank() } ?: return extraction
+        val db = LedgerDatabase.get(context)
+        val customer = db.customers().byName(ShopSettings.ID, name) ?: return extraction
+        val rows = db.transactions().allOnce(ShopSettings.ID)
+            .filter { it.customerId == customer.id && !it.deleted }
+            .sortedBy { it.occurredAt }
+        val owed = app.vaaniledger.data.Aging.settle(rows).outstanding
+        if (owed <= 0.0) return extraction
+        return extraction.copy(
+            amount = owed,
+            customer = customer.name,
+            signals = extraction.signals + "settles-balance",
+            confidence = extraction.confidence.copy(
+                fields = extraction.confidence.fields +
+                    ("amount" to app.vaaniledger.net.FieldScore(0.8, "the balance this customer owes")),
+            ),
+        )
+    }
 
     /**
      * Mark this order's messages as processed.

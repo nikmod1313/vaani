@@ -56,7 +56,10 @@ class VoiceActivity : Activity() {
             )
             // Hindi first; the recogniser still returns Hinglish, which is
             // what the extraction engine is built for.
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+            // The app's own language. English spoken to a Hindi recogniser came
+            // back as English words in Devanagari ("ब्लू कर्टिस"), which no
+            // vocabulary reads.
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, app.vaaniledger.data.ShopSettings.language(this@VoiceActivity).wire)
             putExtra(RecognizerIntent.EXTRA_PROMPT, strings.voicePrompt)
             // Not PREFER_OFFLINE: on a phone without Google's offline Hindi
             // pack that made the recogniser refuse outright ("Voice search

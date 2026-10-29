@@ -127,6 +127,8 @@ _APPAREL = {
     "churidar", "चूड़ीदार", "sherwani", "शेरवानी", "gown", "गाउन",
     "towel", "tauliya", "तौलिया", "bedsheet", "chadar", "चादर",
     "rumal", "handkerchief", "scarf", "stole",
+    "joota", "joote", "juta", "shoe", "shoes", "chappal", "chappals", "sandal", "sandals",
+    "जूता", "जूते", "चप्पल",
 }
 
 _PHARMACY = {
