@@ -52,15 +52,29 @@ object ExportParser {
     private val BRACKETED = Regex(
         """^\[(?<date>\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+""" +
             """(?<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\]\s*""" +
-            """(?<sender>[^:]{1,60}?):\s(?<body>.*)$"""
+            """(?<sender>[^:]{1,60}?):(?:\s(?<body>.*))?$"""
     )
 
     // 26/08/26, 9:41 am - Rahul Verma: message   (hyphen or en/em dash)
     private val DASHED = Regex(
         """^(?<date>\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+""" +
             """(?<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\s+[-–—]\s+""" +
-            """(?<sender>[^:]{1,60}?):\s(?<body>.*)$"""
+            """(?<sender>[^:]{1,60}?):(?:\s(?<body>.*))?$"""
     )
+
+    /**
+     * A timestamped line with no "Sender:" -- WhatsApp narrating ("Isha
+     * changed the group name", "Rahul left"). Unmatched, it was appended to
+     * the message above, and its date became the order's amount: Rs 19 from
+     * "19/09/2026, 19:08".
+     */
+    private val HEADER_ONLY = Regex(
+        """^\[?\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4},?\s+""" +
+            """\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?\]?\s*[-–—]?\s*"""
+    )
+
+    /** WhatsApp's own note on an edited message, not the customer's words. */
+    private val EDITED = Regex("""\s*\u200e?<\s*this message was edited\s*>\s*$""", RegexOption.IGNORE_CASE)
 
     /** System lines carry no sender and must never become ledger entries. */
     private val SYSTEM_MARKERS = listOf(
@@ -69,9 +83,12 @@ object ExportParser {
         "<media omitted>", "media omitted",
         "missed voice call", "missed video call",
         "changed the subject", "changed this group's icon",
-        "created group", "added you", "left",
+        "created group", "added you",
         "joined using this group's invite link",
-        "security code changed", "null",
+        "security code changed",
+        "changed the group name", "changed the group description", "created this group",
+        "image omitted", "video omitted", "audio omitted", "sticker omitted",
+        "gif omitted", "document omitted", "contact card omitted",
     )
 
     private val DATE_FORMATS = listOf(
@@ -100,7 +117,7 @@ object ExportParser {
 
     private fun isSystemLine(body: String): Boolean {
         val low = body.trim().lowercase()
-        return SYSTEM_MARKERS.any { low.contains(it) }
+        return low.isEmpty() || low == "null" || SYSTEM_MARKERS.any { low.contains(it) }
     }
 
     /**
@@ -118,7 +135,12 @@ object ExportParser {
 
             val match = BRACKETED.find(stripped) ?: DASHED.find(stripped)
             if (match != null) {
-                val body = match.groups["body"]!!.value.trim()
+                val rawBody = match.groups["body"]?.value ?: ""
+                // iPhone exports mark WhatsApp's own notes -- media
+                // placeholders, "X changed the group name" -- with a leading
+                // U+200E and a sender's name. Typed words never start with it.
+                if (rawBody.startsWith('\u200e')) continue
+                val body = rawBody.replace(EDITED, "").trim()
                 if (isSystemLine(body)) continue
                 messages.add(
                     Message(
@@ -129,9 +151,13 @@ object ExportParser {
                         body = body,
                     )
                 )
+            } else if (HEADER_ONLY.find(stripped)?.range?.first == 0) {
+                continue
             } else if (messages.isNotEmpty()) {
+                val text = stripped.replace(EDITED, "")
+                if (text.isEmpty()) continue
                 val last = messages.removeAt(messages.lastIndex)
-                messages.add(last.copy(body = last.body + "\n" + stripped))
+                messages.add(last.copy(body = last.body + "\n" + text))
             }
         }
         return messages
@@ -180,7 +206,11 @@ object ExportParser {
     }
 
     fun toTurns(messages: List<Message>, customer: String, aliases: Set<String>): List<Turn> =
-        messages.map { m ->
+        messages
+            // The shop's own Vaani reminder, read back from the export: its
+            // balance was taken as the next order's total.
+            .filterNot { isShopkeeper(it.sender, customer, aliases) && app.vaaniledger.reminder.ReminderLinks.isReminder(it.body) }
+            .map { m ->
             Turn(
                 sender = m.sender,
                 body = m.body,

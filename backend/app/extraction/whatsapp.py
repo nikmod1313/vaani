@@ -31,7 +31,7 @@ from .rules import _ITEMS, _MODE_WORDS, _UNITS, apply_rules
 _BRACKETED = re.compile(
     r"^\[(?P<date>\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+"
     r"(?P<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\]\s*"
-    r"(?P<sender>[^:]{1,60}?):\s(?P<body>.*)$"
+    r"(?P<sender>[^:]{1,60}?):(?:\s(?P<body>.*))?$"
 )
 
 # 26/08/26, 9:41 am - Rahul Verma: message
@@ -41,8 +41,20 @@ _DASHED = re.compile(
     # locales. Matching only the hyphen silently parses zero messages out of
     # an otherwise perfect export.
     r"(?P<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\s+[-\u2013\u2014]\s+"
-    r"(?P<sender>[^:]{1,60}?):\s(?P<body>.*)$"
+    r"(?P<sender>[^:]{1,60}?):(?:\s(?P<body>.*))?$"
 )
+
+# A timestamped line with no "Sender:" is WhatsApp narrating -- "Isha changed
+# the group name from ...", "Rahul left". Not matching it as a header made it
+# a CONTINUATION of the message above, so its date and time were read as
+# numbers: an order booked as Rs 19 from "19/09/2026, 19:08".
+_HEADER_ONLY = re.compile(
+    r"^\[?\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4},?\s+"
+    r"\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?\]?\s*[-\u2013\u2014]?\s*"
+)
+
+# WhatsApp's own annotation on an edited message, not the customer's words.
+_EDITED = re.compile(r"\s*\u200e?<\s*this message was edited\s*>\s*$", re.IGNORECASE)
 
 # System lines carry no sender and must never become ledger entries.
 _SYSTEM_MARKERS = (
@@ -57,11 +69,17 @@ _SYSTEM_MARKERS = (
     "changed this group's icon",
     "created group",
     "added you",
-    "left",
     "joined using this group's invite link",
     "security code changed",
-    "null",
+    "changed the group name",
+    "changed the group description",
+    "created this group",
+    "image omitted", "video omitted", "audio omitted", "sticker omitted",
+    "gif omitted", "document omitted", "contact card omitted",
 )
+# "left" used to be a marker too, and dropped every real message saying
+# "only 2 left". A member leaving is a sender-less line, caught by
+# _HEADER_ONLY instead.
 
 _DATE_FORMATS = (
     "%d/%m/%y", "%d/%m/%Y", "%m/%d/%y", "%m/%d/%Y",
@@ -166,7 +184,7 @@ def _parse_timestamp(date_str: str, time_str: str) -> datetime | None:
 
 def _is_system_line(body: str) -> bool:
     low = body.strip().lower()
-    return any(marker in low for marker in _SYSTEM_MARKERS)
+    return not low or low == "null" or any(marker in low for marker in _SYSTEM_MARKERS)
 
 
 def parse_export(content: str) -> list[Message]:
@@ -186,7 +204,13 @@ def parse_export(content: str) -> list[Message]:
 
         match = _BRACKETED.match(stripped) or _DASHED.match(stripped)
         if match:
-            body = match.group("body").strip()
+            raw_body = match.group("body") or ""
+            # iPhone exports mark WhatsApp's own notes -- media placeholders,
+            # "X changed the group name" -- with a leading U+200E, and put a
+            # sender's name on them. Words a person typed never start with it.
+            if raw_body.startswith("\u200e"):
+                continue
+            body = _EDITED.sub("", raw_body).strip()
             if _is_system_line(body):
                 continue
             messages.append(
@@ -197,8 +221,13 @@ def parse_export(content: str) -> list[Message]:
                     raw=stripped,
                 )
             )
+        elif _HEADER_ONLY.match(stripped):
+            continue
         elif messages:
             # Continuation of the previous message.
+            stripped = _EDITED.sub("", stripped)
+            if not stripped:
+                continue
             messages[-1].body += "\n" + stripped
             messages[-1].raw += "\n" + stripped
 
@@ -412,7 +441,18 @@ def to_turns(
             content_hash=m.content_hash,
         )
         for m in messages
+        # The shop's own Vaani reminder, read back from the export: its
+        # balance was taken as the next order's total.
+        if not (is_shopkeeper(m.sender, customer, shop_aliases) and _is_reminder(m.body))
     ]
+
+
+def _is_reminder(text: str) -> bool:
+    """Mirror of ReminderLinks.isReminder on the phone."""
+    t = text.lower()
+    return ("namaste" in t or "नमस्ते" in t) and (
+        "baaki hai" in t or "बाकी हैं" in t or "is pending as of" in t
+    )
 
 
 @dataclass

@@ -58,13 +58,52 @@ class VoiceActivity : Activity() {
             // what the extraction engine is built for.
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
             putExtra(RecognizerIntent.EXTRA_PROMPT, strings.voicePrompt)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            // Not PREFER_OFFLINE: on a phone without Google's offline Hindi
+            // pack that made the recogniser refuse outright ("Voice search
+            // isn't available") even with a working connection.
         }
         runCatching { startActivityForResult(intent, REQ_SPEECH) }
-            .onFailure {
-                toast(strings.voiceUnavailable)
+            .onFailure { typeInstead() }
+    }
+
+    /**
+     * When the phone cannot listen, the entry still gets made: the same
+     * words, typed, go down the same path.
+     */
+    private fun typeInstead() {
+        val en = app.vaaniledger.data.ShopSettings.language(this) == app.vaaniledger.data.AppLanguage.EN
+        val input = android.widget.EditText(this).apply {
+            hint = if (en) "e.g. Rahul 2 kg aloo 80 udhaar" else "जैसे: राहुल 2 किलो आलू 80 उधार"
+            minLines = 2
+        }
+        val holder = android.widget.FrameLayout(this).apply {
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 3, pad, 0)
+            addView(input)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(if (en) "Couldn't listen — type it instead" else "सुन नहीं पाए — लिख दीजिए")
+            .setView(holder)
+            .setPositiveButton(if (en) "Read it" else "पढ़ो") { _, _ ->
+                val text = input.text.toString().trim()
+                if (text.isNotEmpty()) send(text)
                 finish()
             }
+            .setNeutralButton(if (en) "Try voice again" else "फिर बोलें") { _, _ -> listen() }
+            .setNegativeButton(if (en) "Cancel" else "रहने दें") { _, _ -> finish() }
+            .setOnCancelListener { finish() }
+            .show()
+    }
+
+    private fun send(spoken: String) {
+        // Same pipeline as chat capture: extract, confirm, save. Voice is
+        // just another way in, not a separate path.
+        startService(
+            Intent(this, app.vaaniledger.overlay.OverlayService::class.java).apply {
+                action = app.vaaniledger.overlay.OverlayService.ACTION_EXTRACT_TEXT
+                putExtra(app.vaaniledger.overlay.OverlayService.EXTRA_TEXT, spoken)
+            }
+        )
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -76,17 +115,10 @@ class VoiceActivity : Activity() {
             ?.trim()
 
         if (resultCode != RESULT_OK || spoken.isNullOrBlank()) {
-            toast(strings.heardNothing)
-        } else {
-            // Same pipeline as chat capture: extract, confirm, save. Voice is
-            // just another way in, not a separate path.
-            startService(
-                Intent(this, app.vaaniledger.overlay.OverlayService::class.java).apply {
-                    action = app.vaaniledger.overlay.OverlayService.ACTION_EXTRACT_TEXT
-                    putExtra(app.vaaniledger.overlay.OverlayService.EXTRA_TEXT, spoken)
-                }
-            )
+            typeInstead()
+            return
         }
+        send(spoken)
         finish()
     }
 
