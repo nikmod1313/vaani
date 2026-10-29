@@ -23,6 +23,11 @@ class IosExportTest(unittest.TestCase):
         # The 30 Sep order, stated by the shop: exactly right.
         self.assertEqual(orders[1].amount, 5000.0)
         self.assertEqual(sorted((i.modifier, i.quantity) for i in orders[1].items), [("blue", 2.0), ("yellow", 8.0)])
+        # 19 Sep: paid by "sent 2250 to your account using upi".
+        self.assertEqual((orders[0].amount, orders[0].mode), (2250.0, "upi"))
+        # 28 Oct, told in pieces: "i want 2 kurtis", "blue color", "500 rs".
+        self.assertEqual(orders[2].amount, 500.0)
+        self.assertEqual(orders[2].items[0].modifier, "blue")
         # Never a figure from "19/09/26" or from the Rs 1,000 reminder.
         for o in orders:
             self.assertNotIn(o.amount, (19.0, 26.0, 47.0, 1000.0))

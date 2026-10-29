@@ -167,6 +167,9 @@ _PAYMENT_PHRASES = [
 _MONEY_GATED_PAYMENT_PHRASES = [
     r"\b(?:de|bhej|kar|jama)\s+diy[ae]\b",
     r"\bbheja\b", r"\bbheje\b",
+    # "sent 2250 to your account using upi" -- gated, since "sent the
+    # parcel" is not money.
+    r"\b(?:sent|transferred)\b",
 ]
 _MONEY_WORDS = re.compile(
     r"\b(?:paise?|paisa|pese|payment|amount|rupaye|rupay|rupees|rs|cash|nakad|nagad|"

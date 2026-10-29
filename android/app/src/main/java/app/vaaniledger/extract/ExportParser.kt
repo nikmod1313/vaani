@@ -51,14 +51,14 @@ object ExportParser {
     // [26/08/26, 9:41:23 AM] Rahul Verma: message
     private val BRACKETED = Regex(
         """^\[(?<date>\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+""" +
-            """(?<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\]\s*""" +
+            """(?<time>\d{1,2}:\d{2}(?::\d{2})?[\s\u202f\u00a0]*(?:[APap]\.?[Mm]\.?)?)\]\s*""" +
             """(?<sender>[^:]{1,60}?):(?:\s(?<body>.*))?$"""
     )
 
     // 26/08/26, 9:41 am - Rahul Verma: message   (hyphen or en/em dash)
     private val DASHED = Regex(
         """^(?<date>\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+""" +
-            """(?<time>\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\s+[-–—]\s+""" +
+            """(?<time>\d{1,2}:\d{2}(?::\d{2})?[\s\u202f\u00a0]*(?:[APap]\.?[Mm]\.?)?)\s+[-–—]\s+""" +
             """(?<sender>[^:]{1,60}?):(?:\s(?<body>.*))?$"""
     )
 
@@ -70,7 +70,7 @@ object ExportParser {
      */
     private val HEADER_ONLY = Regex(
         """^\[?\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4},?\s+""" +
-            """\d{1,2}:\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?\]?\s*[-–—]?\s*"""
+            """\d{1,2}:\d{2}(?::\d{2})?[\s\u202f\u00a0]*(?:[APap]\.?[Mm]\.?)?\]?\s*[-–—]?\s*"""
     )
 
     /** WhatsApp's own note on an edited message, not the customer's words. */

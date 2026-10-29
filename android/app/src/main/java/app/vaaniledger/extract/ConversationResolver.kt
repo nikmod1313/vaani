@@ -454,6 +454,32 @@ object ConversationResolver {
                 ) customerAmount = rules.amount
             }
 
+            // The order told in pieces: "i want 2 kurtis", "blue color", "500
+            // rs". A short follow-up that is only a colour or size describes
+            // the one item already asked for; a price the customer adds after
+            // ordering is that order's price. Mirrors conversation.py.
+            if (turn.isCustomer && commitIndex >= 0 && index > commitIndex && rules.items.isEmpty()) {
+                val words = NumberParser.normalise(turn.body).split(Regex("""\s+""")).filter { it.isNotEmpty() }
+                val modifiers = CategoryLexicon.modifiersFor(category)
+                val adjective = if (words.size <= 3) words.firstOrNull { it in modifiers } else null
+                if (adjective != null) {
+                    for (store in listOf(ordered, topics)) {
+                        if (store.size == 1) {
+                            val (onlyKey, only) = store.entries.first()
+                            if (only.modifier == null) {
+                                store.remove(onlyKey)
+                                val described = only.copy(modifier = adjective)
+                                store[key(described)] = described
+                            }
+                        }
+                    }
+                }
+                if (customerAmount == null && rules.amount != null &&
+                    rules.amountSource in setOf("currency-adjacent", "mode-adjacent") &&
+                    rules.direction != RulesEngine.Direction.PAYMENT
+                ) customerAmount = rules.amount
+            }
+
             if (turn.isCustomer && rules.items.isEmpty() && rules.amount != null &&
                 rules.amountSource in setOf("currency-adjacent", "mode-adjacent") &&
                 rules.direction != RulesEngine.Direction.PAYMENT &&

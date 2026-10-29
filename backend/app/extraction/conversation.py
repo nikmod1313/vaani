@@ -42,7 +42,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .categories import Category, canonical, units_for
+from .categories import Category, canonical, modifiers_for, units_for
 from .numbers import find_numbers, normalise
 from .rules import _UNITS, Direction, LineItem, PaymentMode, apply_rules, detect_mode
 
@@ -573,6 +573,29 @@ def resolve_thread(
             if rules.amount is not None and rules.amount_source in (
                 "currency-adjacent", "mode-adjacent", "line-totals",
             ) and rules.direction is not Direction.PAYMENT:
+                customer_amount = rules.amount
+
+        # The order told in pieces: "i want 2 kurtis", "blue color", "500 rs".
+        # A short follow-up that is only a colour or size describes the one
+        # item already asked for; a price the customer adds after ordering is
+        # that order's price. Read only from the ordering message, both were
+        # lost -- the order reached the khata as "2 kurti", no amount.
+        if turn.is_customer and commit_index >= 0 and index > commit_index and not rules.items:
+            words = normalise(turn.body).split()
+            adjective = next((w for w in words if w in modifiers_for(category)), None) if len(words) <= 3 else None
+            if adjective:
+                for store in (ordered, topics):
+                    if len(store) == 1:
+                        (only_key, only), = store.items()
+                        if only.modifier is None:
+                            del store[only_key]
+                            only.modifier = adjective
+                            store[_key(only)] = only
+            if (
+                customer_amount is None and rules.amount is not None
+                and rules.amount_source in ("currency-adjacent", "mode-adjacent")
+                and rules.direction is not Direction.PAYMENT
+            ):
                 customer_amount = rules.amount
 
         if (

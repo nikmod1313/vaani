@@ -160,6 +160,9 @@ object RulesEngine {
     private val MONEY_GATED_PAYMENT_PHRASES = listOf(
         """\b(?:de|bhej|kar|jama)\s+diy[ae]\b""",
         """\bbheja\b""", """\bbheje\b""",
+        // "sent 2250 to your account using upi" -- gated, since "sent the
+        // parcel" is not money.
+        """\b(?:sent|transferred)\b""",
     ).map { Regex(it) }
 
     private val MONEY_WORDS = Regex(
