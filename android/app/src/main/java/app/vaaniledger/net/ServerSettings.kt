@@ -38,10 +38,23 @@ object ServerSettings {
      * to discover a typo.
      */
     fun setBaseUrl(context: Context, url: String) {
-        val trimmed = url.trim()
+        val trimmed = withScheme(url.trim())
         val normalised = if (trimmed.endsWith("/")) trimmed else "$trimmed/"
         prefs(context).edit().putString(KEY_BASE_URL, normalised).apply()
         ApiClient.invalidate()
+    }
+
+    /**
+     * "vaani-dashboard.onrender.com" typed bare was rejected outright: Retrofit
+     * needs a scheme. A website gets https; a computer on the shop's Wi-Fi --
+     * an IP address, "vaani.local", a port -- gets http, which is how it serves.
+     */
+    internal fun withScheme(url: String): String {
+        if (url.isBlank() || Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*://""").containsMatchIn(url)) return url
+        val host = url.substringBefore('/')
+        val local = Regex("""^\d{1,3}(\.\d{1,3}){3}(:\d+)?$""").matches(host) ||
+            host.substringBefore(':').endsWith(".local") || host.substringBefore(':') == "localhost" || ':' in host
+        return (if (local) "http://" else "https://") + url
     }
 
     fun reset(context: Context) {

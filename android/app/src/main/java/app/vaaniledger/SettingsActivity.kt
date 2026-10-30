@@ -616,18 +616,52 @@ class SettingsActivity : Activity() {
     /** Tell the server first; keep the code only once it has it, so the screen never shows a code that won't work. */
     private fun registerDashboardCode(code: String?) {
         val en = ShopSettings.language(this) == AppLanguage.EN
+        val site = ServerSettings.baseUrl(this)
         scope.launch {
-            val result = runCatching {
-                app.vaaniledger.net.ApiClient.api(this@SettingsActivity).setDashboardCode(
-                    ShopSettings.ID, app.vaaniledger.net.DashboardCodeRequest(code ?: ""),
-                )
-            }.onFailure { android.util.Log.w("VaaniSettings", "dashboard code failed: ${it.message}") }.getOrNull()
+            // A free hosted server sleeps when idle and takes up to a minute
+            // to wake, far longer than the app's short timeouts. Keep asking
+            // for about 90 seconds -- the first request is what wakes it --
+            // and say so, instead of failing on the first try.
+            var result: app.vaaniledger.net.DashboardCodeResult? = null
+            var lastError: Throwable? = null
+            val until = System.currentTimeMillis() + 90_000
+            var attempt = 0
+            while (result == null && System.currentTimeMillis() < until) {
+                attempt++
+                runCatching {
+                    app.vaaniledger.net.ApiClient.api(this@SettingsActivity).setDashboardCode(
+                        ShopSettings.ID, app.vaaniledger.net.DashboardCodeRequest(code ?: ""),
+                    )
+                }.onSuccess { result = it }.onFailure { e ->
+                    lastError = e
+                    android.util.Log.w("VaaniSettings", "dashboard code attempt $attempt failed: ${e.message}")
+                    // A refusal from the server is an answer, not a sleeping host.
+                    if (e is retrofit2.HttpException) return@onFailure
+                    if (attempt == 1) kotlinx.coroutines.withContext(Dispatchers.Main) {
+                        Toast.makeText(
+                            this@SettingsActivity,
+                            if (en) "Waking up the dashboard server — this can take a minute…"
+                            else "डैशबोर्ड सर्वर जाग रहा है — एक मिनट लग सकता है…",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                    kotlinx.coroutines.delay(4_000)
+                }
+                if (lastError is retrofit2.HttpException) break
+            }
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 if (result?.ok != true) {
+                    val refused = (lastError as? retrofit2.HttpException)?.code()
                     Toast.makeText(
                         this@SettingsActivity,
-                        if (en) "Couldn't reach the dashboard server — check the internet and Settings → Server address"
-                        else "डैशबोर्ड सर्वर तक नहीं पहुँच पाए — इंटरनेट और सेटिंग्स → सर्वर का पता जाँचिए",
+                        when {
+                            refused == 401 -> if (en) "The server knows this shop from another phone. Only that phone can make its code."
+                                else "यह दुकान सर्वर पर किसी दूसरे फ़ोन से जुड़ी है। कोड वही फ़ोन बना सकता है।"
+                            refused != null -> if (en) "The server said no ($refused). Check Settings → Server address: $site"
+                                else "सर्वर ने मना किया ($refused)। सेटिंग्स → सर्वर का पता जाँचिए: $site"
+                            else -> if (en) "Couldn't reach $site — check the internet and Settings → Server address"
+                                else "$site तक नहीं पहुँच पाए — इंटरनेट और सेटिंग्स → सर्वर का पता जाँचिए"
+                        },
                         Toast.LENGTH_LONG,
                     ).show()
                     return@withContext
