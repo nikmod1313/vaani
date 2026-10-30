@@ -157,9 +157,29 @@ object NumberParser {
     private val RE_CURRENCY_PREFIX = Regex("""(₹|रु\.?)\s*(\d)""")
     private val RE_RS_PREFIX = Regex("""\brs\.?\s*(\d)""")
     private val RE_TRAILING_SLASH = Regex("""(\d)\s*/-""")
+    private val RE_PER_UNIT = Regex(
+        """(?<=\d)\s*/\s*(kgs?|kilos?|gms?|grams?|g|ltrs?|litres?|liters?|l|ml|pcs?|piece|pieces|packets?|pkts?|""" +
+            """dozen|darjan|meters?|metres?|mtrs?|m|box|bottles?|strips?|nag)\b"""
+    )
+    private val RE_GLUED_CURRENCY = Regex("""(?<=\d)(rs|rupees|rupaye|rupay|rupye|rupya|rupiya|inr)\b""")
     private val RE_PHONE = Regex(
         """\+?91[\s-]?[6-9]\d{4}[\s-]?\d{5}(?!\d)|(?<!\d)[6-9]\d{9}(?!\d)|(?<!\d)[6-9]\d{4}[\s-]\d{5}(?!\d)""" +
             """|\(\d{3}\)\s?\d{3}[\s.-]\d{4}(?!\d)|(?<!\d)\d{3}[.-]\d{3}[.-]\d{4}(?!\d)"""
+    )
+    /**
+     * A photo, voice note or document's chrome: file names, file sizes, page
+     * counts and the exports' "<Media omitted>". Mirrors `_MEDIA` in
+     * numbers.py. Java's \w is ASCII-only; these are ASCII shapes, so the
+     * two read the same.
+     */
+    private const val MEDIA_EXTENSIONS =
+        "jpe?g|png|webp|heic|heif|gif|bmp|mp4|mov|3gp|mkv|avi|webm|pdf|docx?|xlsx?|pptx?|txt|csv|" +
+            "opus|ogg|mp3|m4a|aac|amr|wav|zip|rar|apk|vcf"
+    private val RE_MEDIA = Regex(
+        """[^\s/\\]+\.(?:$MEDIA_EXTENSIONS)(?![\w])(?:\s*\(file attached\))?""" +
+            """|(?<![\w.])\d+(?:[.,]\d+)?\s*(?:kb|mb|bytes?)(?![\w])""" +
+            """|(?<![\w.])\d+\s*pages?\s*[•·]|[•·]\s*\d+\s*pages?(?![\w])""" +
+            """|<\s*media omitted\s*>|\b(?:image|video|audio|sticker|gif|document|contact card|media)\s+omitted\b"""
     )
     private val RE_DIGIT_GROUP = Regex("""(?<=\d),(?=\d{2},\d|\d{3}(?!\d))""")
     private val RE_GLUED_UNIT = Regex(
@@ -196,11 +216,20 @@ object NumberParser {
         // 650-0001?" banner was read as a Rs 987 bill. Removed before any
         // number is read. Mirrors numbers.py.
         text = RE_PHONE.replace(text, " ")
+        // Nor is a photo, a voice note or a document: "IMG-20261030-WA0004.jpg",
+        // "245 kB", "PDF • 2 pages • 1.2 MB" were read as a price or a count.
+        // Mirrors numbers.py.
+        text = RE_MEDIA.replace(text, " ")
         // Detach currency markers from the digits they hug, so "₹250",
         // "rs.250" and "250/-" all yield a bare numeric token.
         text = RE_CURRENCY_PREFIX.replace(text) { "${it.groupValues[1]} ${it.groupValues[2]}" }
         text = RE_RS_PREFIX.replace(text) { "rs ${it.groupValues[1]}" }
         text = RE_TRAILING_SLASH.replace(text) { "${it.groupValues[1]} " }
+        // A slash before a unit is "per": "₹200/kg". Mirrors numbers.py.
+        text = RE_PER_UNIT.replace(text) { " per ${it.groupValues[1]}" }
+        // ...and the word written onto the digits: "200rs". Left glued, "1kg
+        // ka 200rs" carried no price at all. Mirrors numbers.py.
+        text = RE_GLUED_CURRENCY.replace(text) { " ${it.groupValues[1]}" }
         // Digit-group commas belong to the number: "1,250", the Indian
         // "1,25,000". Left in, the comma became a clause boundary and
         // "total 1,250 hua" was read as Rs 250. Mirrors numbers.py.
@@ -244,7 +273,7 @@ object NumberParser {
      * kilo", "do hazaar"). It is the imperative "give" when it trails a verb
      * stem ("bhej do") or ends the clause ("likh do.").
      */
-    private fun isVerbNotNumber(tokens: List<String>, i: Int): Boolean {
+    internal fun isVerbNotNumber(tokens: List<String>, i: Int): Boolean {
         val token = tokens[i].trim('.')
         if (token !in WEAK_NUMBERS) return false
 

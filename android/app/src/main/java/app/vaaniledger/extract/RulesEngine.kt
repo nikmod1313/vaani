@@ -135,6 +135,9 @@ object RulesEngine {
         """\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae]|kar\s+d(?:i|ii|ia))\b""",
         // A bare "paid" -- the whole message -- after a reminder.
         """^\W*paid\W*$""",
+        // ...or with its figure: "2000 paid", "paid 2000". Mirrors rules.py.
+        """^\W*(?:rs\.?|₹)?\s*\d[\d,]*(?:\.\d+)?\s*(?:rs|rupees|rupaye)?\s+paid\W*$""",
+        """^\W*paid\s+(?:rs\.?|₹)?\s*\d[\d,]*(?:\.\d+)?\W*$""",
         """\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b""",
         """\bmil\s+gaye?\b""",
         """\bjama\s+kar\w*\b""",
@@ -477,7 +480,11 @@ object RulesEngine {
         start: Int,
         lexicon: Set<String>,
     ): Double? {
-        fun numberRun(from: Int): Pair<Double?, Int> {
+        fun numberRun(start: Int): Pair<Double?, Int> {
+            // "bhej do 500 each": the "do" is "send it", not two. Read as part
+            // of the run it made the rate 502 and the bill Rs 1004.
+            var from = start
+            while (from < tokens.size && NumberParser.isVerbNotNumber(tokens, from)) from++
             var j = from
             while (j < tokens.size && NumberParser.isNumberToken(tokens[j].trim('.'))) j++
             if (j == from) return null to from
@@ -499,7 +506,14 @@ object RulesEngine {
         var i = start
         while (i < tokens.size) {
             val token = tokens[i].trim('.')
-            if (token == NumberParser.BOUNDARY) break
+            if (token == NumberParser.BOUNDARY) {
+                // "2 kurti bhej do, 500 each": the rate sits in the next
+                // clause. It is this item's only when nothing after it names
+                // another one. Mirrors rules.py.
+                if (tokens.drop(i + 1).any { matchItem(it.trim('.'), lexicon) != null }) break
+                i++
+                continue
+            }
             if (i > start && matchItem(token, lexicon) != null) break // belongs to that item
             if (NumberParser.isNumberToken(token)) {
                 val (value, j) = numberRun(i)
@@ -769,7 +783,9 @@ object RulesEngine {
             val number = whole(matched)
             val patterns = listOf(
                 Regex("${CURRENCY.pattern}\\s*$number", RegexOption.IGNORE_CASE),
-                Regex("$number\\s*${CURRENCY.pattern}", RegexOption.IGNORE_CASE),
+                // A marker with a number right after it is THAT number's
+                // prefix: in "bhej do ₹ 2000" the ₹ belongs to 2000.
+                Regex("$number\\s*${CURRENCY.pattern}(?!\\s*\\d)", RegexOption.IGNORE_CASE),
             )
             if (patterns.any { it.containsMatchIn(alone) }) return value to "currency-adjacent"
         }
@@ -782,8 +798,12 @@ object RulesEngine {
             val hit = window.find(isolated(norm, matched, numbers))
             // "2 kurti udhaar 3000": the words between the number and the mode
             // word name the thing it counts, so it is a quantity, not the bill.
-            if (hit != null && hit.groupValues[1].split(Regex("""\s+""")).filter { it.isNotBlank() }
-                    .none { matchItem(it, lexicon) != null }) return value to "mode-adjacent"
+            // ...and when another number sits in between, that one is closer
+            // to the mode word: "do kurti bhej do 2000 upi se" is Rs 2000.
+            val between = hit?.groupValues?.get(1)?.split(Regex("""\s+"""))?.filter { it.isNotBlank() }.orEmpty()
+            if (hit != null && between.none { matchItem(it, lexicon) != null } &&
+                between.none { NumberParser.isNumberToken(it) }
+            ) return value to "mode-adjacent"
         }
 
         // 3. Largest number not already consumed as an item quantity.

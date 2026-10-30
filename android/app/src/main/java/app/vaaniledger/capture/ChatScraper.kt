@@ -118,6 +118,26 @@ object ChatScraper {
     private val PHONE_ONLY = Regex("""^[+(]?[\d\s()+-]{7,20}$""")
 
     /**
+     * The labels on a photo, video, voice note or document bubble: "245 kB",
+     * "1.2 MB", "IMG-20261030-WA0004.jpg", "PDF • 2 pages", "0:42", "Photo".
+     * Each is its own TextView inside the list, shaped exactly like a
+     * message, and its numbers reached the engine as a price or a count.
+     * A caption typed under a photo is a real message and is kept.
+     */
+    private val MEDIA_PARTS = Regex(
+        """[^\s/\\]+\.(?:jpe?g|png|webp|heic|heif|gif|bmp|mp4|mov|3gp|mkv|avi|webm|pdf|docx?|xlsx?|pptx?|txt|csv|opus|ogg|mp3|m4a|aac|amr|wav|zip|rar|apk|vcf)\b""" +
+            """|\b\d+(?:[.,]\d+)?\s*(?:kb|mb|gb|bytes?)\b""" +
+            """|\b\d+\s*pages?\b|\b\d{1,2}:\d{2}(?::\d{2})?\b""" +
+            """|\b(?:photo|video|gif|sticker|voice message|voice note|audio|document|image|file|pdf|jpe?g|png|mp4|docx?|xlsx?)\b""" +
+            """|[•·|,()\-]""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** True when nothing but media chrome is left once its parts are removed. */
+    internal fun isMediaChrome(text: String): Boolean =
+        MEDIA_PARTS.containsMatchIn(text) && MEDIA_PARTS.replace(text, " ").isBlank()
+
+    /**
      * Extract everything that looks like a message from a window.
      *
      * @param screenWidth used to decide incoming vs outgoing by bubble side.
@@ -239,6 +259,7 @@ object ChatScraper {
         if (text.length < 2) return false
         if (TIME_PATTERN.matches(text) || DATE_PATTERN.matches(text)) return false
         if (PHONE_ONLY.matches(text)) return false
+        if (isMediaChrome(text)) return false
         if (CHROME_EXACT.any { lower == it }) return false
         if (SAVE_CONTACT_PROMPT.matches(lower)) return false
         if (CHROME_CONTAINS.any { lower.contains(it) }) return false

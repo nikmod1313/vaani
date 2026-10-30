@@ -82,6 +82,74 @@ class TestCountWords(unittest.TestCase):
             self.assertEqual(extract(text, category="kirana").amount, amount, text)
 
 
+class TestMediaIsIgnored(unittest.TestCase):
+    """A photo, voice note or document in the chat is not part of the order."""
+
+    def test_file_names_sizes_and_placeholders_carry_no_numbers(self):
+        for text, amount, qty in [
+            ("IMG-20261030-WA0004.jpg 245 kB 2 kurti bhej do 500 each", 1000.0, 2.0),
+            ("PDF • 2 pages • 1.2 MB  bill.pdf  1500 ka udhaar", 1500.0, None),
+            ("<Media omitted> 3 saree chahiye", None, 3.0),
+            ("VID-20261030-WA0001.mp4 (file attached) 2 kurti 1000", 1000.0, 2.0),
+        ]:
+            r = extract(text, category="apparel").to_dict()
+            self.assertEqual(r["amount"], amount, text)
+            if qty is not None:
+                self.assertEqual(r["line_items"][0]["quantity"], qty, text)
+
+    def test_media_alone_is_nothing(self):
+        for text in ["245 kB", "1.2 MB", "IMG-20261030-WA0004.jpg", "‎image omitted", "<Media omitted>"]:
+            r = extract(text, category="apparel")
+            self.assertIsNone(r.amount, text)
+            self.assertEqual(r.items, [], text)
+
+    def test_gigabytes_are_an_item_not_a_download(self):
+        """An electronics shop sells a 64 GB pendrive; that is not a file size."""
+        from app.extraction.numbers import normalise
+        self.assertIn("64", normalise("64 GB pendrive 2 chahiye"))
+
+
+class TestImperativeDoIsNotARate(unittest.TestCase):
+    """ "bhej do 500 each" made the rate 502 and the bill Rs 1004."""
+
+    def test_the_verb_is_not_added_to_the_price(self):
+        for text, amount in [
+            ("2 kurti bhej do 500 each", 1000.0), ("2 kurti de do 500 each", 1000.0),
+            ("3 saree bhej do 800 each", 2400.0), ("do kurti 500 each", 1000.0),
+        ]:
+            self.assertEqual(extract(text, category="apparel").amount, amount, text)
+
+    def test_a_rate_in_the_next_clause_prices_the_only_item(self):
+        self.assertEqual(extract("2 kurti bhej do, 500 each", category="apparel").amount, 1000.0)
+        # ...but never jumps over another item to reach this one.
+        r = extract("2 kurti 500 each, 3 saree 800 each", category="apparel")
+        self.assertEqual(r.amount, 3400.0)
+
+
+class TestRateQuotedPerKilo(unittest.TestCase):
+    """A real group chat: the rate quoted per kilo, the order in kilos, "200rs" glued."""
+
+    def test_spring_onions_two_kilo_at_200(self):
+        chat = [
+            at(0, "hello bhaiya"), at(1, "spring onions hai kya?"), at(1, "ha", shop=True),
+            at(1, "1kg ka 200rs", shop=True), at(2, "meko 2kg chaiye"), at(2, "Ok", shop=True),
+        ]
+        for category in ("kirana", "general"):
+            orders = resolve_all(chat, "Isha Agarwal", category)
+            self.assertEqual(len(orders), 1, category)
+            o = orders[0]
+            self.assertEqual((o.direction, o.amount), ("sale", 400.0), category)
+            line = o.items[0]
+            self.assertEqual(
+                (line.modifier, line.name, line.quantity, line.unit, line.unit_price),
+                ("spring", "onion", 2.0, "kg", 200.0), category,
+            )
+
+    def test_currency_written_onto_the_digits(self):
+        for text in ["200rs", "200rupaye", "₹200", "rs200", "200 rs", "200/-"]:
+            self.assertEqual(extract(text, category="kirana").amount, 200.0, text)
+
+
 class TestTypedLabels(unittest.TestCase):
     """What the edit sheet and the dashboard store when an item is typed."""
 

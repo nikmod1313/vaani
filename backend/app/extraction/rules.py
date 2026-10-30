@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .categories import Category, is_compound, items_for, modifiers_for, pharmacy_items, units_for
-from .numbers import BOUNDARY, find_numbers, normalise, tokenize
+from .numbers import BOUNDARY, find_numbers, is_number_token, normalise, tokenize
 
 
 class PaymentMode(str, Enum):
@@ -140,6 +140,9 @@ _PAYMENT_PHRASES = [
     r"\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae]|kar\s+d(?:i|ii|ia))\b",
     # A bare "paid" -- the whole message -- after a reminder.
     r"^\W*paid\W*$",
+    # ...or with its figure: "2000 paid", "₹2000 paid", "paid 2000".
+    r"^\W*(?:rs\.?|₹)?\s*\d[\d,]*(?:\.\d+)?\s*(?:rs|rupees|rupaye)?\s+paid\W*$",
+    r"^\W*paid\s+(?:rs\.?|₹)?\s*\d[\d,]*(?:\.\d+)?\W*$",
     r"\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b",
     r"\bmil\s+gaye?\b",
     # settling up
@@ -543,9 +546,13 @@ def _trailing_rate(
     The scan stops at a clause boundary or at the next item noun, so a rate
     belongs to one item and never leaks onto the one after it.
     """
-    from .numbers import is_number_token, parse_number_phrase
+    from .numbers import _is_verb_not_number, is_number_token, parse_number_phrase
 
     def number_run(i: int) -> tuple[float | None, int]:
+        # "bhej do 500 each": the "do" is "send it", not two. Read as part of
+        # the run it made the rate 502 and the bill Rs 1004.
+        while i < len(tokens) and _is_verb_not_number(tokens, i):
+            i += 1
         j = i
         while j < len(tokens) and is_number_token(tokens[j].strip(".")):
             j += 1
@@ -570,7 +577,14 @@ def _trailing_rate(
     while i < len(tokens):
         tok = tokens[i].strip(".")
         if tok == BOUNDARY:
-            break
+            # "2 kurti bhej do, 500 each": the rate sits in the next clause.
+            # It can only be this item's when nothing after it names another
+            # one -- otherwise it belongs to that item, and the scan stops.
+            rest = tokens[i + 1:]
+            if any(_match_item(t.strip("."), lexicon) is not None for t in rest):
+                break
+            i += 1
+            continue
         if i > start and _match_item(tok, lexicon) is not None:
             break   # the rate belongs to that item, not this one
         if is_number_token(tok):
@@ -858,7 +872,9 @@ def _pick_amount(
         number = _whole(matched)
         for pattern in (
             rf"{_CURRENCY.pattern}\s*{number}",
-            rf"{number}\s*{_CURRENCY.pattern}",
+            # A marker with a number right after it is THAT number's prefix:
+            # in "bhej do ₹ 2000" the ₹ belongs to 2000, not to the verb "do".
+            rf"{number}\s*{_CURRENCY.pattern}(?!\s*\d)",
         ):
             if re.search(pattern, alone, re.IGNORECASE):
                 return value, "currency-adjacent"
@@ -871,7 +887,14 @@ def _pick_amount(
         hit = re.search(window, _isolated(norm, matched, numbers))
         # "2 kurti udhaar 3000": the words between the number and the mode
         # word name the thing it counts, so it is a quantity, not the bill.
-        if hit and not any(_match_item(w, lexicon) for w in hit.group(1).split()):
+        # ...and when another number sits in between, that one is closer to
+        # the mode word: "do kurti bhej do 2000 upi se" is Rs 2000, not 2.
+        between = hit.group(1).split() if hit else []
+        if (
+            hit
+            and not any(_match_item(w, lexicon) for w in between)
+            and not any(is_number_token(w) for w in between)
+        ):
             return value, "mode-adjacent"
 
     # 3. Largest number not already consumed as an item quantity.

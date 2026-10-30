@@ -130,6 +130,29 @@ _PHONE = re.compile(
 )
 
 
+_MEDIA_EXTENSIONS = (
+    "jpe?g|png|webp|heic|heif|gif|bmp|mp4|mov|3gp|mkv|avi|webm|pdf|docx?|xlsx?|pptx?|txt|csv|"
+    "opus|ogg|mp3|m4a|aac|amr|wav|zip|rar|apk|vcf"
+)
+_MEDIA = re.compile(
+    # A file name: "IMG-20261030-WA0004.jpg", "PTT-20261030-WA0002.opus", "bill (2).pdf"
+    rf"[^\s/\\]+\.(?:{_MEDIA_EXTENSIONS})(?![\w])(?:\s*\(file attached\))?"
+    # A file size: "245 kB", "1.2 MB", "3,4 mb". Not GB: "64 GB pendrive"
+    # is an electronics shop's item, not a download.
+    r"|(?<![\w.])\d+(?:[.,]\d+)?\s*(?:kb|mb|bytes?)(?![\w])"
+    # A document's page count, beside its type or size: "2 pages •", "• 12 pages"
+    r"|(?<![\w.])\d+\s*pages?\s*[•·]|[•·]\s*\d+\s*pages?(?![\w])"
+    # Placeholders the exports write: "<Media omitted>", "image omitted", "sticker omitted"
+    r"|<\s*media omitted\s*>|\b(?:image|video|audio|sticker|gif|document|contact card|media)\s+omitted\b"
+)
+
+
+_PER_UNIT = re.compile(
+    r"(?<=\d)\s*/\s*(kgs?|kilos?|gms?|grams?|g|ltrs?|litres?|liters?|l|ml|pcs?|piece|pieces|packets?|pkts?|"
+    r"dozen|darjan|meters?|metres?|mtrs?|m|box|bottles?|strips?|nag)\b"
+)
+
+
 def normalise(text: str) -> str:
     """
     Lowercase, fold Devanagari digits to ASCII, and mark clause boundaries.
@@ -146,11 +169,24 @@ def normalise(text: str) -> str:
     # is read: +91 forms, bare 10-digit mobiles, "98765 43210", and the
     # bracketed and dashed forms a phone's contact UI writes.
     text = _PHONE.sub(" ", text)
+    # Neither is a photo, a voice note or a document. A chat with a picture
+    # in it carried "IMG-20261030-WA0004.jpg", "245 kB" or "PDF • 2 pages •
+    # 1.2 MB" into the text, and those numbers were read as a price or a
+    # count. File names, file sizes, page counts and "<Media omitted>" are
+    # removed before any number is read.
+    text = _MEDIA.sub(" ", text)
     # Detach currency markers from the digits they hug, so "₹250", "rs.250"
     # and "250/-" all yield a bare numeric token.
     text = re.sub(r"(₹|रु\.?)\s*(\d)", r"\1 \2", text)
     text = re.sub(r"\brs\.?\s*(\d)", r"rs \1", text)
     text = re.sub(r"(\d)\s*/-", r"\1 ", text)
+    # A slash before a unit is "per": "₹200/kg", "45/packet". Read as a
+    # clause break it left the rate with no unit, and "2 kilo" no price.
+    text = re.sub(_PER_UNIT, r" per \1", text)
+    # ...and the word written onto the digits: "200rs", "500rupaye". Left
+    # glued, "1kg ka 200rs" carried no price at all, and a quoted Rs 200/kg
+    # never reached the 2 kg the customer ordered.
+    text = re.sub(r"(?<=\d)(rs|rupees|rupaye|rupay|rupye|rupya|rupiya|inr)\b", r" \1", text)
     # Digit-group commas belong to the number, not the sentence: "1,250" and
     # the Indian "1,25,000". Left in, the comma became a clause boundary and
     # "total 1,250 hua" was read as Rs 250 -- a thousand rupees lost on one

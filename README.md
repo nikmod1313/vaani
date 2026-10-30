@@ -250,7 +250,7 @@ lied to someone about their money, and a listener cannot catch it.
 
 ## Traps already found and fixed — do not reintroduce these
 
-Twelve bugs so far, every one of which would have put a wrong number in
+Thirteen bugs so far, every one of which would have put a wrong number in
 someone's ledger. All have regression tests. The instructive classes:
 
 **Hindi words that are also verbs.** `do` means 2 but usually "send", so
@@ -299,6 +299,14 @@ while the order stayed udhaar. A later payment of no figure, or of the
 order's figure, now pays that order (`link_late_payments`, mirrored in
 Kotlin), and on the phone it switches the credit row's mode instead of adding
 a row (`PaymentLink`). A part payment stays separate. `TestLatePayments`.
+
+**Chat media was read as money.** A photo or document bubble put
+"IMG-…-WA0004.jpg", "245 kB" or "PDF • 2 pages" into the text, and those
+numbers became prices or counts. They are stripped before any number is read,
+and the screen reader skips media-only bubbles. Also fixed alongside: "bhej
+do 500 each" (the verb "do" added to the rate), "200rs" and "₹200/kg"
+written without spaces, and "2000 paid". `python3 -m eval.matrix` runs
+33,804 known-answer cases over all of this in about 30 seconds.
 
 **A fresh phone's first sync had no shop row.** Transactions and customers
 saved fine, but `/summary` 404'd on a shop that demonstrably had data —

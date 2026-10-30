@@ -67,7 +67,7 @@ _KIRANA = {
     "doodh", "dudh", "milk", "दूध", "dahi", "curd", "दही",
     "sabun", "soap", "साबुन", "detergent", "surf", "डिटर्जेंट",
     "biscuit", "biskut", "बिस्कुट", "maggi", "मैगी", "noodles",
-    "masala", "मसाला", "haldi", "हल्दी", "mirch", "मिर्च",
+    "masala", "मसाला", "haldi", "हल्दी", "mirch", "मिर्च", "mirchi", "chilli", "chili",
     "aalu", "aloo", "aalo", "alu", "potato", "आलू", "pyaz", "onion", "प्याज",
     "tamatar", "tomato", "टमाटर", "anda", "egg", "अंडा",
     "bread", "ब्रेड", "paneer", "पनीर", "ghee", "घी",
@@ -115,7 +115,7 @@ _KIRANA = {
 
 _APPAREL = {
     "kurti", "kurta", "कुर्ती", "कुर्ता", "saree", "sari", "साड़ी",
-    "salwar", "salwaar", "सलवार", "kameez", "कमीज़", "dupatta", "दुपट्टा",
+    "salwar", "salwaar", "सलवार", "kameez", "कमीज़", "dupatta", "दुपट्टा", "top", "टॉप",
     "lehenga", "लहंगा", "shirt", "शर्ट", "tshirt", "t-shirt", "टीशर्ट",
     "pant", "pants", "trouser", "trousers", "पैंट", "jeans", "जींस",
     "saya", "petticoat", "blouse", "ब्लाउज", "frock", "फ्रॉक",
@@ -230,6 +230,9 @@ _GROCERY = {
     "groundnut", "desi", "organic", "amul", "tata", "fortune", "aashirvaad",
     "patanjali", "mother", "britannia", "garam", "kali", "hari", "lal",
     "brown", "white", "fresh", "toned", "full", "double",
+    # Vegetable varieties: "spring onions" are not onions, "shimla mirch" is
+    # not mirch. Without these the khata read "onion 2kg".
+    "spring", "green", "red", "shimla", "sweet", "baby",
     # Brands said in front of the thing: "2 dettol soap", "lux sabun". Each
     # is also an item on its own ("1 dettol").
     "dettol", "lux", "lifebuoy", "vim", "rin", "surf", "colgate", "parle",

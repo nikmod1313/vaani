@@ -224,6 +224,15 @@ class ReviewActivity : Activity() {
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
             )
             addView(View(this@ReviewActivity), LinearLayout.LayoutParams(dp(10), 1))
+            // The same correction the confirm sheet's "Badlo" offers. Without
+            // it an order read off a chat could only be saved as read or
+            // skipped -- a wrong amount or item had to be saved and then
+            // fixed in the khata.
+            addView(
+                button("✎  ${sheetStrings.edit}", "", primary = false) { edit(card) },
+                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f),
+            )
+            addView(View(this@ReviewActivity), LinearLayout.LayoutParams(dp(10), 1))
             addView(
                 button("✓  ${t.save}", t.saveSub, primary = true) { decide(card, approve = true) },
                 LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.3f),
@@ -231,6 +240,57 @@ class ReviewActivity : Activity() {
         })
 
         return card
+    }
+
+    private val sheetStrings by lazy { Strings.of(ShopSettings.language(this)).sheets }
+
+    /**
+     * Correct an order before it is saved, in the same sheet the ledger uses.
+     *
+     * The corrected order replaces the card in place, still unsaved, so the
+     * shopkeeper sees exactly what Save will write and can change it again.
+     */
+    private fun edit(card: View) {
+        val item = outstanding[card] ?: return
+        val e = item.extraction
+        val dialog = android.app.AlertDialog.Builder(this).create()
+        val sheet = app.vaaniledger.overlay.EditSheetView(
+            context = this,
+            extraction = e.copy(customer = e.customer ?: item.customerName),
+            onSave = { corrected ->
+                dialog.dismiss()
+                replace(card, item.copy(extraction = corrected(e, corrected)))
+            },
+            onDismiss = { dialog.dismiss() },
+        )
+        dialog.setView(sheet)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        dialog.show()
+    }
+
+    /** The human's version wins; the engine's structure is kept only where the items were not touched. */
+    private fun corrected(e: Extraction, c: app.vaaniledger.overlay.EditSheetView.Corrected): Extraction {
+        val itemsChanged = c.items != e.items
+        return e.copy(
+            amount = c.amount ?: e.amount,
+            customer = c.customer ?: e.customer,
+            mode = c.mode,
+            direction = c.direction,
+            items = c.items,
+            // Edited labels are read back from the text by LineItems.fromLabels.
+            lineItems = if (itemsChanged) emptyList() else e.lineItems,
+            customerIsNew = if (c.customer != null && c.customer != e.customer) false else e.customerIsNew,
+        )
+    }
+
+    private fun replace(card: View, item: ReviewQueue.Pending) {
+        if (outstanding.remove(card) == null) return
+        val index = list.indexOfChild(card)
+        list.removeView(card)
+        val fresh = card(item)
+        outstanding[fresh] = item
+        list.addView(fresh, index.coerceAtLeast(0))
+        refreshHeading()
     }
 
     /** "3 × blue kurti @ ₹500" -- only the parts that were actually stated. */

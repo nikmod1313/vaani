@@ -27,7 +27,7 @@ object CategoryLexicon {
         "doodh", "dudh", "milk", "दूध", "dahi", "curd", "दही",
         "sabun", "soap", "साबुन", "detergent", "surf", "डिटर्जेंट",
         "biscuit", "biskut", "बिस्कुट", "maggi", "मैगी", "noodles",
-        "masala", "मसाला", "haldi", "हल्दी", "mirch", "मिर्च",
+        "masala", "मसाला", "haldi", "हल्दी", "mirch", "मिर्च", "mirchi", "chilli", "chili",
         "aalu", "aloo", "aalo", "alu", "potato", "आलू", "pyaz", "onion", "प्याज",
         "tamatar", "tomato", "टमाटर", "anda", "egg", "अंडा",
         "bread", "ब्रेड", "paneer", "पनीर", "ghee", "घी",
@@ -62,7 +62,7 @@ object CategoryLexicon {
 
     private val APPAREL = setOf(
         "kurti", "kurta", "कुर्ती", "कुर्ता", "saree", "sari", "साड़ी",
-        "salwar", "salwaar", "सलवार", "kameez", "कमीज़", "dupatta", "दुपट्टा",
+        "salwar", "salwaar", "सलवार", "kameez", "कमीज़", "dupatta", "दुपट्टा", "top", "टॉप",
         "lehenga", "लहंगा", "shirt", "शर्ट", "tshirt", "t-shirt", "टीशर्ट",
         "pant", "pants", "trouser", "trousers", "पैंट", "jeans", "जींस",
         "saya", "petticoat", "blouse", "ब्लाउज", "frock", "फ्रॉक",
@@ -187,6 +187,8 @@ object CategoryLexicon {
         "nestle", "nirma", "organic", "parle", "patanjali", "refined", "rin", "sarso",
         "sarson", "sona", "surf", "tata", "tide", "toned", "toor", "tuar", "urad", "vim",
         "white",
+        // Vegetable varieties: "spring onions" are not onions. Mirrors categories.py.
+        "spring", "green", "red", "shimla", "sweet", "baby",
     )
 
     private val STATIONERY_MODIFIERS = setOf(

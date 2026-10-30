@@ -66,6 +66,51 @@ class QuantitiesAndLatePaymentsTest {
     }
 
     @Test
+    fun `media in the chat carries no numbers`() {
+        for ((text, amount) in listOf(
+            "IMG-20261030-WA0004.jpg 245 kB 2 kurti bhej do 500 each" to 1000.0,
+            "PDF • 2 pages • 1.2 MB  bill.pdf  1500 ka udhaar" to 1500.0,
+            "VID-20261030-WA0001.mp4 (file attached) 2 kurti 1000" to 1000.0,
+        )) assertEquals(text, amount, lines(text).first)
+        assertEquals(3.0, lines("<Media omitted> 3 saree chahiye").second.single().second)
+        for (text in listOf("245 kB", "1.2 MB", "IMG-20261030-WA0004.jpg", "‎image omitted", "<Media omitted>")) {
+            val (amount, items) = lines(text)
+            assertEquals(text, null, amount)
+            assertTrue(text, items.isEmpty())
+        }
+        assertTrue(NumberParser.normalise("64 GB pendrive 2 chahiye").contains("64"))
+    }
+
+    @Test
+    fun `the imperative do is not added to a rate`() {
+        for ((text, amount) in listOf(
+            "2 kurti bhej do 500 each" to 1000.0, "2 kurti de do 500 each" to 1000.0,
+            "3 saree bhej do 800 each" to 2400.0, "do kurti 500 each" to 1000.0,
+            "2 kurti bhej do, 500 each" to 1000.0, "2 kurti 500 each, 3 saree 800 each" to 3400.0,
+        )) assertEquals(text, amount, lines(text).first)
+    }
+
+    @Test
+    fun `spring onions two kilo at 200 a kilo`() {
+        val t = LocalDateTime.of(2026, 10, 30, 23, 32)
+        fun turn(m: Long, body: String, shop: Boolean = false) =
+            Turn(sender = if (shop) "You" else "Isha Agarwal", body = body, timestamp = t.plusMinutes(m), isShopkeeper = shop, contentHash = "s$m$body")
+        val chat = listOf(
+            turn(0, "hello bhaiya"), turn(1, "spring onions hai kya?"), turn(1, "ha", true),
+            turn(1, "1kg ka 200rs", true), turn(2, "meko 2kg chaiye"), turn(2, "Ok", true),
+        )
+        for (category in listOf(ShopCategory.KIRANA, ShopCategory.GENERAL)) {
+            val o = ConversationResolver.resolveAll(chat, "Isha Agarwal", category).single()
+            assertEquals("sale" to 400.0, o.direction to o.amount)
+            val line = o.items.single()
+            assertEquals(listOf<Any?>("spring", "onion", 2.0, "kg", 200.0), listOf(line.modifier, line.name, line.quantity, line.unit, line.unitPrice))
+        }
+        for (text in listOf("200rs", "200rupaye", "₹200", "rs200", "200 rs", "200/-")) {
+            assertEquals(text, 200.0, OfflineExtractor.extract(text, category = ShopCategory.KIRANA).amount)
+        }
+    }
+
+    @Test
     fun `a typed leading count becomes the quantity`() {
         for ((typed, label) in listOf(
             "do kurti" to "kurti 2", "Do Kurti" to "Kurti 2", "2 kurti" to "kurti 2",
