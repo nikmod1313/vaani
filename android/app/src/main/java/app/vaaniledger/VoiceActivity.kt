@@ -48,7 +48,70 @@ class VoiceActivity : Activity() {
         }
     }
 
+    private var recognizer: android.speech.SpeechRecognizer? = null
+    private var listening: android.app.AlertDialog? = null
+
+    /**
+     * Google's recogniser, driven from inside the app: no Google pop-up,
+     * words appear as they are heard. Phones without it fall back to the
+     * system dialog, and that to typing.
+     */
     private fun listen() {
+        if (!android.speech.SpeechRecognizer.isRecognitionAvailable(this)) return listenWithDialog()
+        val en = app.vaaniledger.data.ShopSettings.language(this) == app.vaaniledger.data.AppLanguage.EN
+        val heard = android.widget.TextView(this).apply {
+            text = if (en) "Listening… speak the entry" else "सुन रहे हैं… एंट्री बोलिए"
+            textSize = 18f
+            val pad = (22 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        val sr = android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+        recognizer = sr
+        listening = android.app.AlertDialog.Builder(this)
+            .setTitle(if (en) "Speak" else "बोलिए")
+            .setView(heard)
+            .setPositiveButton(if (en) "Done" else "हो गया") { _, _ -> sr.stopListening() }
+            .setNegativeButton(if (en) "Cancel" else "रहने दें") { _, _ -> sr.cancel(); finish() }
+            .setOnCancelListener { sr.cancel(); finish() }
+            .show()
+        sr.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+            override fun onPartialResults(partial: Bundle?) {
+                partial?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()?.takeIf { it.isNotBlank() }?.let { heard.text = it }
+            }
+            override fun onResults(results: Bundle?) {
+                listening?.setOnCancelListener(null); listening?.dismiss()
+                val said = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull()?.trim()
+                if (said.isNullOrBlank()) typeInstead() else { send(said); finish() }
+            }
+            override fun onError(error: Int) {
+                listening?.setOnCancelListener(null); listening?.dismiss()
+                android.util.Log.w("VaaniVoice", "recogniser error $error")
+                typeInstead()
+            }
+        })
+        sr.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, app.vaaniledger.data.ShopSettings.language(this@VoiceActivity).wire)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            // A shopkeeper pauses mid-sentence to check a price.
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L)
+        })
+    }
+
+    override fun onDestroy() {
+        recognizer?.destroy()
+        super.onDestroy()
+    }
+
+    private fun listenWithDialog() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
