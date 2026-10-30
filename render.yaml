@@ -1,0 +1,32 @@
+# The hosted Vaani dashboard on Render (https://render.com).
+#
+# Render -> New -> Blueprint -> pick this repository. It reads this file.
+# VAANI_PUBLIC=1 makes every shop need its phone's key or its dashboard code;
+# without it the server trusts its Wi-Fi like the shop counter version does.
+#
+# The disk keeps the khata across restarts (Starter plan). On the free plan
+# there is no disk: the server forgets on every restart, and each phone sends
+# its whole khata and its dashboard code again on its next sync.
+services:
+  - type: web
+    name: vaani-dashboard
+    runtime: python
+    plan: starter
+    region: singapore
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: VAANI_PUBLIC
+        value: "1"
+      - key: VAANI_DATA
+        value: /var/data
+      - key: VAANI_SECRET
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+    disk:
+      name: vaani-data
+      mountPath: /var/data
+      sizeGB: 1

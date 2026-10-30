@@ -127,6 +127,8 @@ object ConversationResolver {
 
     /** ...and a price for ONE: "450 ki ek", "10 ka ek", "500 each". */
     private val RATE = listOf(
+        // "450 rs kilo": money, then the unit it buys. Mirrors conversation.py.
+        """\b(?:rs|rupees|rupaye|rupay|rupaiye)\s+(?:kilo|kg|kilogram|litre|liter|ltr|dozen|darjan|piece|pc|meter|mtr)\b""",
         """\beach\b""", """\bper\b""", """\bprati\b""", """\b(?:ka|ki|ke)\s+(?:ek|1)\b""",
         """\b(?:ek|1)\s+(?:ka|ki|ke)\b""", """\bpiece\b""", """\bonwards\b""", """\bse\s+shuru\b""",
         """(?<!\S)प्रति""", """(?<!\S)(?:का|की)\s+एक""",
@@ -391,6 +393,8 @@ object ConversationResolver {
         var shopRunQty: Double? = null
         var previousSpeakerWasShop: Boolean? = null
         var commitTurn: Turn? = null
+        // The turn that said HOW MANY: "I want 2 kg" then "udhaar likh lo".
+        var countTurn: Turn? = null
         var commitRules: RulesEngine.RuleResult? = null
         var commitIndex = -1
         var lastItemCommitIndex = -1
@@ -462,6 +466,7 @@ object ConversationResolver {
 
             if (turn.isCustomer && (isCommitment(turn.body) || isImplicitOrder(turn.body, rules))) {
                 commitTurn = turn; commitRules = rules; commitIndex = index
+                if (bareQuantity(turn.body, category).first != null) countTurn = turn
                 if (rules.items.isNotEmpty()) {
                     rules.items.forEach { mergeItem(ordered, it) }
                     lastItemCommitIndex = index
@@ -509,7 +514,7 @@ object ConversationResolver {
             thread, category, topics, ordered, topicTurn, commitTurn, commitRules,
             quotedRate, quotedTotal, quotedTotalQty,
             if (shopTotalIndex > lastItemCommitIndex) shopTotal else null,
-            customerAmount, signals, excludeModeFrom = paymentIndex,
+            customerAmount, signals, excludeModeFrom = paymentIndex, countTurn = countTurn,
         )
 
         val entry = creditEntry
@@ -591,6 +596,7 @@ object ConversationResolver {
         customerAmount: Double?,
         signals: List<String>,
         excludeModeFrom: Int,
+        countTurn: Turn? = null,
     ): ResolvedOrder? {
         if (commit == null || commitResult == null) return null
         // Committed to something we cannot name.
@@ -618,7 +624,7 @@ object ConversationResolver {
 
         // ---- the quantity -------------------------------------------------
         if (items.size == 1 && items[0].quantity == null) {
-            val (quantity, unit) = bareQuantity(commit.body, category)
+            val (quantity, unit) = bareQuantity((countTurn ?: commit).body, category)
             if (quantity != null) {
                 items[0] = items[0].copy(quantity = quantity, unit = unit ?: items[0].unit)
                 uniqueSignals.add("quantity-from-commitment")

@@ -45,7 +45,14 @@ from .store import LedgerStore, Transaction
 from .summary import SUPPORTED, compose
 from .tts import SarvamTTS
 
-DATA = Path("data")
+# Where the ledger lives. A hosted deploy points this at its persistent disk.
+DATA = Path(os.environ.get("VAANI_DATA", "data"))
+
+# PUBLIC: the server is on the open internet (the hosted dashboard). Every
+# shop's data then needs proof: the phone's own key, or a session opened with
+# the shop's dashboard code. Off by default, so a server on the shop's Wi-Fi
+# behaves exactly as before -- pairing, no codes.
+PUBLIC = os.environ.get("VAANI_PUBLIC", "").strip().lower() in ("1", "true", "yes")
 
 app = FastAPI(
     title="VaaniLedger API",
@@ -163,6 +170,9 @@ class SyncRequest(BaseModel):
     transactions: list[TransactionModel] = Field(default_factory=list)
     # The phone's whole khata: the server keeps nothing else for this shop.
     full: bool = False
+    # Hash of the shop's current dashboard code, sent on every sync so a
+    # server that lost its disk (or a fresh deploy) knows the code again.
+    dashboard_code_hash: str | None = None
 
 
 class CorrectionRequest(BaseModel):
@@ -246,6 +256,92 @@ def _order_to_dict(order: ResolvedOrder, category: str) -> dict:
 
 
 # --------------------------------------------------------------------------
+# Access (hosted dashboard)
+# --------------------------------------------------------------------------
+#
+# Two ways to prove a request may touch a shop, checked only when PUBLIC:
+#
+#   the PHONE sends its own secret key (X-Vaani-Key). The first key a shop
+#   sees is the one it keeps -- trust on first use -- and only its hash is
+#   stored.
+#
+#   a BROWSER sends a session (Authorization: Bearer ...) it got by typing the
+#   shop's dashboard code. The session is signed with the server's secret and
+#   names the code it came from, so a new code from the phone locks every
+#   browser holding the old one out.
+
+import hashlib as _hashlib
+import hmac as _hmac
+import secrets as _secrets
+import time as _time
+
+SECRET = os.environ.get("VAANI_SECRET") or _secrets.token_hex(32)
+
+
+def _digest(value: str) -> str:
+    return _hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def normalise_code(code: str) -> str:
+    """"vk7q-m2pd", "VK7Q M2PD" and "vk7qm2pd" are one code."""
+    return "".join(ch for ch in code.upper() if ch.isalnum())
+
+
+def code_hash(code: str) -> str:
+    return _digest("vaani-dashboard-code:" + normalise_code(code))
+
+
+def _session_for(shop_id: str, at: str) -> str:
+    body = f"{shop_id}|{at}"
+    sig = _hmac.new(SECRET.encode(), body.encode(), _hashlib.sha256).hexdigest()
+    return (body.encode().hex()) + "." + sig
+
+
+def _session_shop(token: str) -> str | None:
+    """The shop a session opens, if it is genuine and its code still current."""
+    try:
+        raw, sig = token.split(".", 1)
+        body = bytes.fromhex(raw).decode()
+        shop_id, at = body.split("|", 1)
+    except Exception:
+        return None
+    good = _hmac.new(SECRET.encode(), body.encode(), _hashlib.sha256).hexdigest()
+    if not _hmac.compare_digest(good, sig):
+        return None
+    shop = STORE.get_shop(shop_id)
+    if not shop or not shop.get("access_code_at") or shop["access_code_at"] != at:
+        return None
+    return shop_id
+
+
+def _device_ok(request: Request, shop_id: str, claim: bool) -> bool:
+    key = request.headers.get("x-vaani-key", "").strip()
+    if len(key) < 16:
+        return False
+    shop = STORE.get_shop(shop_id)
+    stored = shop.get("device_key_hash") if shop else None
+    if stored:
+        return _hmac.compare_digest(stored, _digest(key))
+    if claim:
+        STORE.set_device_key_hash(shop_id, _digest(key))
+        return True
+    return False
+
+
+def authorize(request: Request, shop_id: str | None, *, phone_only: bool = False, claim: bool = False) -> None:
+    """Raise 401 unless this request may touch shop_id. No-op off the internet."""
+    if not PUBLIC or not shop_id:
+        return
+    if _device_ok(request, shop_id, claim):
+        return
+    if not phone_only:
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer ") and _session_shop(auth[7:].strip()) == shop_id:
+            return
+    raise HTTPException(401, "Enter this shop's dashboard code to see it.")
+
+
+# --------------------------------------------------------------------------
 # Endpoints
 # --------------------------------------------------------------------------
 
@@ -257,12 +353,15 @@ def health() -> dict:
         "stage2": _layer.model if LLM else "unavailable (rules-only)",
         "tts": "sarvam bulbul:v3" if TTS.available() else "unavailable (text only)",
         "corrections": len(CORRECTIONS),
+        # The dashboard asks for a code instead of offering Wi-Fi pairing.
+        "public": PUBLIC,
     }
 
 
 @app.post("/extract")
-def extract_one(req: ExtractRequest) -> dict:
+def extract_one(req: ExtractRequest, request: Request) -> dict:
     """Single message -> transaction candidate with per-field confidence."""
+    authorize(request, req.shop_id, phone_only=True)
     result = extract(
         req.text,
         known_customers=_customers_for(req.shop_id, req.known_customers),
@@ -274,8 +373,9 @@ def extract_one(req: ExtractRequest) -> dict:
 
 
 @app.post("/extract/batch")
-def extract_many(req: BatchRequest) -> dict:
+def extract_many(req: BatchRequest, request: Request) -> dict:
     """Bulk path -- many blocks, one model request."""
+    authorize(request, req.shop_id, phone_only=True)
     results = extract_batch(
         [b.text for b in req.blocks],
         known_customers=_customers_for(req.shop_id, req.known_customers),
@@ -287,7 +387,7 @@ def extract_many(req: BatchRequest) -> dict:
 
 
 @app.post("/ingest/export")
-def ingest_export(req: IngestRequest) -> dict:
+def ingest_export(req: IngestRequest, request: Request) -> dict:
     """
     Ingest a WhatsApp chat export.
 
@@ -310,6 +410,7 @@ def ingest_export(req: IngestRequest) -> dict:
     Deliberately does not advance the cursor -- the client does that once the
     user approves the review queue, so a crash mid-review cannot lose orders.
     """
+    authorize(request, req.shop_id, phone_only=True)
     cursor = ChatCursor(chat_id=req.chat_id)
     if req.cursor:
         cursor.last_timestamp = req.cursor.last_timestamp
@@ -404,7 +505,7 @@ def ingest_export(req: IngestRequest) -> dict:
 
 
 @app.post("/ingest/screen")
-def ingest_screen(req: ScreenRequest) -> dict:
+def ingest_screen(req: ScreenRequest, request: Request) -> dict:
     """
     Ingest messages read off the screen by the accessibility capture.
 
@@ -417,6 +518,7 @@ def ingest_screen(req: ScreenRequest) -> dict:
     That is the whole reason the two lanes share a cursor rather than
     keeping one each.
     """
+    authorize(request, req.shop_id, phone_only=True)
     cursor = ChatCursor(chat_id=req.chat_id)
     if req.cursor:
         cursor.last_timestamp = req.cursor.last_timestamp
@@ -487,13 +589,14 @@ def categories() -> dict:
 
 
 @app.post("/sync")
-def sync(req: SyncRequest) -> dict:
+def sync(req: SyncRequest, request: Request) -> dict:
     """
     Bidirectional sync. Idempotent by client-generated transaction id.
 
     Retrying a batch after a dropped connection updates rows; it never
     invents money.
     """
+    authorize(request, req.shop_id, phone_only=True, claim=True)
     # Name the shop properly when the client knows it; _ensure_shop would
     # otherwise leave the id standing in as the name.
     if req.shop_name or req.shop_category:
@@ -522,17 +625,29 @@ def sync(req: SyncRequest) -> dict:
     accepted, duplicates = STORE.save_many(incoming)
     removed = STORE.keep_only(req.shop_id, {t.id for t in incoming}) if req.full else 0
 
+    # Only a changed code moves the stamp sessions are tied to, so an
+    # ordinary sync never logs a browser out.
+    if req.dashboard_code_hash is not None:
+        current = (STORE.get_shop(req.shop_id) or {}).get("access_code_hash")
+        wanted = req.dashboard_code_hash or None
+        if wanted != current:
+            STORE.set_access_code(req.shop_id, wanted)
+
     since = req.since.isoformat(timespec="seconds") if req.since else None
     return {
         "accepted": accepted,
         "duplicates": duplicates,
         "removed": removed,
         "transactions": STORE.changed_since(req.shop_id, since),
+        # How many rows the server holds. The phone resends its whole khata
+        # when this reads 0 though it has synced before: the server lost it.
+        "server_count": STORE.transaction_count(req.shop_id),
     }
 
 
 @app.get("/shops/{shop_id}/summary")
-def shop_summary(shop_id: str, days: int = 14) -> dict:
+def shop_summary(shop_id: str, request: Request, days: int = 14) -> dict:
+    authorize(request, shop_id)
     """KPIs, the daily series (14 days unless asked), and per-customer balances."""
     if not STORE.get_shop(shop_id):
         raise HTTPException(404, f"unknown shop {shop_id!r}")
@@ -542,6 +657,7 @@ def shop_summary(shop_id: str, days: int = 14) -> dict:
 @app.get("/summary/narrate")
 def narrate(
     shop_id: str,
+    request: Request,
     lang: str = "hi-IN",
     speaker: str = "anushka",
 ) -> dict:
@@ -554,6 +670,7 @@ def narrate(
     With no Sarvam key, returns the text anyway so the app can fall back to
     Android's on-device TextToSpeech.
     """
+    authorize(request, shop_id)
     if not STORE.get_shop(shop_id):
         raise HTTPException(404, f"unknown shop {shop_id!r}")
     if lang not in SUPPORTED:
@@ -598,13 +715,14 @@ def audio(filename: str) -> FileResponse:
 
 
 @app.post("/corrections")
-def add_correction(req: CorrectionRequest) -> dict:
+def add_correction(req: CorrectionRequest, request: Request) -> dict:
     """
     Record a Badlo.
 
     Stored as a (raw_text -> corrected_json) pair and retrieved later as a
     per-shop few-shot example. This is the learning loop.
     """
+    authorize(request, req.shop_id, phone_only=True)
     CORRECTIONS.add(
         raw_text=req.raw_text,
         corrected=req.corrected,
@@ -620,6 +738,8 @@ def add_correction(req: CorrectionRequest) -> dict:
 @app.post("/shops/{shop_id}/seed")
 def seed(shop_id: str, days: int = 90) -> dict:
     """Load demo data. Never present on an empty database."""
+    if PUBLIC:
+        raise HTTPException(404, "not available on the hosted dashboard")
     return STORE.seed(shop_id, days=days)
 
 
@@ -642,12 +762,19 @@ def _lan_address(port: int) -> str:
 
 @app.on_event("startup")
 async def _announce() -> None:
-    await discovery.start(int(os.environ.get("VAANI_PORT", "8000")))
+    if not PUBLIC:   # nothing to announce on the internet
+        await discovery.start(int(os.environ.get("VAANI_PORT", "8000")))
 
 
 @app.on_event("shutdown")
 async def _unannounce() -> None:
     await discovery.stop()
+
+
+def _no_pairing_online() -> None:
+    """Wi-Fi pairing picks a shop with no proof; online, the dashboard code does that."""
+    if PUBLIC:
+        raise HTTPException(404, "use the dashboard code from the phone")
 
 
 def _expire_pairs() -> None:
@@ -661,6 +788,7 @@ def pair_new(request: Request) -> dict:
     """A fresh six-digit code for this browser to show."""
     import secrets
 
+    _no_pairing_online()
     _expire_pairs()
     code = f"{secrets.randbelow(1_000_000):06d}"
     while code in PAIRS:
@@ -678,6 +806,7 @@ def pair_new(request: Request) -> dict:
 @app.get("/pair/{code}")
 def pair_status(code: str) -> dict:
     """Polled by the dashboard until the phone has typed the code."""
+    _no_pairing_online()
     _expire_pairs()
     pair = PAIRS.get(code)
     if pair is None:
@@ -697,6 +826,7 @@ class PairClaim(BaseModel):
 
 @app.post("/pair/claim")
 def pair_claim(req: PairClaim) -> dict:
+    _no_pairing_online()
     _expire_pairs()
     pair = PAIRS.get(req.code.strip())
     if pair is None:
@@ -711,6 +841,60 @@ def pair_claim(req: PairClaim) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Dashboard code: made on the phone, typed on the website.
+# ---------------------------------------------------------------------------
+
+
+class DashboardCode(BaseModel):
+    # The code itself, or empty to switch online access off.
+    code: str = ""
+
+
+@app.post("/shops/{shop_id}/dashboard-code")
+def set_dashboard_code(shop_id: str, body: DashboardCode, request: Request) -> dict:
+    """The phone registers its new code. Every browser on the old one is signed out."""
+    authorize(request, shop_id, phone_only=True, claim=True)
+    code = normalise_code(body.code)
+    if code and len(code) < 8:
+        raise HTTPException(422, "a dashboard code has at least 8 letters and digits")
+    STORE.set_access_code(shop_id, code_hash(code) if code else None)
+    return {"ok": True, "active": bool(code)}
+
+
+class Redeem(BaseModel):
+    code: str
+
+
+# Wrong codes per address, to make guessing pointless: 10 tries per 15 minutes.
+_FAILS: dict[str, list[float]] = {}
+_FAIL_LIMIT, _FAIL_WINDOW = 10, 15 * 60
+
+
+def _client(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "?")
+
+
+@app.post("/dashboard/redeem")
+def redeem_code(body: Redeem, request: Request) -> dict:
+    """Swap a dashboard code for a session on that shop."""
+    who, now = _client(request), _time.time()
+    recent = [t for t in _FAILS.get(who, []) if now - t < _FAIL_WINDOW]
+    if len(recent) >= _FAIL_LIMIT:
+        raise HTTPException(429, "Too many wrong codes. Try again in 15 minutes.")
+    shop = STORE.shop_for_access_code(code_hash(body.code)) if normalise_code(body.code) else None
+    if not shop or not shop.get("access_code_at"):
+        _FAILS[who] = recent + [now]
+        raise HTTPException(404, "That code is not right. Check it on the phone: Settings, Dashboard code.")
+    _FAILS.pop(who, None)
+    return {
+        "token": _session_for(shop["id"], shop["access_code_at"]),
+        "shop_id": shop["id"],
+        "shop_name": shop.get("name") or shop["id"],
+    }
+
+
+# ---------------------------------------------------------------------------
 # The dashboard's working surface: khata, price list, entries.
 # ---------------------------------------------------------------------------
 
@@ -722,9 +906,10 @@ def _shop_or_404(shop_id: str) -> None:
 
 @app.get("/shops/{shop_id}/transactions")
 def shop_transactions(
-    shop_id: str, q: str = "", direction: str | None = None,
+    shop_id: str, request: Request, q: str = "", direction: str | None = None,
     customer: str | None = None, limit: int = 200,
 ) -> dict:
+    authorize(request, shop_id)
     _shop_or_404(shop_id)
     return {"transactions": STORE.transactions(shop_id, q, direction, customer, limit)}
 
@@ -739,8 +924,9 @@ class DashboardEntry(BaseModel):
 
 
 @app.post("/shops/{shop_id}/transactions")
-def add_transaction(shop_id: str, entry: DashboardEntry) -> dict:
+def add_transaction(shop_id: str, entry: DashboardEntry, request: Request) -> dict:
     """An entry typed at the computer. The phone pulls it down on its next sync."""
+    authorize(request, shop_id)
     _shop_or_404(shop_id)
     if entry.direction not in ("sale", "payment") or entry.mode not in ("cash", "upi", "udhaar"):
         raise HTTPException(422, "direction must be sale|payment, mode cash|upi|udhaar")
@@ -753,14 +939,20 @@ def add_transaction(shop_id: str, entry: DashboardEntry) -> dict:
 
 
 @app.delete("/transactions/{tx_id}")
-def delete_transaction(tx_id: str) -> dict:
+def delete_transaction(tx_id: str, request: Request) -> dict:
     """Soft delete -- the phone hides it too on its next sync."""
+    if PUBLIC:
+        shop_id = STORE.shop_of_transaction(tx_id)
+        if shop_id is None:
+            raise HTTPException(404, "no such entry")
+        authorize(request, shop_id)
     STORE.soft_delete(tx_id)
     return {"ok": True}
 
 
 @app.get("/shops/{shop_id}/items")
-def shop_items(shop_id: str, days: int = 30) -> dict:
+def shop_items(shop_id: str, request: Request, days: int = 30) -> dict:
+    authorize(request, shop_id)
     _shop_or_404(shop_id)
     return {"items": STORE.top_items(shop_id, days)}
 
@@ -777,13 +969,15 @@ class CataloguePayload(BaseModel):
 
 
 @app.get("/shops/{shop_id}/catalogue")
-def get_catalogue(shop_id: str) -> dict:
+def get_catalogue(shop_id: str, request: Request) -> dict:
+    authorize(request, shop_id)
     return STORE.catalogue(shop_id)
 
 
 @app.put("/shops/{shop_id}/catalogue")
-def put_catalogue(shop_id: str, body: CataloguePayload) -> dict:
+def put_catalogue(shop_id: str, body: CataloguePayload, request: Request) -> dict:
     """Last writer wins; the reply is whichever list is newer."""
+    authorize(request, shop_id, claim=True)
     return STORE.put_catalogue(shop_id, [i.model_dump() for i in body.items], body.updated_at)
 
 

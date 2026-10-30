@@ -130,6 +130,8 @@ _TOTAL_PATTERNS = [
 ]
 # ...and a price for ONE: "450 ki ek", "10 ka ek", "500 each".
 _RATE_PATTERNS = [
+    # "450 rs kilo", "200 rupaye kilo": money, then the unit it buys.
+    r"\b(?:rs|rupees|rupaye|rupay|rupaiye)\s+(?:kilo|kg|kilogram|litre|liter|ltr|dozen|darjan|piece|pc|meter|mtr)\b",
     r"\beach\b", r"\bper\b", r"\bprati\b", r"\b(?:ka|ki|ke)\s+(?:ek|1)\b",
     r"\b(?:ek|1)\s+(?:ka|ki|ke)\b", r"\bpiece\b", r"\bonwards\b", r"\bse\s+shuru\b",
     r"(?<!\S)प्रति", r"(?<!\S)(?:का|की)\s+एक",
@@ -490,6 +492,7 @@ def resolve_thread(
     shop_run_qty: float | None = None
     previous_speaker_was_shop: bool | None = None
     commit_turn: Turn | None = None
+    count_turn: Turn | None = None
     commit_rules = None
     commit_index = -1
     last_item_commit_index = -1
@@ -588,6 +591,11 @@ def resolve_thread(
             is_commitment(turn.body) or is_implicit_order(turn.body, rules)
         ):
             commit_turn, commit_rules, commit_index = turn, rules, index
+            # The turn that said HOW MANY. "I want 2 kg" then "udhaar likh lo"
+            # is two commitments; the second names no number, and reading the
+            # count from it lost the 2 kg -- the bill came out as one kilo.
+            if _bare_quantity(turn.body, category)[0] is not None:
+                count_turn = turn
             if rules.items:
                 for named in rules.items:
                     _merge_item(ordered, named)
@@ -635,6 +643,7 @@ def resolve_thread(
         shop_total if shop_total_index > last_item_commit_index else None,
         customer_amount, signals,
         exclude_mode_from=payment_index,
+        count_turn=count_turn,
     )
 
     if sale is None and credit_entry is not None:
@@ -706,6 +715,7 @@ def _resolve_sale(
     customer_amount: float | None,
     signals: list[str],
     exclude_mode_from: int = -1,
+    count_turn: Turn | None = None,
 ) -> ResolvedOrder | None:
     if commit_turn is None or commit_rules is None:
         return None
@@ -757,7 +767,7 @@ def _resolve_sale(
     # that; against "yellow kurti and blue kurti" it is genuinely ambiguous,
     # and splitting or duplicating it would invent a quantity.
     if len(items) == 1 and items[0].quantity is None:
-        quantity, unit = _bare_quantity(commit_turn.body, category)
+        quantity, unit = _bare_quantity((count_turn or commit_turn).body, category)
         if quantity is not None:
             items[0].quantity = quantity
             items[0].unit = unit or items[0].unit

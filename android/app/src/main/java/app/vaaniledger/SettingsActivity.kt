@@ -133,6 +133,12 @@ class SettingsActivity : Activity() {
                 if (en) "Type the code shown on the dashboard" else "डैशबोर्ड पर दिखा कोड डालिए",
             ) { pairComputer() },
             settingRow(
+                LineIcon.Glyph.QR, if (en) "Dashboard code" else "डैशबोर्ड कोड",
+                app.vaaniledger.data.DashboardAccess.code(this)?.let {
+                    if (en) "$it — opens your khata on the website" else "$it — इससे वेबसाइट पर आपका खाता खुलता है"
+                } ?: if (en) "Make a code to open your khata on the website" else "वेबसाइट पर खाता खोलने के लिए कोड बनाइए",
+            ) { dashboardCode() },
+            settingRow(
                 LineIcon.Glyph.GLOBE, if (en) "Your dashboard" else "आपका डैशबोर्ड",
                 if (en) "http://vaani.local:8000 — open it on a computer on this Wi-Fi. Tap to share."
                 else "http://vaani.local:8000 — इसी Wi-Fi के कंप्यूटर पर खोलिए। भेजने के लिए टैप करें।",
@@ -538,6 +544,102 @@ class SettingsActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    /**
+     * The code that opens this shop's khata on the hosted dashboard.
+     *
+     * Made here, registered with the server, then shown big enough to read
+     * out. It works until a new one is made, which signs every browser that
+     * used the old one out -- the answer to "I gave the code to someone I
+     * shouldn't have".
+     */
+    private fun dashboardCode() {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        val code = app.vaaniledger.data.DashboardAccess.code(this)
+        val site = ServerSettings.baseUrl(this).trimEnd('/')
+        if (code == null) {
+            AlertDialog.Builder(this)
+                .setTitle(if (en) "Dashboard code" else "डैशबोर्ड कोड")
+                .setMessage(
+                    if (en) "Make a code, then type it on the website ($site) to see this khata from any computer. Anyone with the code can see and add entries, so share it only with people you trust."
+                    else "कोड बनाइए, फिर वेबसाइट ($site) पर डालकर किसी भी कंप्यूटर से यह खाता देखिए। कोड जिसके पास होगा वह खाता देख और एंट्री जोड़ सकता है — भरोसेमंद लोगों को ही दीजिए।"
+                )
+                .setPositiveButton(if (en) "Make code" else "कोड बनाइए") { _, _ -> registerDashboardCode(app.vaaniledger.data.DashboardAccess.newCode()) }
+                .setNegativeButton(if (en) "Cancel" else "रहने दें", null)
+                .show()
+            return
+        }
+        val big = text(code, 34f, Theme.primary, Type.display(this)).apply {
+            gravity = Gravity.CENTER
+            letterSpacing = 0.12f
+            setTextIsSelectable(true)
+            setPadding(0, dp(8), 0, dp(4))
+        }
+        val holder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(6), dp(22), 0)
+            addView(big)
+            addView(text(site, 14f, Theme.muted).apply { gravity = Gravity.CENTER; setTextIsSelectable(true) })
+        }
+        AlertDialog.Builder(this)
+            .setTitle(if (en) "Dashboard code" else "डैशबोर्ड कोड")
+            .setMessage(
+                if (en) "Open the website on any computer and type this code. It keeps working until you make a new one."
+                else "किसी भी कंप्यूटर पर वेबसाइट खोलिए और यह कोड डालिए। नया कोड बनाने तक यही चलेगा।"
+            )
+            .setView(holder)
+            .setPositiveButton(if (en) "Share" else "भेजें") { _, _ ->
+                val body = if (en) "Vaani khata of ${ShopSettings.name(this)}:\nOpen $site and type the code $code"
+                else "${ShopSettings.name(this)} का Vaani खाता:\n$site खोलिए और कोड $code डालिए"
+                startActivity(Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, body),
+                    if (en) "Send the dashboard code" else "डैशबोर्ड कोड भेजें",
+                ))
+            }
+            .setNeutralButton(if (en) "New code" else "नया कोड") { _, _ ->
+                AlertDialog.Builder(this)
+                    .setTitle(if (en) "Make a new code?" else "नया कोड बनाएँ?")
+                    .setMessage(
+                        if (en) "Everyone using $code on the website is signed out. Use this if the code reached the wrong person."
+                        else "वेबसाइट पर $code से खुला खाता सबके लिए बंद हो जाएगा। कोड ग़लत हाथ में गया हो तो यही कीजिए।"
+                    )
+                    .setPositiveButton(if (en) "New code" else "नया कोड") { _, _ -> registerDashboardCode(app.vaaniledger.data.DashboardAccess.newCode()) }
+                    .setNeutralButton(if (en) "Turn off" else "बंद करें") { _, _ -> registerDashboardCode(null) }
+                    .setNegativeButton(if (en) "Cancel" else "रहने दें", null)
+                    .show()
+            }
+            .setNegativeButton(if (en) "Close" else "बंद करें", null)
+            .show()
+    }
+
+    /** Tell the server first; keep the code only once it has it, so the screen never shows a code that won't work. */
+    private fun registerDashboardCode(code: String?) {
+        val en = ShopSettings.language(this) == AppLanguage.EN
+        scope.launch {
+            val result = runCatching {
+                app.vaaniledger.net.ApiClient.api(this@SettingsActivity).setDashboardCode(
+                    ShopSettings.ID, app.vaaniledger.net.DashboardCodeRequest(code ?: ""),
+                )
+            }.onFailure { android.util.Log.w("VaaniSettings", "dashboard code failed: ${it.message}") }.getOrNull()
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                if (result?.ok != true) {
+                    Toast.makeText(
+                        this@SettingsActivity,
+                        if (en) "Couldn't reach the dashboard server — check the internet and Settings → Server address"
+                        else "डैशबोर्ड सर्वर तक नहीं पहुँच पाए — इंटरनेट और सेटिंग्स → सर्वर का पता जाँचिए",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    return@withContext
+                }
+                app.vaaniledger.data.DashboardAccess.setCode(this@SettingsActivity, code)
+                // The khata goes up now, so the website opens on real entries.
+                app.vaaniledger.sync.SyncWorker.syncFull(this@SettingsActivity, ShopSettings.ID, ShopSettings.name(this@SettingsActivity))
+                render()
+                if (code != null) dashboardCode()
+                else Toast.makeText(this@SettingsActivity, if (en) "Online dashboard turned off" else "ऑनलाइन डैशबोर्ड बंद", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     /**

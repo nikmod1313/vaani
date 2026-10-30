@@ -37,7 +37,7 @@ object ApiClient {
         val cached = cachedApi
         if (cached != null && url == cachedUrl) return cached
 
-        val built = build(url)
+        val built = build(url, app.vaaniledger.data.DashboardAccess.deviceKey(context))
         cachedUrl = url
         cachedApi = built
         return built
@@ -49,7 +49,7 @@ object ApiClient {
         cachedUrl = null
     }
 
-    private fun build(baseUrl: String): VaaniApi {
+    private fun build(baseUrl: String, deviceKey: String): VaaniApi {
         val logging = HttpLoggingInterceptor { Log.d("VaaniHttp", it) }.apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
                     else HttpLoggingInterceptor.Level.NONE
@@ -60,6 +60,12 @@ object ApiClient {
             // Falling back to rules-only locally beats a 30-second spinner.
             .connectTimeout(4, TimeUnit.SECONDS)
             .readTimeout(8, TimeUnit.SECONDS)
+            // This phone's own key on every request. A server on the shop's
+            // Wi-Fi ignores it; the hosted dashboard trusts this phone, and
+            // only this phone, to write the shop's khata.
+            .addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().header("X-Vaani-Key", deviceKey).build())
+            }
             .addInterceptor(logging)
             .build()
 

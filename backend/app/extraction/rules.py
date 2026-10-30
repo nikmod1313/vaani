@@ -967,6 +967,8 @@ def _pick_amount(
     # without this it gets picked as the amount: a ₹2 sale.
     used = {it.quantity for it in items if it.quantity is not None}
     used |= {it.unit_price for it in items if it.unit_price is not None}
+    # A medicine's strength is part of its name ("crocin 650"), never Rs 650.
+    used |= {float(w) for it in items for w in it.name.split() if _is_numeric_token(w)}
     used |= _measure_values(text, category)
     used |= _count_values(text, category)
     # A rupee or two is not a bill. Below ten, an unattached number is a

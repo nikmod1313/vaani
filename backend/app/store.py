@@ -164,6 +164,11 @@ class LedgerStore:
         """
         additive = [
             ("shops", "category", "TEXT NOT NULL DEFAULT 'general'"),
+            # The online dashboard: a hash of the phone's own secret key, and
+            # of the dashboard code it shares. Never the key or code itself.
+            ("shops", "device_key_hash", "TEXT"),
+            ("shops", "access_code_hash", "TEXT"),
+            ("shops", "access_code_at", "TEXT"),
         ]
         for table, column, spec in additive:
             existing = {
@@ -242,6 +247,42 @@ class LedgerStore:
             "SELECT * FROM shops WHERE id = ?", (shop_id,)
         ).fetchone()
         return dict(row) if row else None
+
+    # ------------------------------------------------------------------
+    # Online dashboard access
+    # ------------------------------------------------------------------
+
+    def set_device_key_hash(self, shop_id: str, key_hash: str) -> None:
+        self._ensure_shop(shop_id)
+        with self._tx() as conn:
+            conn.execute("UPDATE shops SET device_key_hash = ? WHERE id = ?", (key_hash, shop_id))
+
+    def set_access_code(self, shop_id: str, code_hash: str | None) -> str | None:
+        """Store a new dashboard code (or none). Returns the stamp sessions are tied to."""
+        self._ensure_shop(shop_id)
+        at = datetime.now().isoformat(timespec="microseconds") if code_hash else None
+        with self._tx() as conn:
+            conn.execute(
+                "UPDATE shops SET access_code_hash = ?, access_code_at = ? WHERE id = ?",
+                (code_hash, at, shop_id),
+            )
+        return at
+
+    def shop_for_access_code(self, code_hash: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM shops WHERE access_code_hash = ?", (code_hash,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def shop_of_transaction(self, tx_id: str) -> str | None:
+        row = self._conn.execute("SELECT shop_id FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        return row["shop_id"] if row else None
+
+    def transaction_count(self, shop_id: str) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) AS n FROM transactions WHERE shop_id = ?", (shop_id,)
+        ).fetchone()
+        return int(row["n"])
 
     def upsert_customer(self, shop_id: str, name: str, phone: str | None = None) -> str:
         """

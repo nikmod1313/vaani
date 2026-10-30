@@ -69,6 +69,8 @@ class SyncWorker(
                     since = null,
                     transactions = pending.map { it.toPayload() },
                     full = full,
+                    dashboardCodeHash = app.vaaniledger.data.DashboardAccess.code(applicationContext)
+                        ?.let { app.vaaniledger.data.DashboardAccess.hash(it) },
                 )
             )
 
@@ -79,6 +81,15 @@ class SyncWorker(
                     pending.map { it.id },
                     SyncState.SYNCED.name,
                 )
+            }
+
+            // The server holds nothing though this phone has synced before:
+            // it lost its disk (a restart on a free host). Send the whole
+            // khata again so the online dashboard is whole.
+            if (!full && response.serverCount == 0 &&
+                db.transactions().everything(shopId).any { it.syncState == SyncState.SYNCED.name }
+            ) {
+                syncFull(applicationContext, shopId, inputData.getString(KEY_SHOP_NAME))
             }
 
             pullDashboardEntries(response.transactions)

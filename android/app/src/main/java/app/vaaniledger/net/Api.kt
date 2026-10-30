@@ -244,12 +244,16 @@ data class SyncRequest(
      * the phone's khata -- not demo data or a previous phone's leftovers.
      */
     val full: Boolean = false,
+    /** Hash of the current dashboard code, so a server that lost it learns it again. */
+    @SerialName("dashboard_code_hash") val dashboardCodeHash: String? = null,
 )
 
 @Serializable
 data class SyncResponse(
     val accepted: Int,
     val duplicates: Int,
+    /** Rows the server holds for this shop; 0 after it lost its disk. */
+    @SerialName("server_count") val serverCount: Int? = null,
     /**
      * Rows the server changed. Kept as raw JSON because the server sends
      * mixed types — amount is a number, deleted a boolean — and typing this
@@ -354,6 +358,12 @@ interface VaaniApi {
     @POST("sync")
     suspend fun sync(@Body request: SyncRequest): SyncResponse
 
+    @POST("shops/{shop}/dashboard-code")
+    suspend fun setDashboardCode(
+        @retrofit2.http.Path("shop") shopId: String,
+        @Body body: DashboardCodeRequest,
+    ): DashboardCodeResult
+
     @GET("summary/narrate")
     suspend fun narrate(
         @Query("shop_id") shopId: String,
@@ -364,3 +374,10 @@ interface VaaniApi {
     @POST("corrections")
     suspend fun correction(@Body request: CorrectionRequest): CorrectionResponse
 }
+
+/** A new dashboard code for the hosted dashboard, or "" to switch it off. */
+@Serializable
+data class DashboardCodeRequest(val code: String)
+
+@Serializable
+data class DashboardCodeResult(val ok: Boolean = false, val active: Boolean = false)

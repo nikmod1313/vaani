@@ -877,6 +877,8 @@ object RulesEngine {
         val used = buildSet {
             items.mapNotNull { it.quantity }.forEach { add(it) }
             items.mapNotNull { it.unitPrice }.forEach { add(it) }
+            // A medicine's strength is part of its name ("crocin 650"), never Rs 650.
+            items.forEach { li -> li.name.split(" ").filter { isNumeric(it) }.forEach { add(it.toDouble()) } }
             addAll(measureValues(text, category))
             addAll(countValues(text, category))
         }

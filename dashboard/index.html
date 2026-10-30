@@ -207,6 +207,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
 .dlg-bd{padding:18px 20px 20px;display:flex;flex-direction:column;gap:12px}
 .dlg-bd label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.codein{width:100%;margin-top:6px;font-size:22px;letter-spacing:.18em;text-transform:uppercase;text-align:center}
 .code{font-family:var(--f-display);font-size:54px;letter-spacing:.22em;text-align:center;color:var(--indigo);padding:8px 0 0;font-variant-numeric:tabular-nums}
 .steps{margin:0;padding-left:20px;color:var(--ink-2);font-size:14.5px}
 .steps b{color:var(--ink)}
@@ -379,6 +380,24 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
     </div>
   </dialog>
 
+  <dialog id="dlgCode">
+    <form method="dialog" id="codeForm">
+      <div class="dlg-hd"><h2>Open a shop's khata</h2><button type="button" class="x" data-close aria-label="Close">×</button></div>
+      <div class="dlg-bd">
+        <label>Dashboard code
+          <input class="field codein" id="codeInput" name="code" required autocomplete="off" autocapitalize="characters"
+                 spellcheck="false" placeholder="VK7Q-M2PD" maxlength="20">
+        </label>
+        <ol class="steps">
+          <li>On the shop's phone, open <b>Vaani → Settings → Dashboard code</b>.</li>
+          <li>Type the code shown there. This browser then shows that shop's khata.</li>
+        </ol>
+        <div class="note" id="codeNote">The code works until the shopkeeper makes a new one.</div>
+        <button class="btn primary" id="codeGo" type="submit">Open khata</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="dlgEntry">
     <form method="dialog" id="entryForm">
       <div class="dlg-hd"><h2 id="entryTitle">New entry</h2><button type="button" class="x" data-close aria-label="Close">×</button></div>
@@ -442,6 +461,10 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   // No pairing, no shop: an unpaired browser shows nothing rather than
   // whatever khata happens to sit on the server.
   var SHOP = new URLSearchParams(location.search).get("shop") || store.get("vaani.shop") || null;
+  // On the hosted dashboard a shop opens with its dashboard code; the server
+  // hands back a session, kept here and sent with every request.
+  var TOKEN = store.get("vaani.token") || null;
+  function online() { return !!(state.health && state.health.public); }
 
   var $ = function (id) { return document.getElementById(id); };
   var state = { summary: null, health: null, days: 14, custFilter: "all", txDir: "", catalogue: [] };
@@ -465,7 +488,16 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   }
 
   function api(path, opts) {
+    opts = opts || {};
+    if (TOKEN) {
+      var h = {};
+      Object.keys(opts.headers || {}).forEach(function (k) { h[k] = opts.headers[k]; });
+      h["Authorization"] = "Bearer " + TOKEN;
+      opts = Object.assign({}, opts, { headers: h });
+    }
     return fetch(API + path, opts).then(function (r) {
+      // A session the shop has replaced with a new code: forget it and ask.
+      if (r.status === 401 && online() && SHOP) { forget(); askCode("That code has changed on the phone. Type the new one."); }
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     });
@@ -849,9 +881,43 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
 
   // ------------------------------------------------------------- pairing
   var pairTimer = null;
+  function forget() {
+    try { localStorage.removeItem("vaani.shop"); localStorage.removeItem("vaani.token"); } catch (e) {}
+    SHOP = null; TOKEN = null; state.summary = null;
+    renderPaired(); showEmpty();
+  }
+  function askCode(note) {
+    $("codeNote").textContent = note || "The code works until the shopkeeper makes a new one.";
+    $("codeInput").value = "";
+    if (!$("dlgCode").open) $("dlgCode").showModal();
+    $("codeInput").focus();
+  }
+  $("codeForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = $("codeInput").value.trim();
+    if (!code) return;
+    $("codeGo").disabled = true;
+    fetch(API + "/dashboard/redeem", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: code })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (b) { return { ok: r.ok, b: b }; });
+    }).then(function (res) {
+      if (!res.ok) { $("codeNote").textContent = (res.b && res.b.detail) || "That code didn't work."; return; }
+      SHOP = res.b.shop_id; TOKEN = res.b.token;
+      store.set("vaani.shop", SHOP); store.set("vaani.token", TOKEN);
+      history.replaceState(null, "", location.pathname);
+      $("dlgCode").close();
+      toast("Opened " + (res.b.shop_name || "the khata"));
+      renderPaired(); load();
+    }).catch(function () {
+      $("codeNote").textContent = "Couldn't reach the server. Check the internet and try again.";
+    }).then(function () { $("codeGo").disabled = false; });
+  });
   function renderPaired() {
     $("connect").innerHTML = SHOP
-      ? '<span class="paired"><span class="dot"></span>Phone connected</span>' : "Connect phone";
+      ? '<span class="paired"><span class="dot"></span>' + (online() ? "Khata open" : "Phone connected") + '</span>'
+      : (online() ? "Enter dashboard code" : "Connect phone");
+    $("connectEmpty").textContent = online() ? "Enter dashboard code" : "Connect phone";
     $("disconnect").classList.toggle("hidden", !SHOP);
     ["newEntry", "csv", "refresh"].forEach(function (id) { $(id).classList.toggle("hidden", !SHOP); });
   }
@@ -860,8 +926,8 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   // server; connecting again brings it straight back.
   $("disconnect").addEventListener("click", function () {
     if (!confirm("Disconnect this computer from the phone? Your khata stays safe on the phone.")) return;
-    try { localStorage.removeItem("vaani.shop"); } catch (e) {}
-    SHOP = null;
+    try { localStorage.removeItem("vaani.shop"); localStorage.removeItem("vaani.token"); } catch (e) {}
+    SHOP = null; TOKEN = null;
     state.summary = null;
     history.replaceState(null, "", location.pathname);
     renderPaired();
@@ -872,7 +938,9 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
   function showEmpty(text) {
     $("main").classList.add("hidden");
     $("empty").classList.remove("hidden");
-    $("emptyText").textContent = text || "Connect your phone to see its khata here.";
+    $("emptyText").textContent = text || (online()
+      ? "Type the shop's dashboard code to see its khata here."
+      : "Connect your phone to see its khata here.");
     $("connectEmpty").classList.toggle("hidden", !!SHOP);
     $("shopName").childNodes[0].nodeValue = "Vaani";
     $("shopMeta").textContent = SHOP ? "waiting for the phone" : "not connected";
@@ -881,6 +949,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
 
   $("connect").addEventListener("click", function () {
     if (SHOP) return;   // already connected; Disconnect is beside it
+    if (online()) { askCode(); return; }
     $("pairCode").textContent = "······";
     $("pairNote").textContent = "Same Wi-Fi for both. The code lasts 10 minutes." +
       (location.hostname === "vaani.local" ? "" : " Others on this Wi-Fi can open http://vaani.local:8000.");
@@ -920,13 +989,13 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
 
   function load(quiet) {
     if (!SHOP) {
-      api("/health").then(function (h) { state.health = h; renderStatus(); })
+      api("/health").then(function (h) { state.health = h; renderStatus(); renderPaired(); showEmpty(); })
         .catch(function () { state.health = null; renderStatus(); });
       showEmpty();
       return Promise.resolve();
     }
     return api("/health")
-      .then(function (h) { state.health = h; renderStatus(); })
+      .then(function (h) { state.health = h; renderStatus(); renderPaired(); })
       .catch(function () { state.health = null; renderStatus(); })
       .then(function () {
         return api(shopPath("/summary?days=" + state.days));
