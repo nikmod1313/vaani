@@ -28,6 +28,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from .extraction.rules import normalise_label
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS shops (
     id          TEXT PRIMARY KEY,
@@ -377,6 +379,8 @@ class LedgerStore:
             (shop_id, since),
         ):
             for label in row["items"].split(","):
+                # "do kurti" typed before labels were normalised is two kurtis.
+                label = normalise_label(label)
                 parts = label.strip().rsplit(" ", 1)
                 qty = 1.0
                 name = label.strip()

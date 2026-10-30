@@ -498,8 +498,15 @@ class OverlayService : Service() {
                     )
                 }
 
+            // When the shop sent a reminder with a pay link: a later "payment
+            // done" was paid through it. Read from every bubble on screen,
+            // seen or not -- the reminder is usually older than the reply.
+            val payLinks = messages
+                .filter { it.isOutgoing && app.vaaniledger.reminder.ReminderLinks.carriesPayLink(it.text) }
+                .map { app.vaaniledger.capture.ChatDates.parse(it.dateLabel, it.timeLabel) }
+
             val resolved = app.vaaniledger.extract.ConversationResolver
-                .resolveAll(turns, customer, category)
+                .resolveAll(turns, customer, category, payLinkSent = payLinks)
                 .map {
                     with(app.vaaniledger.extract.ConversationResolver) {
                         it.toExtraction(known, category)
@@ -769,6 +776,15 @@ class OverlayService : Service() {
 
                 val customer = extraction.customer?.takeIf { it.isNotBlank() }
                     ?.let { db.customers().resolve(SHOP_ID, it) }
+
+                // A payment for an order already on credit updates that order
+                // rather than adding a second row -- see PaymentLink.
+                if (customer != null &&
+                    ReviewQueue.payOrderOnCredit(db, SHOP_ID, customer, extraction).isNotEmpty()
+                ) {
+                    markSourceSeen()
+                    return@runCatching
+                }
 
                 val row = TransactionEntity(
                     shopId = SHOP_ID,

@@ -132,7 +132,9 @@ object RulesEngine {
         """\b(?:transferred|sent)\s+(?:the\s+)?(?:money|amount|payment|cash)\b""",
         """\bpaid\s+(?:you|it|already|for\s+it)\b""",
         """\bpayment\s+ho\s+gay[ai]\b""",
-        """\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae])\b""",
+        """\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae]|kar\s+d(?:i|ii|ia))\b""",
+        // A bare "paid" -- the whole message -- after a reminder.
+        """^\W*paid\W*$""",
         """\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b""",
         """\bmil\s+gaye?\b""",
         """\bjama\s+kar\w*\b""",
@@ -227,6 +229,35 @@ object RulesEngine {
     //
     // "ka / ki / ke" is the Hindi possessive: "paune sau ka chai" is
     // seventy-five rupees WORTH of tea, not seventy-five teas.
+    /**
+     * A typed item, put in the "<name> <qty><unit>" shape every label has.
+     * Mirrors `normalise_label` in rules.py.
+     *
+     * The edit sheet takes items as free text, and "do kurti" typed there was
+     * stored whole -- a product called "do kurti", quantity one. A leading
+     * count is lifted off and written the way [LineItem.label] writes it:
+     * "do kurti" -> "kurti 2", "2 kg chawal" -> "chawal 2kg". A digit is only
+     * taken as a count when a unit or a known item follows it, so a product
+     * whose name starts with a number ("5 star") is left alone.
+     */
+    fun normaliseLabel(label: String): String {
+        val raw = label.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }.joinToString(" ")
+        val tokens = raw.split(" ")
+        if (tokens.size < 2) return raw
+        val lower = tokens.map { it.lowercase().trim('.') }
+        var j = 0
+        while (j < tokens.size - 1 && NumberParser.isNumberToken(lower[j])) j++
+        if (j == 0 || NumberParser.isNumberToken(lower[j])) return raw
+        val qty = NumberParser.parseNumberPhrase(lower.subList(0, j)) ?: return raw
+        val unit = if (j < tokens.size - 1) UNITS[lower[j]] else null
+        val rest = if (unit != null) tokens.drop(j + 1) else tokens.drop(j)
+        if (qty <= 0 || qty >= 1000 || rest.isEmpty()) return raw
+        val worded = lower.subList(0, j).none { w -> w.any { it.isDigit() } }
+        if (!(worded || unit != null || matchItem(rest.last().lowercase(), CategoryLexicon.allKnownItems()) != null)) return raw
+        val shown = if (qty == Math.floor(qty)) qty.toLong().toString() else qty.toString()
+        return "${rest.joinToString(" ")} $shown${unit ?: ""}"
+    }
+
     /** The shared unit table merged with a category's own. */
     internal fun unitTable(category: ShopCategory): Map<String, String> =
         UNITS + CategoryLexicon.unitsFor(category)
@@ -411,6 +442,18 @@ object RulesEngine {
         // Devanagari अंडे for अंडा. "ek darjan ande" named no item at all.
         if (token.endsWith("e") && token.dropLast(1) + "a" in lexicon) return token.dropLast(1) + "a"
         if (token.endsWith("े") && token.dropLast(1) + "ा" in lexicon) return token.dropLast(1) + "ा"
+        // The Hindi feminine plural and oblique: kurtiyan / kurtiyaan /
+        // kurtiyon for kurti, and कुर्तियाँ for कुर्ती. "do kurtiyan kharidi"
+        // named no item at all, so the two was left with nothing to count.
+        for (suffix in listOf("iyaan", "iyan", "iyon", "iya")) {
+            if (token.endsWith(suffix) && token.dropLast(suffix.length) + "i" in lexicon) return token.dropLast(suffix.length) + "i"
+        }
+        for (suffix in listOf("ियाँ", "ियां", "ियों")) {
+            if (token.endsWith(suffix) && token.dropLast(suffix.length) + "ी" in lexicon) return token.dropLast(suffix.length) + "ी"
+        }
+        // ...and the "-en" plural: chappalen, kitaben, किताबें.
+        if (token.endsWith("en") && token.length > 4 && token.dropLast(2) in lexicon) return token.dropLast(2)
+        if (token.endsWith("ें") && token.dropLast(2) in lexicon) return token.dropLast(2)
         return null
     }
 
@@ -722,19 +765,25 @@ object RulesEngine {
 
         // 1. Currency-adjacent.
         for ((value, matched) in numbers) {
-            val quoted = Regex.escape(matched)
+            val alone = isolated(norm, matched, numbers)
+            val number = whole(matched)
             val patterns = listOf(
-                Regex("${CURRENCY.pattern}\\s*$quoted", RegexOption.IGNORE_CASE),
-                Regex("$quoted\\s*${CURRENCY.pattern}", RegexOption.IGNORE_CASE),
+                Regex("${CURRENCY.pattern}\\s*$number", RegexOption.IGNORE_CASE),
+                Regex("$number\\s*${CURRENCY.pattern}", RegexOption.IGNORE_CASE),
             )
-            if (patterns.any { it.containsMatchIn(norm) }) return value to "currency-adjacent"
+            if (patterns.any { it.containsMatchIn(alone) }) return value to "currency-adjacent"
         }
 
         // 2. Mode-adjacent -- "dhai sau ka udhaar".
         val modeWords = MODE_WORDS.keys.joinToString("|") { Regex.escape(it) }
+        val lexicon = CategoryLexicon.itemsFor(category)
         for ((value, matched) in numbers) {
-            val window = Regex("${Regex.escape(matched)}\\s+(?:\\w+\\s+){0,2}(?:$modeWords)")
-            if (window.containsMatchIn(norm)) return value to "mode-adjacent"
+            val window = Regex("${whole(matched)}\\s+((?:\\w+\\s+){0,2})(?:$modeWords)")
+            val hit = window.find(isolated(norm, matched, numbers))
+            // "2 kurti udhaar 3000": the words between the number and the mode
+            // word name the thing it counts, so it is a quantity, not the bill.
+            if (hit != null && hit.groupValues[1].split(Regex("""\s+""")).filter { it.isNotBlank() }
+                    .none { matchItem(it, lexicon) != null }) return value to "mode-adjacent"
         }
 
         // 3. Largest number not already consumed as an item quantity.
@@ -772,6 +821,28 @@ object RulesEngine {
     }
 
     /** Every number immediately followed by an item noun -- a count, never money. */
+    /**
+     * A number's words as a pattern that only matches the WHOLE number.
+     * Unanchored, "2" matched the front of "₹ 2000" and "do" the front of
+     * "do hazar udhaar", so both booked Rs 2. Mirrors `_whole` in rules.py.
+     */
+    private fun whole(matched: String): String {
+        val tail = if (matched.lastOrNull()?.isDigit() == true) """(?!\d)(?!\.\d)""" else """(?![\p{L}])"""
+        return """(?<![\w.])""" + Regex.escape(matched) + tail
+    }
+
+    /** The text with every LONGER number containing this one blanked out. Mirrors `_isolated`. */
+    private fun isolated(norm: String, matched: String, numbers: List<NumberParser.Found>): String {
+        val inner = Regex(whole(matched))
+        var out = norm
+        for (other in numbers) {
+            if (other.matched.length > matched.length && inner.containsMatchIn(other.matched)) {
+                out = Regex(whole(other.matched)).replace(out, "\u0001")
+            }
+        }
+        return out
+    }
+
     private fun countValues(text: String, category: ShopCategory): Set<Double> {
         val lexicon = CategoryLexicon.itemsFor(category)
         val modifiers = CategoryLexicon.modifiersFor(category)

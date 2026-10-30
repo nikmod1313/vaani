@@ -172,7 +172,11 @@ class ImportExportActivity : Activity() {
             val known = runCatching { db.customers().names(ShopSettings.ID) }
                 .getOrDefault(emptyList())
             val turns = ExportParser.toTurns(fresh, customer, aliases)
-            val orders = ConversationResolver.resolveAll(turns, customer, category)
+            // A reminder with a pay link, sent before a later "payment done".
+            val payLinks = parsed
+                .filter { ExportParser.isShopkeeper(it.sender, customer, aliases) && app.vaaniledger.reminder.ReminderLinks.carriesPayLink(it.body) }
+                .map { it.timestamp }
+            val orders = ConversationResolver.resolveAll(turns, customer, category, payLinkSent = payLinks)
                 .map { with(ConversationResolver) { it.toExtraction(known, category) } }
                 .map { app.vaaniledger.extract.CatalogueMatch.enrich(it, app.vaaniledger.data.Catalogue.items(this@ImportExportActivity)) }
                 .map { ReviewQueue.settleFromBalance(this@ImportExportActivity, it, it.customer) }

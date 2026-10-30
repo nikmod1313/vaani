@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from .conversation import ResolvedOrder, Turn, build_threads, resolve_thread
+from .conversation import ResolvedOrder, Turn, build_threads, link_late_payments, resolve_thread
 from .numbers import normalise
 from .rules import _ITEMS, _MODE_WORDS, _UNITS, apply_rules
 
@@ -455,6 +455,24 @@ def _is_reminder(text: str) -> bool:
     )
 
 
+def _is_pay_link_reminder(text: str) -> bool:
+    """A Vaani reminder that carried a UPI pay link. Mirror of ReminderLinks.carriesPayLink."""
+    return _is_reminder(text) and "upi://pay" in text.lower()
+
+
+def pay_link_times(
+    messages: list[Message],
+    customer: str,
+    shop_aliases: set[str] | None = None,
+) -> list[datetime | None]:
+    """When the shop sent this customer a reminder with a pay link in it."""
+    return [
+        m.timestamp
+        for m in messages
+        if is_shopkeeper(m.sender, customer, shop_aliases) and _is_pay_link_reminder(m.body)
+    ]
+
+
 @dataclass
 class ConversationResult:
     total_messages: int
@@ -496,7 +514,13 @@ def ingest_conversation(
 
     turns = to_turns(fresh, customer, shop_aliases)
     threads = build_threads(turns, customer, gap_minutes)
-    orders = [o for t in threads for o in resolve_thread(t, category)]
+    # A payment that arrives after a quiet spell still pays the order before
+    # it -- see link_late_payments. The reminder that prompted it may be an
+    # older message, so every message is searched for it, not just new ones.
+    orders = link_late_payments(
+        [resolve_thread(t, category) for t in threads],
+        pay_link_times(messages, customer, shop_aliases),
+    )
 
     return ConversationResult(
         total_messages=total,

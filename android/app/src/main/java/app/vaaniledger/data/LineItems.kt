@@ -1,6 +1,7 @@
 package app.vaaniledger.data
 
 import app.vaaniledger.extract.CategoryLexicon
+import app.vaaniledger.extract.RulesEngine
 import app.vaaniledger.net.Extraction
 
 /**
@@ -53,6 +54,8 @@ object LineItems {
     fun fromLabels(transaction: TransactionEntity): List<TransactionItemEntity> =
         transaction.itemList
             .filter { it.isNotBlank() }
+            // Read typed text such as "do kurti" as the count it states.
+            .map { RulesEngine.normaliseLabel(it) }
             .map { label ->
                 val match = LABEL.find(label.trim())
                 val display = (match?.groupValues?.get(1) ?: label).trim()

@@ -269,8 +269,10 @@ class EditSheetView(
                         customer = customerField.text.toString().trim()
                             .ifBlank { null },
                         mode = selectedMode,
+                        // "do kurti" is two kurtis, not one item named "do kurti".
                         items = itemsField.text.toString()
-                            .split(",").map { it.trim() }.filter { it.isNotBlank() },
+                            .split(",").map { it.trim() }.filter { it.isNotBlank() }
+                            .map { app.vaaniledger.extract.RulesEngine.normaliseLabel(it) },
                         direction = selectedDirection,
                     )
                 )
