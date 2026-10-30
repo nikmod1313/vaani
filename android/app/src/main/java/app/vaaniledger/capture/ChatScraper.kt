@@ -100,6 +100,14 @@ object ChatScraper {
         "changed the group description", "you're now an admin",
         "joined using this group", "left the group", "add description",
         "add members", "add your member tag",
+        // WhatsApp's own notices, read off a real group chat: "You sent
+        // Hrishikesh and Nikharv message history that starts on Thu, 29 Oct,
+        // 23:38" became a Rs 38 order.
+        "message history", "you added", "you removed", "you were added", "you created group",
+        "you left", "changed their phone number", "security code changed",
+        "security code with", "disappearing messages", "turned on disappearing", "turned off disappearing",
+        "pinned a message", "unpinned a message", "joined from the community",
+        "this business uses", "tap to learn more", "learn more",
     )
 
     /** "2 members, 1 contact" -- group metadata, wherever it appears in a line. */

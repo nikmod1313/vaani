@@ -664,7 +664,7 @@
       "name": "anda",
       "quantity": 1.0,
       "unit": "tray",
-      "unit_price": null
+      "unit_price": 210.0
      }
     ],
     "mode": "udhaar"
@@ -967,7 +967,7 @@
       "modifier": "tata",
       "name": "chai",
       "quantity": 1.0,
-      "unit": null,
+      "unit": "g",
       "unit_price": 140.0
      }
     ],
@@ -1411,8 +1411,8 @@
      {
       "modifier": null,
       "name": "dawai",
-      "quantity": null,
-      "unit": null,
+      "quantity": 2.0,
+      "unit": "strip",
       "unit_price": null
      }
     ],

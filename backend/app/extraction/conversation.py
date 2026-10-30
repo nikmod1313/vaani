@@ -445,6 +445,16 @@ def _shop_unit_rate(text: str, category: Category | str | None) -> float | None:
     return None
 
 
+def _states_rate(text: str, rules, category: Category | str | None) -> bool:
+    """A price for ONE unit: "1kg ka 200", "500 each", "1000 ki ek", "200 per kg"."""
+    norm = normalise(text)
+    if any(r.search(norm) for r in _TOTAL_RE):
+        return False
+    if any(r.search(norm) for r in _RATE_RE) or any(i.unit_price is not None for i in rules.items):
+        return True
+    return _measure_quantity(text, category) == 1
+
+
 def resolve_thread(
     thread: Thread,
     category: Category | str | None = None,
@@ -562,6 +572,18 @@ def resolve_thread(
                         signals.append("shop-quoted-rate")
         previous_speaker_was_shop = turn.is_shopkeeper
 
+        # "1kg ka 200rs", "500 each", "1 for 1000" is a RATE whoever says it.
+        # In a group chat the person quoting may not be the phone's owner, and
+        # read as the customer's own figure it became the whole bill: 2 kg of
+        # spring onions at Rs 200 a kilo booked as Rs 200.
+        customer_rate = (
+            turn.is_customer and rules.amount is not None
+            and rules.direction is not Direction.PAYMENT and _states_rate(turn.body, rules, category)
+        )
+        if customer_rate:
+            quoted_rate = rules.amount
+            signals.append("quoted-rate")
+
         if turn.is_customer and (
             is_commitment(turn.body) or is_implicit_order(turn.body, rules)
         ):
@@ -572,7 +594,7 @@ def resolve_thread(
                 last_item_commit_index = index
             if rules.amount is not None and rules.amount_source in (
                 "currency-adjacent", "mode-adjacent", "line-totals",
-            ) and rules.direction is not Direction.PAYMENT:
+            ) and rules.direction is not Direction.PAYMENT and not customer_rate:
                 customer_amount = rules.amount
 
         # The order told in pieces: "i want 2 kurtis", "blue color", "500 rs".
@@ -594,7 +616,7 @@ def resolve_thread(
             if (
                 customer_amount is None and rules.amount is not None
                 and rules.amount_source in ("currency-adjacent", "mode-adjacent")
-                and rules.direction is not Direction.PAYMENT
+                and rules.direction is not Direction.PAYMENT and not customer_rate
             ):
                 customer_amount = rules.amount
 

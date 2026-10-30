@@ -365,6 +365,14 @@ object ConversationResolver {
      * Reading the second as a rate multiplied a real Rs 60 bill for two
      * strips of tablets to Rs 4,22,500.
      */
+    /** A price for ONE unit: "1kg ka 200", "500 each", "200 per kg". Mirrors `_states_rate`. */
+    private fun statesRate(text: String, rules: RulesEngine.RuleResult, category: ShopCategory): Boolean {
+        val norm = NumberParser.normalise(text)
+        if (TOTAL.any { it.containsMatchIn(norm) }) return false
+        if (RATE.any { it.containsMatchIn(norm) } || rules.items.any { it.unitPrice != null }) return true
+        return measureQuantity(text, category) == 1.0
+    }
+
     fun resolveThread(thread: Thread, category: ShopCategory): List<ResolvedOrder> {
         if (thread.turns.isEmpty()) return emptyList()
 
@@ -442,6 +450,16 @@ object ConversationResolver {
             }
             previousSpeakerWasShop = turn.isShopkeeper
 
+            // "1kg ka 200rs", "500 each", "1 for 1000" is a RATE whoever says
+            // it -- in a group chat the person quoting may not be the phone's
+            // owner. Mirrors conversation.py.
+            val customerRate = turn.isCustomer && rules.amount != null &&
+                rules.direction != RulesEngine.Direction.PAYMENT && statesRate(turn.body, rules, category)
+            if (customerRate) {
+                quotedRate = rules.amount
+                signals.add("quoted-rate")
+            }
+
             if (turn.isCustomer && (isCommitment(turn.body) || isImplicitOrder(turn.body, rules))) {
                 commitTurn = turn; commitRules = rules; commitIndex = index
                 if (rules.items.isNotEmpty()) {
@@ -450,7 +468,7 @@ object ConversationResolver {
                 }
                 if (rules.amount != null &&
                     rules.amountSource in setOf("currency-adjacent", "mode-adjacent", "line-totals") &&
-                    rules.direction != RulesEngine.Direction.PAYMENT
+                    rules.direction != RulesEngine.Direction.PAYMENT && !customerRate
                 ) customerAmount = rules.amount
             }
 
@@ -476,7 +494,7 @@ object ConversationResolver {
                 }
                 if (customerAmount == null && rules.amount != null &&
                     rules.amountSource in setOf("currency-adjacent", "mode-adjacent") &&
-                    rules.direction != RulesEngine.Direction.PAYMENT
+                    rules.direction != RulesEngine.Direction.PAYMENT && !customerRate
                 ) customerAmount = rules.amount
             }
 

@@ -183,8 +183,18 @@ object NumberParser {
     )
     private val RE_DIGIT_GROUP = Regex("""(?<=\d),(?=\d{2},\d|\d{3}(?!\d))""")
     private val RE_GLUED_UNIT = Regex(
-        """(?<=\d)(kgs?|kilos?|gms?|grams?|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b"""
+        """(?<=\d)(kgs?|kilos?|gms?|grams?|g|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b"""
     )
+    /** A price for ONE, said the short way. Mirrors `_ONE_FOR` / `_FOR_ONE` in numbers.py. */
+    private const val MONEY_NUM = """((?:₹|rs\.?)\s*)?(\d+(?:\.\d+)?)(\s*(?:rs|rupees|rupaye|rupay|₹))?"""
+    private val RE_ONE_FOR = Regex("""(?<![\w.])(?:1|ek|one)\s+(?:for|ka|ki|ke|@)\s+""" + MONEY_NUM + """(?![\w.])""")
+    private val RE_FOR_ONE = Regex(
+        """(?<![\w.])""" + MONEY_NUM + """\s+(?:ka|ki|ke|for)\s+(?:1|ek|one)(?![\w.])""" +
+            """(?!\s*(?:kgs?|kilos?|kilo|gms?|grams?|g|ltrs?|litres?|liters?|l|ml|dozen|darjan|meters?|metres?|mtrs?|m|""" +
+            """strips?|pattas?|patte|packets?|pkts?|pcs?|pieces?|box|boxes|bottles?|botal|tablets?|tabs?|caps?|capsules?|""" +
+            """sets?|pairs?|jodi|nag|bags?|bori|sacks?|trays?|rolls?|tins?|jars?|dabba|dabbe|pouch|bundle)\b)"""
+    )
+    private val RE_TIMES_COUNT = Regex("""(?<![\w.])[x×]\s*(\d{1,3})(?![\w.])""")
     private val RE_CLAUSE_SEPARATORS = Regex("""[,،;:।!?\n\r]+""")
     private val RE_STANDALONE_PERIOD = Regex("""(?<!\d)\.(?!\d)""")
     // \p{L}\p{N} rather than \w: Java's \w is ASCII-only, and \w here would
@@ -234,6 +244,11 @@ object NumberParser {
         // "1,25,000". Left in, the comma became a clause boundary and
         // "total 1,250 hua" was read as Rs 250. Mirrors numbers.py.
         text = RE_DIGIT_GROUP.replace(text, "")
+        // "1 for 1000", "ek ka 50", "1000 ki ek" are a rate: "<n> each".
+        // "x2" after an item is a count of pieces. Mirrors numbers.py.
+        text = RE_ONE_FOR.replace(text) { " ${it.groupValues[1]}${it.groupValues[2]}${it.groupValues[3]} each " }
+        text = RE_FOR_ONE.replace(text) { " ${it.groupValues[1]}${it.groupValues[2]}${it.groupValues[3]} each " }
+        text = RE_TIMES_COUNT.replace(text) { " ${it.groupValues[1]} pc " }
         // Split glued measures: people type "atta 5kg, dal 2kg" far more often
         // than "5 kg". Without this the unit never registers and the item
         // loses its quantity entirely.

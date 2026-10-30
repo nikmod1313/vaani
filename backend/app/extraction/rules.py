@@ -677,7 +677,7 @@ def extract_items(
 
             # "paune sau ka chai" — a price, not a count. Leaving pending_qty
             # unset keeps the number available as the amount.
-            if value is not None and nxt not in _PRICE_MARKERS:
+            if value is not None and nxt not in _PRICE_MARKERS and nxt not in _EXPLICIT_RATE_MARKERS:
                 if pending_qty is not None and pending_measured and not measured:
                     # A BARE number arriving after an established measure is a
                     # price, not a replacement count. Real chat states them in
@@ -809,7 +809,69 @@ def extract_items(
 
         i += 1
 
+    # One thing named, its measure said somewhere else in the message:
+    # "spring onion chahiye, 2 kg", "spring onion bhej do 2kg", "chawal do
+    # kilo". The walk only looks beside the item, so the two kilos were lost
+    # and a price list charged for one. With a single item there is nothing
+    # else the measure could belong to; with two measures it is ambiguous and
+    # left alone.
+    if len(items) == 1 and items[0].quantity is None:
+        from .numbers import _is_verb_not_number
+
+        found: list[tuple[float, str]] = []
+        k = 0
+        while k < len(tokens):
+            if is_number_token(tok_at(k)) and not _is_verb_not_number(tokens, k):
+                value, j = number_run(k)
+                if value is not None and value > 0 and tok_at(j) in units and tok_at(j) not in _CONTAINERS:
+                    found.append((value, units[tok_at(j)]))
+                k = max(j, k + 1)
+                continue
+            k += 1
+        if len(set(found)) == 1:
+            items[0].quantity, items[0].unit = found[0]
+        else:
+            # ...or a bare count right before an ordering word: "kurta 1 for
+            # 2000, 2 chahiye". Only a small whole number, and only one.
+            counts: list[float] = []
+            k = 0
+            while k < len(tokens):
+                if is_number_token(tok_at(k)) and not _is_verb_not_number(tokens, k):
+                    value, j = number_run(k)
+                    if (
+                        value is not None and 0 < value <= 100 and value == int(value)
+                        and tok_at(j) in _COUNT_VERBS
+                    ):
+                        counts.append(value)
+                    k = max(j, k + 1)
+                    continue
+                k += 1
+            if len(set(counts)) == 1 and not found:
+                items[0].quantity = counts[0]
+        # A rate stated before the thing: "2000 each kurta" ("1 for 2000
+        # kurta"). Only an EXPLICIT marker counts here: "paune sau ka chai" is
+        # seventy-five rupees of tea, not a rate.
+        if items[0].unit_price is None:
+            k = 0
+            while k < len(tokens) and tok_at(k) != BOUNDARY:
+                if is_number_token(tok_at(k)) and not _is_verb_not_number(tokens, k):
+                    value, j = number_run(k)
+                    if value is not None and value > 0 and tok_at(j) in _EXPLICIT_RATE_MARKERS:
+                        items[0].unit_price = value
+                        break
+                    k = max(j, k + 1)
+                    continue
+                k += 1
+
     return items
+
+
+# Words that say "I want this many": the number before them is a count.
+_COUNT_VERBS = {
+    "chahiye", "chaiye", "chahie", "chaahiye", "chaye", "chaiyay", "chahiyein",
+    "dena", "dedo", "bhejna", "bhejo", "bhejdo", "lunga", "loonga", "lungi", "lenge",
+    "चाहिए", "चाहिये", "भेजना", "लूंगा", "देना",
+}
 
 
 def _is_numeric_token(tok: str) -> bool:
@@ -1021,6 +1083,15 @@ def apply_rules(text: str, category: Category | str | None = None) -> RuleResult
         result.amount_source = "line-totals"
         result.resolved.add("amount")
         return result
+
+    # One thing, priced for one, no count: "1 for 2000 kurta", "kurti 500
+    # each". The price of the one is the bill.
+    if (
+        result.amount is None and len(result.items) == 1
+        and result.items[0].unit_price is not None and result.items[0].quantity is None
+    ):
+        result.amount = result.items[0].unit_price
+        result.amount_source = "rate-of-one"
 
     # "largest-unused" is a guess, not a resolution -- leave it for the model
     # to confirm rather than claiming certainty we do not have.

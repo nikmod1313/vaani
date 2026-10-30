@@ -147,6 +147,16 @@ _MEDIA = re.compile(
 )
 
 
+_MONEY_NUM = r"((?:₹|rs\.?)\s*)?(\d+(?:\.\d+)?)(\s*(?:rs|rupees|rupaye|rupay|₹))?"
+_ONE_FOR = re.compile(r"(?<![\w.])(?:1|ek|one)\s+(?:for|ka|ki|ke|@)\s+" + _MONEY_NUM + r"(?![\w.])")
+_FOR_ONE = re.compile(
+    r"(?<![\w.])" + _MONEY_NUM + r"\s+(?:ka|ki|ke|for)\s+(?:1|ek|one)(?![\w.])"
+    # ...but not when a unit follows: "200 ka 1 kilo" is per kilo, and "crocin
+    # 650 ki 1 strip" is a strength and then one strip.
+    r"(?!\s*(?:kgs?|kilos?|kilo|gms?|grams?|g|ltrs?|litres?|liters?|l|ml|dozen|darjan|meters?|metres?|mtrs?|m|"
+    r"strips?|pattas?|patte|packets?|pkts?|pcs?|pieces?|box|boxes|bottles?|botal|tablets?|tabs?|caps?|capsules?|"
+    r"sets?|pairs?|jodi|nag|bags?|bori|sacks?|trays?|rolls?|tins?|jars?|dabba|dabbe|pouch|bundle)\b)"
+)
 _PER_UNIT = re.compile(
     r"(?<=\d)\s*/\s*(kgs?|kilos?|gms?|grams?|g|ltrs?|litres?|liters?|l|ml|pcs?|piece|pieces|packets?|pkts?|"
     r"dozen|darjan|meters?|metres?|mtrs?|m|box|bottles?|strips?|nag)\b"
@@ -193,11 +203,19 @@ def normalise(text: str) -> str:
     # bill. Only a comma followed by exactly three digits (or two digits and
     # another group) is a separator; "2,3 kurti" stays two numbers.
     text = re.sub(r"(?<=\d),(?=\d{2},\d|\d{3}(?!\d))", "", text)
+    # A price for ONE, said the short way: "1 for 1000", "ek ka 50", "1000 ki
+    # ek", "500 for one". Each is a rate, written here as "<n> each" so every
+    # reader downstream treats it as one. Unread, "1 for 2000 kurta" booked two
+    # thousand kurtas, and "2 kurta 1 ka 2000" a rate of Rs 1.
+    text = _ONE_FOR.sub(r" \1\2\3 each ", text)
+    text = _FOR_ONE.sub(r" \1\2\3 each ", text)
+    # "x2" / "×2" after an item is a count of pieces.
+    text = re.sub(r"(?<![\w.])[x×]\s*(\d{1,3})(?![\w.])", r" \1 pc ", text)
     # Split glued measures: people type "atta 5kg, dal 2kg" far more often
     # than "5 kg". Without this the unit never registers and the item loses
     # its quantity entirely.
     text = re.sub(
-        r"(?<=\d)(kgs?|kilos?|gms?|grams?|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b",
+        r"(?<=\d)(kgs?|kilos?|gms?|grams?|g|ml|ltrs?|litres?|liters?|l|pkts?|packets?|pcs?)\b",
         r" \1",
         text,
     )

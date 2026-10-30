@@ -597,7 +597,7 @@ object RulesEngine {
                 val measured = next in units
 
                 // "paune sau ka chai" -- a price, not a count.
-                if (value != null && next !in PRICE_MARKERS) {
+                if (value != null && next !in PRICE_MARKERS && next !in EXPLICIT_RATE_MARKERS) {
                     if (pendingQty != null && pendingMeasured && !measured) {
                         // A BARE number after an established measure is a
                         // price, not a replacement count: "2kg for" "500
@@ -726,8 +726,70 @@ object RulesEngine {
             i++
         }
 
+        // One thing named, its measure said elsewhere in the message: "spring
+        // onion chahiye, 2 kg", "chawal do kilo". Mirrors extract_items.
+        if (items.size == 1 && items[0].quantity == null) {
+            val found = mutableListOf<Pair<Double, String>>()
+            var k = 0
+            while (k < tokens.size) {
+                if (NumberParser.isNumberToken(tokAt(k)) && !NumberParser.isVerbNotNumber(tokens, k)) {
+                    val (value, j) = numberRun(k)
+                    if (value != null && value > 0 && tokAt(j) in units && tokAt(j) !in CONTAINERS) {
+                        found += value to units.getValue(tokAt(j))
+                    }
+                    k = maxOf(j, k + 1)
+                    continue
+                }
+                k++
+            }
+            if (found.toSet().size == 1) {
+                items[0] = items[0].copy(quantity = found[0].first, unit = found[0].second)
+            } else if (found.isEmpty()) {
+                // ...or a bare count right before an ordering word: "kurta 1
+                // for 2000, 2 chahiye".
+                val counts = mutableListOf<Double>()
+                k = 0
+                while (k < tokens.size) {
+                    if (NumberParser.isNumberToken(tokAt(k)) && !NumberParser.isVerbNotNumber(tokens, k)) {
+                        val (value, j) = numberRun(k)
+                        if (value != null && value > 0 && value <= 100 && value == Math.floor(value) && tokAt(j) in COUNT_VERBS) {
+                            counts += value
+                        }
+                        k = maxOf(j, k + 1)
+                        continue
+                    }
+                    k++
+                }
+                if (counts.toSet().size == 1) items[0] = items[0].copy(quantity = counts[0])
+            }
+            // A rate stated before the thing, explicit markers only: "2000
+            // each kurta" ("1 for 2000 kurta"), never "paune sau ka chai".
+            if (items[0].unitPrice == null) {
+                k = 0
+                while (k < tokens.size && tokAt(k) != NumberParser.BOUNDARY) {
+                    if (NumberParser.isNumberToken(tokAt(k)) && !NumberParser.isVerbNotNumber(tokens, k)) {
+                        val (value, j) = numberRun(k)
+                        if (value != null && value > 0 && tokAt(j) in EXPLICIT_RATE_MARKERS) {
+                            items[0] = items[0].copy(unitPrice = value)
+                            break
+                        }
+                        k = maxOf(j, k + 1)
+                        continue
+                    }
+                    k++
+                }
+            }
+        }
+
         return items
     }
+
+    /** Words that say "I want this many": the number before them is a count. Mirrors `_COUNT_VERBS`. */
+    private val COUNT_VERBS = setOf(
+        "chahiye", "chaiye", "chahie", "chaahiye", "chaye", "chaiyay", "chahiyein",
+        "dena", "dedo", "bhejna", "bhejo", "bhejdo", "lunga", "loonga", "lungi", "lenge",
+        "चाहिए", "चाहिये", "भेजना", "लूंगा", "देना",
+    )
 
     private val STRENGTH_UNITS = setOf("mg", "ml", "mcg")
 
@@ -917,6 +979,16 @@ object RulesEngine {
                 items = items,
                 allNumbers = allNumbers,
                 resolved = resolved,
+            )
+        }
+
+        // One thing, priced for one, no count: "1 for 2000 kurta". The price
+        // of the one is the bill. Mirrors apply_rules.
+        val only = items.singleOrNull()
+        if (amount == null && only != null && only.unitPrice != null && only.quantity == null) {
+            return RuleResult(
+                amount = only.unitPrice, amountSource = "rate-of-one", mode = mode, direction = direction,
+                items = items, allNumbers = allNumbers, resolved = resolved,
             )
         }
 

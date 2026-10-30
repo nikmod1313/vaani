@@ -47,7 +47,8 @@ object CatalogueMatch {
                 }
             if (hit == null) line else {
                 claimed += hit.first
-                priced(line.copy(displayName = hit.first.name), hit.first)
+                val counted = if (line.quantity == null) countAfter(words(e.text), hit.second, hit.first.price) else null
+                priced(line.copy(displayName = hit.first.name, quantity = counted ?: line.quantity), hit.first)
             }
         }.toMutableList()
 
@@ -94,7 +95,57 @@ object CatalogueMatch {
     private fun priced(line: LineItem, item: CatalogueItem): LineItem {
         val rate = line.unitPrice ?: item.price ?: return line
         val qty = line.quantity ?: 1.0
-        return line.copy(unitPrice = rate, quantity = qty, lineTotal = Math.round(rate * qty * 100.0) / 100.0)
+        // A list price is per the shop's usual unit: "spring onion 200" is
+        // Rs 200 a kilo. An order in grams is a fraction of that kilo, not
+        // five hundred kilos -- "250 gram" at 200 booked Rs 50,000. Only the
+        // list's price is converted; a rate the message stated is per the
+        // message's own unit already.
+        val factor = if (line.unitPrice != null) 1.0 else conversion(line.unit, item.unit)
+        val billed = qty * factor
+        return line.copy(unitPrice = rate, quantity = qty, lineTotal = Math.round(rate * billed * 100.0) / 100.0)
+    }
+
+    /** How many list units one ordered unit is: g against a per-kg price is 1/1000. */
+    internal fun conversion(ordered: String?, listed: String?): Double {
+        val o = canonicalUnit(ordered)
+        val l = canonicalUnit(listed)
+        return when {
+            o == "g" && (l == null || l == "kg") -> 0.001
+            o == "ml" && (l == null || l == "l") -> 0.001
+            o == "kg" && l == "g" -> 1000.0
+            o == "l" && l == "ml" -> 1000.0
+            else -> 1.0
+        }
+    }
+
+    private fun canonicalUnit(u: String?): String? = when (u?.lowercase()?.trim()) {
+        null, "" -> null
+        "kg", "kgs", "kilo", "kilos", "kilogram" -> "kg"
+        "g", "gm", "gms", "gram", "grams" -> "g"
+        "l", "ltr", "litre", "liter", "litres", "liters" -> "l"
+        "ml" -> "ml"
+        else -> u.lowercase().trim()
+    }
+
+    /** Words that make a number after an item a price or a measure, not a count. */
+    private val NOT_A_COUNT = setOf(
+        "rs", "rupaye", "rupees", "rupay", "ka", "ki", "ke", "each", "per", "kg", "kilo", "g", "gm", "gram",
+        "grams", "l", "litre", "ml", "packet", "pkt", "box", "dozen",
+    )
+
+    /**
+     * "spring onion 2": the number straight after a listed item, small, whole,
+     * and not a price or a measure, is how many. Read only for items on the
+     * list -- the list already says what one costs, so the number cannot be
+     * that price unless it equals it.
+     */
+    private fun countAfter(text: List<String>, name: List<String>, price: Double?): Double? {
+        val at = indexOfRun(text, name)
+        if (at < 0) return null
+        val n = text.getOrNull(at + name.size)?.toDoubleOrNull() ?: return null
+        val next = text.getOrNull(at + name.size + 1)
+        if (n <= 0 || n > 50 || n != Math.floor(n) || n == price || next in NOT_A_COUNT) return null
+        return n
     }
 
     private fun label(line: LineItem): String {
