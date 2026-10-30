@@ -215,14 +215,16 @@ class SyncWorker(
 
         /** Safety net for entries logged while the phone had no signal. */
         fun schedulePeriodic(context: Context, shopId: String) {
-            val request = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
+            // Every 15 minutes (Android's minimum): a hosted dashboard on a
+            // free server forgets while it sleeps, and the phone refills it.
+            val request = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .setInputData(androidx.work.workDataOf(KEY_SHOP_ID to shopId))
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_PERIODIC,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
         }

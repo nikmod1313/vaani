@@ -353,6 +353,9 @@ class ReviewActivity : Activity() {
             }
 
             withContext(Dispatchers.Main) { toast(message) }
+            // Up to the dashboard now, not only when Close is pressed --
+            // leaving with Back used to keep approved orders off it.
+            if (approve) app.vaaniledger.sync.SyncWorker.syncNow(this@ReviewActivity, ShopSettings.ID, ShopSettings.name(this@ReviewActivity))
         }
     }
 
@@ -376,6 +379,7 @@ class ReviewActivity : Activity() {
                     .onFailure { android.util.Log.e(TAG, "approveAll failed", it) }
             }
             withContext(Dispatchers.Main) { toast(t.toastApprovedCount(saved)) }
+            app.vaaniledger.sync.SyncWorker.syncNow(this@ReviewActivity, ShopSettings.ID, ShopSettings.name(this@ReviewActivity))
         }
     }
 

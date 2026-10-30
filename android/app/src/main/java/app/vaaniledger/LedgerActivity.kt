@@ -430,6 +430,8 @@ class LedgerActivity : Activity() {
                 db.analytics().insertItems(LineItems.fromLabels(updated))
             }.onFailure { android.util.Log.e(TAG, "edit failed", it) }
 
+            // The correction goes up to the dashboard straight away.
+            app.vaaniledger.sync.SyncWorker.syncNow(this@LedgerActivity, ShopSettings.ID, ShopSettings.name(this@LedgerActivity))
             withContext(Dispatchers.Main) {
                 toast(strings().updated)
                 reload()
@@ -450,6 +452,7 @@ class LedgerActivity : Activity() {
                     runCatching {
                         LedgerDatabase.get(this@LedgerActivity).transactions().softDelete(tx.id)
                     }.onFailure { android.util.Log.e(TAG, "delete failed", it) }
+                    app.vaaniledger.sync.SyncWorker.syncNow(this@LedgerActivity, ShopSettings.ID, ShopSettings.name(this@LedgerActivity))
                     withContext(Dispatchers.Main) {
                         toast(s.deleted)
                         reload()

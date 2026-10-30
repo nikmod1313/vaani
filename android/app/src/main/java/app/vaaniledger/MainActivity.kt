@@ -108,6 +108,9 @@ class MainActivity : Activity() {
         if (!ShopSettings.hasCompletedOnboarding(this)) return
         build()
         loadToday()
+        // Opening the app brings the dashboard up to date -- and refills a
+        // hosted server that forgot everything while it slept.
+        app.vaaniledger.sync.SyncWorker.syncNow(this, ShopSettings.ID, ShopSettings.name(this))
     }
 
     override fun onDestroy() {

@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.store import LedgerStore, Transaction  # noqa: E402
+from app.store import LedgerStore, Transaction, _now, _today  # noqa: E402
 from app.summary import compose  # noqa: E402
 from app.tts import SarvamTTS  # noqa: E402
 
@@ -146,7 +146,7 @@ class TestBalances(StoreCase):
         self.assertEqual(balance["outstanding"], 0)
 
     def test_days_overdue_is_computed_from_oldest_udhaar(self):
-        old = (datetime.now() - timedelta(days=42)).isoformat(timespec="seconds")
+        old = (_now() - timedelta(days=42)).isoformat(timespec="seconds")
         self.store.save(_tx(
             customer_name="Sunita Devi", amount=840, mode="udhaar", occurred_at=old
         ))
@@ -165,7 +165,7 @@ class TestBalances(StoreCase):
         reminder it drives is plainly wrong to whoever receives it.
         """
         def days_ago(n):
-            return (datetime.now() - timedelta(days=n)).isoformat(timespec="seconds")
+            return (_now() - timedelta(days=n)).isoformat(timespec="seconds")
 
         # An old debt, fully paid, then a fresh one.
         self.store.save(_tx(customer_name="Priya Sharma", amount=500,
@@ -185,7 +185,7 @@ class TestBalances(StoreCase):
 
     def test_partial_payment_ages_from_the_remaining_debt(self):
         def days_ago(n):
-            return (datetime.now() - timedelta(days=n)).isoformat(timespec="seconds")
+            return (_now() - timedelta(days=n)).isoformat(timespec="seconds")
 
         self.store.save(_tx(customer_name="Imran Khan", amount=400,
                             mode="udhaar", occurred_at=days_ago(50)))
@@ -214,7 +214,7 @@ class TestBalances(StoreCase):
 
     def test_an_advance_is_spent_by_the_next_udhaar(self):
         """...but the Rs 300 over is credit, not lost: dropping it overstated the next bill."""
-        early = (datetime.now() - timedelta(days=2)).isoformat(timespec="seconds")
+        early = (_now() - timedelta(days=2)).isoformat(timespec="seconds")
         self.store.save(_tx(customer_name="Mohan Lal", amount=500, mode="cash",
                             direction="payment", occurred_at=early))
         self.store.save(_tx(customer_name="Mohan Lal", amount=800, mode="udhaar"))
@@ -233,7 +233,7 @@ class TestBalances(StoreCase):
         self.assertLess(max(overdue), 90)
 
     def test_settled_customer_is_not_overdue(self):
-        old = (datetime.now() - timedelta(days=60)).isoformat(timespec="seconds")
+        old = (_now() - timedelta(days=60)).isoformat(timespec="seconds")
         self.store.save(_tx(customer_name="Mohan Lal", amount=500, mode="udhaar",
                             occurred_at=old))
         self.store.save(_tx(customer_name="Mohan Lal", amount=500, mode="cash",
@@ -270,7 +270,7 @@ class TestAggregates(StoreCase):
     def test_series_fills_empty_days_with_zero(self):
         series = self.store.series(SHOP, days=14)
         self.assertEqual(len(series), 14)
-        self.assertEqual(series[-1]["date"], date.today().isoformat())
+        self.assertEqual(series[-1]["date"], _today().isoformat())
         self.assertTrue(all("cash" in row for row in series))
 
     def test_auto_filled_counts_high_confidence_entries(self):
@@ -351,7 +351,7 @@ class TestNarration(StoreCase):
         empty.close()
 
     def test_overdue_customer_is_mentioned_last(self):
-        old = (datetime.now() - timedelta(days=42)).isoformat(timespec="seconds")
+        old = (_now() - timedelta(days=42)).isoformat(timespec="seconds")
         self.store.save(_tx(customer_name="Sunita Devi", amount=840,
                             mode="udhaar", occurred_at=old))
         n = compose(self.store.summary(SHOP), "hi-IN")
@@ -407,3 +407,24 @@ class TestTTSCache(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestShopClock(unittest.TestCase):
+    """A hosted server runs on UTC; the khata's "today" is the shop's (IST)."""
+
+    def test_today_is_the_shops_day_whatever_the_server_clock(self):
+        from datetime import timezone
+        from zoneinfo import ZoneInfo
+        ist = datetime.now(ZoneInfo("Asia/Kolkata")).date()
+        self.assertEqual(_today(), ist)
+        # Between 18:30 and 24:00 UTC the two differ by a whole day.
+        utc = datetime.now(timezone.utc).date()
+        self.assertIn((_today() - utc).days, (0, 1))
+
+    def test_an_entry_made_now_counts_in_todays_totals(self):
+        store = LedgerStore(":memory:")
+        store.save(Transaction(shop_id="s", amount=400, mode="udhaar", customer_name="Isha",
+                               occurred_at=_now().isoformat(timespec="seconds")))
+        summary = store.summary("s", 7)
+        self.assertEqual(summary["series"][-1]["date"], _today().isoformat())
+        self.assertEqual(sum(d.get("udhaar", 0) for d in summary["series"][-1:]), 400)

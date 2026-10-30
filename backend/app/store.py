@@ -30,6 +30,26 @@ from pathlib import Path
 
 from .extraction.rules import normalise_label
 
+# The shop's own clock. Entries arrive from the phone in its local time
+# (India), and "today" on the dashboard must be the shopkeeper's today. A
+# hosted server runs on UTC, so from midnight to 5:30 am IST it still thought
+# it was yesterday: the day's entries vanished from "Aaj ki sale", the chart
+# and the reports. VAANI_TZ overrides for a shop elsewhere.
+from zoneinfo import ZoneInfo as _ZoneInfo
+import os as _os
+
+_TZ = _ZoneInfo(_os.environ.get("VAANI_TZ", "Asia/Kolkata"))
+
+
+def _now() -> datetime:
+    """Now on the shop's clock, as a naive local time like the phone's."""
+    return datetime.now(_TZ).replace(tzinfo=None)
+
+
+def _today() -> date:
+    return _now().date()
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS shops (
     id          TEXT PRIMARY KEY,
@@ -99,7 +119,7 @@ class Transaction:
 
     def __post_init__(self) -> None:
         if not self.occurred_at:
-            self.occurred_at = datetime.now().isoformat(timespec="seconds")
+            self.occurred_at = _now().isoformat(timespec="seconds")
 
     @property
     def signed_amount(self) -> float:
@@ -219,7 +239,7 @@ class LedgerStore:
                     category = COALESCE(?, shops.category)
                 """,
                 (shop_id, name, language, speaker, category or "general",
-                 datetime.now().isoformat(timespec="seconds"), category),
+                 _now().isoformat(timespec="seconds"), category),
             )
 
     def _ensure_shop(self, shop_id: str) -> None:
@@ -239,7 +259,7 @@ class LedgerStore:
                 "INSERT OR IGNORE INTO shops (id, name, language, speaker, created_at)"
                 " VALUES (?, ?, ?, ?, ?)",
                 (shop_id, shop_id, "hi-IN", "anushka",
-                 datetime.now().isoformat(timespec="seconds")),
+                 _now().isoformat(timespec="seconds")),
             )
 
     def get_shop(self, shop_id: str) -> dict | None:
@@ -260,7 +280,7 @@ class LedgerStore:
     def set_access_code(self, shop_id: str, code_hash: str | None) -> str | None:
         """Store a new dashboard code (or none). Returns the stamp sessions are tied to."""
         self._ensure_shop(shop_id)
-        at = datetime.now().isoformat(timespec="microseconds") if code_hash else None
+        at = _now().isoformat(timespec="microseconds") if code_hash else None
         with self._tx() as conn:
             conn.execute(
                 "UPDATE shops SET access_code_hash = ?, access_code_at = ? WHERE id = ?",
@@ -305,7 +325,7 @@ class LedgerStore:
                 "INSERT INTO customers (id, shop_id, name, phone, created_at)"
                 " VALUES (?, ?, ?, ?, ?)",
                 (customer_id, shop_id, name, phone,
-                 datetime.now().isoformat(timespec="seconds")),
+                 _now().isoformat(timespec="seconds")),
             )
         return customer_id
 
@@ -332,7 +352,7 @@ class LedgerStore:
         if tx.customer_id is None and tx.customer_name:
             tx.customer_id = self.upsert_customer(tx.shop_id, tx.customer_name)
 
-        now = datetime.now().isoformat(timespec="seconds")
+        now = _now().isoformat(timespec="seconds")
         with self._tx() as conn:
             conn.execute(
                 """
@@ -412,7 +432,7 @@ class LedgerStore:
 
     def top_items(self, shop_id: str, days: int = 30, limit: int = 10) -> list[dict]:
         """What sold, by how often it appears on a bill. Labels carry a trailing quantity ("kurti 2"), stripped here."""
-        since = (date.today() - timedelta(days=days - 1)).isoformat()
+        since = (_today() - timedelta(days=days - 1)).isoformat()
         counts: dict[str, dict] = {}
         for row in self._conn.execute(
             f"SELECT items FROM transactions WHERE shop_id = ? AND {self._live()} "
@@ -469,7 +489,7 @@ class LedgerStore:
         its shop id -- demo data, an old test phone -- showed the sum of
         both, and every figure on the dashboard was wrong.
         """
-        now = datetime.now().isoformat(timespec="seconds")
+        now = _now().isoformat(timespec="seconds")
         stale = [
             r["id"] for r in self._conn.execute(
                 f"SELECT id FROM transactions WHERE shop_id = ? AND {self._live()} AND source != 'dashboard'",
@@ -488,7 +508,7 @@ class LedgerStore:
         with self._tx() as conn:
             conn.execute(
                 "UPDATE transactions SET deleted = 1, updated_at = ? WHERE id = ?",
-                (datetime.now().isoformat(timespec="seconds"), tx_id),
+                (_now().isoformat(timespec="seconds"), tx_id),
             )
 
     # ------------------------------------------------------------------
@@ -499,7 +519,7 @@ class LedgerStore:
         return "deleted = 0"
 
     def day_totals(self, shop_id: str, on: date | None = None) -> dict:
-        day = (on or date.today()).isoformat()
+        day = (on or _today()).isoformat()
         row = self._conn.execute(
             f"""
             SELECT
@@ -582,7 +602,7 @@ class LedgerStore:
                         credit = 0
                 person["advance"] += credit
 
-        today = date.today()
+        today = _today()
         result = []
         for person in people.values():
             debts = person["debts"]
@@ -603,7 +623,7 @@ class LedgerStore:
 
     def series(self, shop_id: str, days: int = 14) -> list[dict]:
         """Daily cash-vs-udhaar for the dashboard chart. Gaps filled with zeros."""
-        start = date.today() - timedelta(days=days - 1)
+        start = _today() - timedelta(days=days - 1)
         rows = {
             r["d"]: r for r in self._conn.execute(
                 f"""
@@ -679,7 +699,7 @@ class LedgerStore:
         created = 0
 
         for offset in range(days):
-            day = date.today() - timedelta(days=days - 1 - offset)
+            day = _today() - timedelta(days=days - 1 - offset)
             for _ in range(rng.randint(3, 9)):
                 name, _phone = rng.choice(people)
                 mode = rng.choices(["cash", "upi", "udhaar"], weights=[5, 3, 2])[0]
