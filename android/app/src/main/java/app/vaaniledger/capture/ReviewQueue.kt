@@ -148,6 +148,16 @@ object ReviewQueue {
             ?.takeIf { it.isNotBlank() }
             ?.let { db.customers().resolve(ShopSettings.ID, it) }
 
+        // "Payment done" for an order already on credit pays THAT order: the
+        // order's row changes mode instead of a second row being added.
+        if (customer != null && extraction.direction == "payment") {
+            val paid = payOrderOnCredit(db, ShopSettings.ID, customer, extraction)
+            if (paid.isNotEmpty()) {
+                recordSeen(context, item.chatId, extraction.contentHashes, parseTimestamp(extraction.occurredAt))
+                return paid.last()
+            }
+        }
+
         val occurredAt = parseTimestamp(extraction.occurredAt)
         val key = dedupeKey(extraction, ShopSettings.ID, occurredAt)
 
@@ -221,6 +231,33 @@ object ReviewQueue {
     }
 
     private const val HALF_DAY = 12 * 60 * 60 * 1000L
+
+    /**
+     * Apply a payment to the credit order it pays, if it pays one -- see
+     * [app.vaaniledger.data.PaymentLink].
+     *
+     * @return the updated sale rows, or empty when the payment must be saved
+     *   as a payment of its own.
+     */
+    suspend fun payOrderOnCredit(
+        db: LedgerDatabase,
+        shopId: String,
+        customer: app.vaaniledger.data.CustomerEntity,
+        payment: Extraction,
+    ): List<TransactionEntity> {
+        if (payment.direction != "payment") return emptyList()
+        val rows = db.transactions().allOnce(shopId)
+            .filter { it.customerId == customer.id && !it.deleted }
+            .sortedBy { it.occurredAt }
+        val paid = app.vaaniledger.data.PaymentLink.creditsPaidBy(rows, payment.amount?.takeIf { it > 0 })
+        if (paid.isEmpty()) return emptyList()
+        val mode = app.vaaniledger.extract.ConversationResolver
+            .paidInstrument(payment.canonicalText ?: payment.text, payment.mode)
+        return paid.map { sale ->
+            sale.copy(mode = mode, syncState = app.vaaniledger.data.SyncState.PENDING.name)
+                .also { db.transactions().upsert(it) }
+        }
+    }
 
     /**
      * "i have completed the payment", read later than the order it pays for.

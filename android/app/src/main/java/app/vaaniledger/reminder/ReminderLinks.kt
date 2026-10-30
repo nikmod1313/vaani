@@ -172,6 +172,10 @@ object ReminderLinks {
         return greets && owes
     }
 
+    /** A Vaani reminder that carried a UPI pay link. Mirrors `_is_pay_link_reminder`. */
+    fun carriesPayLink(text: String): Boolean =
+        isReminder(text) && text.lowercase().contains("upi://pay")
+
     const val WHATSAPP_PACKAGE = "com.whatsapp"
     const val WHATSAPP_BUSINESS_PACKAGE = "com.whatsapp.w4b"
 }

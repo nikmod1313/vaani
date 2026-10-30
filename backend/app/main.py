@@ -25,12 +25,15 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from .extraction.categories import LABELS, Category
-from .extraction.conversation import ResolvedOrder, Turn, build_threads, resolve_thread
+from .extraction.conversation import ResolvedOrder, Turn, build_threads, link_late_payments, resolve_thread
 from .extraction.numbers import normalise
 from .extraction.corrections import CorrectionStore
 from .extraction.llm import ClaudeLayer
 from .extraction.pipeline import extract, extract_batch
+from .extraction.rules import normalise_label
 from .extraction.whatsapp import (
+    _is_pay_link_reminder,
+    _is_reminder,
     ChatCursor,
     infer_customer,
     ingest,
@@ -423,7 +426,14 @@ def ingest_screen(req: ScreenRequest) -> dict:
 
     turns: list[Turn] = []
     seen_this_batch: set[str] = set()
+    # When the shop sent a reminder with a pay link; a later "payment done"
+    # was paid through it. Read from every message, seen or not.
+    pay_links = [m.timestamp for m in req.messages if m.is_outgoing and _is_pay_link_reminder(m.body)]
     for m in req.messages:
+        # The shop's own reminder is not part of any order (as on the phone):
+        # its balance was read as the next order's total.
+        if m.is_outgoing and _is_reminder(m.body):
+            continue
         digest = m.content_hash or hashlib.sha1(
             f"{(m.sender or '').strip().lower()}|"
             f"{m.timestamp.isoformat() if m.timestamp else ''}|"
@@ -447,7 +457,7 @@ def ingest_screen(req: ScreenRequest) -> dict:
         )
 
     threads = build_threads(turns, req.customer_name)
-    orders = [o for t in threads for o in resolve_thread(t, category)]
+    orders = link_late_payments([resolve_thread(t, category) for t in threads], pay_links)
 
     return {
         "lane": "screen",
@@ -736,7 +746,7 @@ def add_transaction(shop_id: str, entry: DashboardEntry) -> dict:
         raise HTTPException(422, "direction must be sale|payment, mode cash|upi|udhaar")
     tx = Transaction(
         shop_id=shop_id, amount=entry.amount, mode=entry.mode, direction=entry.direction,
-        customer_name=entry.customer_name.strip(), items=[i.strip() for i in entry.items if i.strip()],
+        customer_name=entry.customer_name.strip(), items=[normalise_label(i) for i in entry.items if i.strip()],
         source="dashboard", confidence=1.0, occurred_at=entry.occurred_at or "",
     )
     return {"id": STORE.save(tx)}

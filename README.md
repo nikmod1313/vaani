@@ -250,7 +250,7 @@ lied to someone about their money, and a listener cannot catch it.
 
 ## Traps already found and fixed — do not reintroduce these
 
-Ten bugs so far, every one of which would have put a wrong number in
+Twelve bugs so far, every one of which would have put a wrong number in
 someone's ledger. All have regression tests. The instructive classes:
 
 **Hindi words that are also verbs.** `do` means 2 but usually "send", so
@@ -284,6 +284,21 @@ request time, so treating construction as availability made `eval.run --llm`
 print "rules + claude-opus-5" over numbers the model never touched. The eval
 now refuses to report stage-2 numbers when zero calls succeeded, and
 `/health` states which stages are live.
+
+**A number matched inside a longer number.** The "next to ₹ / udhaar"
+check searched for the number's text anywhere, so "2" matched the front of
+"₹ 2,000" and "do" the front of "do hazar udhaar": *"Shyam ne do kurti
+kharidi, do hazar udhaar"* booked ₹2. Numbers now match only whole, and a
+count followed by its item ("2 kurti udhaar 3000") is never the bill.
+`TestCountWords`. Typed items get the same care: "do kurti" in the edit
+sheet or dashboard is stored as `kurti 2`, not one item called "do kurti".
+
+**A payment after a quiet spell stood alone.** Threads split after 45
+minutes, so "payment done" an hour after a reminder became its own payment
+while the order stayed udhaar. A later payment of no figure, or of the
+order's figure, now pays that order (`link_late_payments`, mirrored in
+Kotlin), and on the phone it switches the credit row's mode instead of adding
+a row (`PaymentLink`). A part payment stays separate. `TestLatePayments`.
 
 **A fresh phone's first sync had no shop row.** Transactions and customers
 saved fine, but `/summary` 404'd on a shop that demonstrably had data —

@@ -137,7 +137,9 @@ _PAYMENT_PHRASES = [
     r"\bpaid\s+(?:you|it|already|for\s+it)\b",
     r"\bpayment\s+ho\s+gay[ai]\b",
     # explicit payment nouns
-    r"\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae])\b",
+    r"\bpayment\b.{0,20}?\b(?:mila|mile|aaya|aa\s+gaya|hua|kiya|kar\s+diy[ae]|kar\s+d(?:i|ii|ia))\b",
+    # A bare "paid" -- the whole message -- after a reminder.
+    r"^\W*paid\W*$",
     r"\bpaise?\b.{0,15}?\b(?:mil|aa|de|bhej|diy)\w*\b",
     r"\bmil\s+gaye?\b",
     # settling up
@@ -463,8 +465,58 @@ def _match_item(token: str, lexicon: set[str]) -> str | None:
         return token[:-1] + "a"
     if token.endswith("े") and token[:-1] + "ा" in lexicon:
         return token[:-1] + "ा"
+    # The Hindi feminine plural and oblique: kurtiyan / kurtiyaan / kurtiyon
+    # for kurti, and in Devanagari कुर्तियाँ for कुर्ती. "do kurtiyan kharidi"
+    # named no item at all, so the two was left with nothing to count.
+    for suffix in ("iyaan", "iyan", "iyon", "iya"):
+        if token.endswith(suffix) and token[: -len(suffix)] + "i" in lexicon:
+            return token[: -len(suffix)] + "i"
+    for suffix in ("ियाँ", "ियां", "ियों"):
+        if token.endswith(suffix) and token[: -len(suffix)] + "ी" in lexicon:
+            return token[: -len(suffix)] + "ी"
+    # ...and the "-en" plural: chappalen, kitaben, किताबें.
+    if token.endswith("en") and len(token) > 4 and token[:-2] in lexicon:
+        return token[:-2]
+    if token.endswith("ें") and token[:-2] in lexicon:
+        return token[:-2]
     return None
 
+
+def normalise_label(label: str) -> str:
+    """
+    A typed item, put in the "<name> <qty><unit>" shape every label has.
+
+    The edit sheet and the dashboard take items as free text, and "do kurti"
+    typed there was stored whole -- a product called "do kurti", quantity
+    one. A leading count is lifted off and written the way `label()` writes
+    it: "do kurti" -> "kurti 2", "2 kg chawal" -> "chawal 2kg". A digit is
+    only taken as a count when a unit or a known item follows it, so a
+    product whose name starts with a number ("5 star") is left alone.
+    Anything already in the label shape is returned unchanged.
+    """
+    from .categories import all_known_items
+    from .numbers import is_number_token, parse_number_phrase
+
+    raw = " ".join(label.split())
+    tokens = raw.split(" ")
+    if len(tokens) < 2:
+        return raw
+    lower = [t.lower().strip(".") for t in tokens]
+    j = 0
+    while j < len(tokens) - 1 and is_number_token(lower[j]):
+        j += 1
+    if j == 0 or is_number_token(lower[j]):
+        return raw
+    qty = parse_number_phrase(lower[:j])
+    unit = _UNITS.get(lower[j]) if j < len(tokens) - 1 else None
+    rest = tokens[j + 1:] if unit else tokens[j:]
+    if qty is None or qty <= 0 or qty >= 1000 or not rest:
+        return raw
+    worded = not any(ch.isdigit() for ch in "".join(lower[:j]))
+    if not (worded or unit or _match_item(rest[-1].lower(), all_known_items())):
+        return raw
+    shown = int(qty) if qty == int(qty) else qty
+    return f"{' '.join(rest)} {shown}{unit or ''}"
 
 def _trailing_rate(
     tokens: list[str],
@@ -802,18 +854,24 @@ def _pick_amount(
 
     # 1. Currency-adjacent.
     for value, matched in numbers:
+        alone = _isolated(norm, matched, numbers)
+        number = _whole(matched)
         for pattern in (
-            rf"{_CURRENCY.pattern}\s*{re.escape(matched)}",
-            rf"{re.escape(matched)}\s*{_CURRENCY.pattern}",
+            rf"{_CURRENCY.pattern}\s*{number}",
+            rf"{number}\s*{_CURRENCY.pattern}",
         ):
-            if re.search(pattern, norm, re.IGNORECASE):
+            if re.search(pattern, alone, re.IGNORECASE):
                 return value, "currency-adjacent"
 
     # 2. Mode-adjacent -- "dhai sau ka udhaar".
     mode_words = "|".join(re.escape(w) for w in _MODE_WORDS)
+    lexicon = items_for(category)
     for value, matched in numbers:
-        window = rf"{re.escape(matched)}\s+(?:\w+\s+){{0,2}}(?:{mode_words})"
-        if re.search(window, norm):
+        window = rf"{_whole(matched)}\s+((?:\w+\s+){{0,2}})(?:{mode_words})"
+        hit = re.search(window, _isolated(norm, matched, numbers))
+        # "2 kurti udhaar 3000": the words between the number and the mode
+        # word name the thing it counts, so it is a quantity, not the bill.
+        if hit and not any(_match_item(w, lexicon) for w in hit.group(1).split()):
             return value, "mode-adjacent"
 
     # 3. Largest number not already consumed as an item quantity.
@@ -851,6 +909,34 @@ def _pick_amount(
         return None, None
     value, matched = max(candidates, key=lambda p: p[0])
     return value, "largest-overall"
+
+
+def _whole(matched: str) -> str:
+    """
+    A number's words as a pattern that only matches the WHOLE number.
+
+    Unanchored, "2" matched the front of "₹ 2000" and "do" the front of "do
+    hazar udhaar", so "2 kurti ₹2,000" and "do kurti, do hazar udhaar" both
+    booked Rs 2 -- the count read as the bill.
+    """
+    tail = r"(?![\d])(?!\.\d)" if matched[-1:].isdigit() else r"(?![^\W\d_])"
+    return rf"(?<![\w.]){re.escape(matched)}{tail}"
+
+
+def _isolated(norm: str, matched: str, numbers: list[tuple[float, str]]) -> str:
+    """
+    The text with every LONGER number that contains this one blanked out.
+
+    "do" is a number on its own and the first word of "do hazar". Testing the
+    two-thousand for adjacency is right; letting the two borrow its "udhaar"
+    is how a Rs 2,000 credit became Rs 2.
+    """
+    inner = _whole(matched)
+    out = norm
+    for _, other in numbers:
+        if len(other) > len(matched) and re.search(inner, other):
+            out = re.sub(_whole(other), "\x01", out)
+    return out
 
 
 def _count_values(text: str, category: Category | str | None = None) -> set[float]:

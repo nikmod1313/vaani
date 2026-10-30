@@ -863,15 +863,104 @@ def resolve(
     return orders[0] if orders else None
 
 
+_SENT = re.compile(r"\b(?:bhej\w*|sent|transfer\w*)\b|(?<!\S)भेज")
+
+def paid_instrument(text: str, mode: str) -> str:
+    """
+    How a later payment was made. Named in the message wins; money SENT away
+    from the counter went online, since cash cannot be sent over a chat;
+    anything else unnamed is cash, as on the same-thread path.
+    """
+    if mode not in (PaymentMode.UNKNOWN.value, PaymentMode.UDHAAR.value):
+        return mode
+    if _SENT.search(normalise(text)):
+        return PaymentMode.UPI.value
+    return PaymentMode.CASH.value
+
+
+#: How long after an order a lone "payment done" is still read as paying it.
+#: Threads split after 45 minutes of silence, which is right for an ORDER --
+#: "3 chahiye" on Friday must not attach to Monday's kurti -- and wrong for a
+#: PAYMENT, which typically arrives hours later, after a reminder.
+LATE_PAYMENT_WINDOW = timedelta(days=7)
+
+
+def link_late_payments(
+    per_thread: list[list[ResolvedOrder]],
+    pay_link_sent: list[datetime | None] | None = None,
+) -> list[ResolvedOrder]:
+    """
+    Fold a payment from a LATER thread into the credit order it pays.
+
+    The order is discussed, booked as udhaar, a reminder goes out with a UPI
+    link, and fifty minutes later the customer writes "payment done". That
+    lands in a thread of its own, so it was booked as a separate payment and
+    the order stayed marked credit. A payment that names no figure, or the
+    order's own figure, settles THAT order: its mode becomes how it was paid
+    (cash when the message names no instrument, as on the same-thread path).
+
+    Only across threads -- inside one thread `resolve_thread` has already
+    decided, and a payment it left standing (sent before the order, or for a
+    different sum) is deliberately separate. A part payment stays separate
+    too: the order really was on credit, and the khata's oldest-first aging
+    settles the part.
+
+    `pay_link_sent` holds when the shop sent a reminder carrying a UPI pay
+    link (None for an undated one). A payment after such a reminder that
+    names no instrument -- "payment done", "paise bhej diye" -- was paid
+    through the link, so it is UPI rather than the cash default.
+    """
+    sent = pay_link_sent or []
+
+    def instrument(order: ResolvedOrder) -> str:
+        if order.mode != PaymentMode.UNKNOWN.value:
+            return order.mode
+        after_link = any(
+            t is None or order.occurred_at is None or t <= order.occurred_at for t in sent
+        )
+        return PaymentMode.UPI.value if after_link else PaymentMode.UNKNOWN.value
+
+    out: list[ResolvedOrder] = []
+    for orders in per_thread:
+        earlier = list(out)
+        for order in orders:
+            sale = next((o for o in reversed(earlier) if o.direction == "sale"), None)
+            if order.direction == "payment":
+                order.mode = instrument(order)
+            if (
+                order.direction == "payment"
+                and sale is not None
+                and sale.mode in (PaymentMode.UDHAAR.value, PaymentMode.UNKNOWN.value)
+                and (
+                    order.amount is None or sale.amount is None
+                    or abs(order.amount - sale.amount) < 0.01
+                )
+                and (
+                    order.occurred_at is None or sale.occurred_at is None
+                    or timedelta(0) <= order.occurred_at - sale.occurred_at <= LATE_PAYMENT_WINDOW
+                )
+            ):
+                sale.mode = paid_instrument(order.canonical_text, order.mode)
+                if sale.amount is None:
+                    sale.amount = order.amount
+                sale.signals.append("paid-later")
+                sale.content_hashes = list(dict.fromkeys(sale.content_hashes + order.content_hashes))
+                sale.evidence = f"{sale.evidence}\n{order.evidence}"
+                earlier.remove(sale)
+                continue
+            out.append(order)
+    return out
+
+
 def resolve_all(
     turns: list[Turn],
     customer: str,
     category: Category | str | None = None,
     gap_minutes: int = 45,
+    pay_link_sent: list[datetime | None] | None = None,
 ) -> list[ResolvedOrder]:
     """Thread a whole chat and resolve every order in it."""
-    return [
-        order
-        for thread in build_threads(turns, customer, gap_minutes)
-        for order in resolve_thread(thread, category)
-    ]
+    return link_late_payments(
+        [resolve_thread(thread, category) for thread in build_threads(turns, customer, gap_minutes)],
+        pay_link_sent,
+    )

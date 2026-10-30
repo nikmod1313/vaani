@@ -714,8 +714,82 @@ object ConversationResolver {
         customer: String,
         category: ShopCategory,
         gapMinutes: Long = 45,
+        payLinkSent: List<LocalDateTime?> = emptyList(),
     ): List<ResolvedOrder> =
-        buildThreads(turns, customer, gapMinutes).flatMap { resolveThread(it, category) }
+        linkLatePayments(buildThreads(turns, customer, gapMinutes).map { resolveThread(it, category) }, payLinkSent)
+
+    /**
+     * How long after an order a lone "payment done" is still read as paying
+     * it. Threads split after 45 minutes of silence, which is right for an
+     * ORDER and wrong for a PAYMENT, which typically arrives hours later,
+     * after a reminder. Mirrors `LATE_PAYMENT_WINDOW`.
+     */
+    private val LATE_PAYMENT_WINDOW: Duration = Duration.ofDays(7)
+
+    private val SENT = Regex("""\b(?:bhej\w*|sent|transfer\w*)\b|(?<!\S)भेज""")
+
+    /**
+     * How a later payment was made. Named in the message wins; money SENT
+     * away from the counter went online, since cash cannot be sent over a
+     * chat; anything else unnamed is cash, as on the same-thread path.
+     */
+    fun paidInstrument(text: String, mode: String): String = when {
+        mode != PaymentMode.UNKNOWN.wire && mode != PaymentMode.UDHAAR.wire -> mode
+        SENT.containsMatchIn(NumberParser.normalise(text)) -> PaymentMode.UPI.wire
+        else -> PaymentMode.CASH.wire
+    }
+
+    /**
+     * Fold a payment from a LATER thread into the credit order it pays.
+     * Mirrors `link_late_payments` in conversation.py -- see there.
+     *
+     * The order is booked as udhaar, a reminder goes out with a UPI link,
+     * and fifty minutes later "payment done" lands in a thread of its own.
+     * It used to be booked as a separate payment while the order stayed
+     * credit. A payment naming no figure, or the order's own figure, pays
+     * THAT order. A part payment stays separate; inside one thread
+     * [resolveThread] has already decided.
+     */
+    fun linkLatePayments(
+        perThread: List<List<ResolvedOrder>>,
+        payLinkSent: List<LocalDateTime?> = emptyList(),
+    ): List<ResolvedOrder> {
+        fun instrument(order: ResolvedOrder): String {
+            if (order.mode != PaymentMode.UNKNOWN.wire) return order.mode
+            val afterLink = payLinkSent.any { it == null || order.occurredAt == null || !it.isAfter(order.occurredAt) }
+            return if (afterLink) PaymentMode.UPI.wire else PaymentMode.UNKNOWN.wire
+        }
+
+        val out = mutableListOf<ResolvedOrder>()
+        for (orders in perThread) {
+            val earlier = out.indices.toMutableList()
+            for (raw in orders) {
+                val order = if (raw.direction == "payment") raw.copy(mode = instrument(raw)) else raw
+                val at = earlier.lastOrNull { out[it].direction == "sale" }
+                val sale = at?.let { out[it] }
+                if (
+                    order.direction == "payment" && sale != null &&
+                    (sale.mode == PaymentMode.UDHAAR.wire || sale.mode == PaymentMode.UNKNOWN.wire) &&
+                    (order.amount == null || sale.amount == null || Math.abs(order.amount - sale.amount) < 0.01) &&
+                    (order.occurredAt == null || sale.occurredAt == null ||
+                        Duration.between(sale.occurredAt, order.occurredAt).let { !it.isNegative && it <= LATE_PAYMENT_WINDOW })
+                ) {
+                    val mode = paidInstrument(order.canonicalText, order.mode)
+                    out[at] = sale.copy(
+                        mode = mode,
+                        amount = sale.amount ?: order.amount,
+                        signals = sale.signals + "paid-later",
+                        contentHashes = (sale.contentHashes + order.contentHashes).distinct(),
+                        evidence = sale.evidence + "\n" + order.evidence,
+                    )
+                    earlier.remove(at)
+                    continue
+                }
+                out += order
+            }
+        }
+        return out
+    }
 
     // ----------------------------------------------------------------------
     // Into the shape the review queue renders
