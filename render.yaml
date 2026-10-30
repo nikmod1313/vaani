@@ -4,14 +4,17 @@
 # VAANI_PUBLIC=1 makes every shop need its phone's key or its dashboard code;
 # without it the server trusts its Wi-Fi like the shop counter version does.
 #
-# The disk keeps the khata across restarts (Starter plan). On the free plan
-# there is no disk: the server forgets on every restart, and each phone sends
-# its whole khata and its dashboard code again on its next sync.
+# Free plan: no disk, so the server forgets on every restart or sleep, and
+# each phone sends its whole khata and its dashboard code again on its next
+# sync. To keep data across restarts, switch to the Starter plan and add:
+#     plan: starter
+#     disk: {name: vaani-data, mountPath: /var/data, sizeGB: 1}
+#   with env VAANI_DATA=/var/data.
 services:
   - type: web
     name: vaani-dashboard
     runtime: python
-    plan: starter
+    plan: free
     region: singapore
     rootDir: backend
     buildCommand: pip install -r requirements.txt
@@ -20,13 +23,7 @@ services:
     envVars:
       - key: VAANI_PUBLIC
         value: "1"
-      - key: VAANI_DATA
-        value: /var/data
       - key: VAANI_SECRET
         generateValue: true
       - key: PYTHON_VERSION
         value: "3.12.7"
-    disk:
-      name: vaani-data
-      mountPath: /var/data
-      sizeGB: 1
