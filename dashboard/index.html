@@ -690,7 +690,7 @@ dialog::backdrop{background:rgba(17,28,66,.55)}
     return api(shopPath("/transactions" + p)).then(function (r) {
       var rows = r.transactions;
       $("txMeta").textContent = rows.length + (rows.length === 200 ? "+" : "") + " shown";
-      $("txs").innerHTML = rows.length ? rows.map(txRow).join("") :
+      $("txs").innerHTML = rows.length ? rows.map(function (t) { return txRow(t, false); }).join("") :
         '<tr><td colspan="5" class="sub">No entries match.</td></tr>';
     }).catch(function () { $("txs").innerHTML = ""; });
   }
